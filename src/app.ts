@@ -99,6 +99,41 @@ app.use((req, res, next) => {
   next();
 });
 
+// Root endpoint - API information
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Jevah API v2.0.0 - Gospel Media Platform",
+    version: process.env.npm_package_version || "2.0.0",
+    environment: process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    endpoints: {
+      health: "/health",
+      apiDocs: "/api-docs",
+      apiDocsJson: "/api-docs.json",
+      test: "/api/test",
+      auth: "/api/auth",
+      users: "/api/users",
+      media: "/api/media",
+      aiChatbot: "/api/ai-chatbot",
+      trending: "/api/trending",
+      userProfiles: "/api/user-profiles",
+      healthCheck: "/api/health"
+    },
+    features: [
+      "User Authentication & Authorization",
+      "Media Upload & Streaming",
+      "AI Biblical Counseling",
+      "Live Streaming with Contabo",
+      "Trending Analytics",
+      "Real-time Interactions",
+      "User Profile Management"
+    ],
+    documentation: "https://jevahapp-backend.onrender.com/api-docs"
+  });
+});
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
