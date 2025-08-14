@@ -74,8 +74,12 @@ const swaggerOptions = {
                     description: "Development server",
                 },
                 {
+                    url: "https://jevahapp-backend.onrender.com",
+                    description: "Production server (Render)",
+                },
+                {
                     url: "https://api.jevah.com",
-                    description: "Production server",
+                    description: "Production server (Custom domain)",
                 },
             ],
         },

@@ -55,7 +55,7 @@ services:
       - key: FRONTEND_URL
         value: https://jevah-app.vercel.app
       - key: API_BASE_URL
-        value: https://jevah-backend.onrender.com
+        value: https://jevahapp-backend.onrender.com
       - key: CORS_ORIGIN
         value: https://jevah-app.vercel.app
       - key: LOG_LEVEL

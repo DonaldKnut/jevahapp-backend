@@ -119,7 +119,7 @@ app.get("/", (req, res) => {
       aiChatbot: "/api/ai-chatbot",
       trending: "/api/trending",
       userProfiles: "/api/user-profiles",
-      healthCheck: "/api/health"
+      healthCheck: "/api/health",
     },
     features: [
       "User Authentication & Authorization",
@@ -128,9 +128,9 @@ app.get("/", (req, res) => {
       "Live Streaming with Contabo",
       "Trending Analytics",
       "Real-time Interactions",
-      "User Profile Management"
+      "User Profile Management",
     ],
-    documentation: "https://jevahapp-backend.onrender.com/api-docs"
+    documentation: "https://jevahapp-backend.onrender.com/api-docs",
   });
 });
 
