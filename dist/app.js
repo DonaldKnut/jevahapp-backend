@@ -28,6 +28,7 @@ const contentInteraction_routes_1 = __importDefault(require("./routes/contentInt
 const aiChatbot_routes_1 = __importDefault(require("./routes/aiChatbot.routes"));
 const trending_routes_1 = __importDefault(require("./routes/trending.routes"));
 const userProfile_routes_1 = __importDefault(require("./routes/userProfile.routes"));
+const health_routes_1 = __importDefault(require("./routes/health.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -126,6 +127,7 @@ app.use("/api/content", contentInteraction_routes_1.default);
 app.use("/api/ai-chatbot", aiChatbot_routes_1.default);
 app.use("/api/trending", trending_routes_1.default);
 app.use("/api/user-profiles", userProfile_routes_1.default);
+app.use("/api/health", health_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

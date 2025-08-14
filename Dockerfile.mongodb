@@ -1,0 +1,18 @@
+FROM mongo:7.0
+
+# Set environment variables
+ENV MONGO_INITDB_ROOT_USERNAME=admin
+ENV MONGO_INITDB_ROOT_PASSWORD=password
+ENV MONGO_INITDB_DATABASE=jevah
+
+# Create data directory
+RUN mkdir -p /data/db
+
+# Copy initialization scripts
+COPY ./scripts/mongo-init.js /docker-entrypoint-initdb.d/
+
+# Expose MongoDB port
+EXPOSE 27017
+
+# Set default command
+CMD ["mongod", "--bind_ip_all"]

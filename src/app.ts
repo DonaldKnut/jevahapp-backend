@@ -25,6 +25,7 @@ import contentInteractionRoutes from "./routes/contentInteraction.routes";
 import aiChatbotRoutes from "./routes/aiChatbot.routes";
 import trendingRoutes from "./routes/trending.routes";
 import userProfileRoutes from "./routes/userProfile.routes";
+import healthRoutes from "./routes/health.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -143,6 +144,7 @@ app.use("/api/content", contentInteractionRoutes);
 app.use("/api/ai-chatbot", aiChatbotRoutes);
 app.use("/api/trending", trendingRoutes);
 app.use("/api/user-profiles", userProfileRoutes);
+app.use("/api/health", healthRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {
