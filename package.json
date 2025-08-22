@@ -13,7 +13,9 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts",
     "docs:generate": "swagger-jsdoc -d swaggerDef.js -o swagger.json",
-    "docs:serve": "swagger-ui-express swagger.json"
+    "docs:serve": "swagger-ui-express swagger.json",
+    "test:email": "node scripts/test-email-config.js",
+    "cleanup:users": "node scripts/cleanup-orphaned-users.js"
   },
   "keywords": [
     "gospel",

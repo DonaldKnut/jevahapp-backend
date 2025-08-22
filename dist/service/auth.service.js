@@ -205,6 +205,7 @@ class AuthService {
             const hashedPassword = yield bcrypt_1.default.hash(password, 10);
             const verificationFlags = this.setVerificationFlags(role);
             let avatarUrl;
+            // Handle avatar upload first
             if (avatarBuffer && avatarMimeType) {
                 const validImageMimeTypes = ["image/jpeg", "image/png", "image/gif"];
                 if (!validImageMimeTypes.includes(avatarMimeType)) {
@@ -214,10 +215,19 @@ class AuthService {
                 console.log("Avatar Upload Result:", uploadResult);
                 avatarUrl = uploadResult.secure_url;
             }
+            // Send verification email BEFORE creating user record
+            // This ensures we don't create orphaned user records if email fails
+            try {
+                yield (0, mailer_1.sendVerificationEmail)(email, firstName || email.split("@")[0], verificationCode);
+            }
+            catch (emailError) {
+                console.error("Failed to send verification email:", emailError);
+                throw new Error("Unable to send verification email. Please try again later.");
+            }
+            // Only create user record after email is sent successfully
             const newUser = yield user_model_1.User.create(Object.assign({ email, firstName: firstName || email.split("@")[0], // Use email prefix as fallback
                 lastName, avatar: avatarUrl, provider: "email", password: hashedPassword, verificationCode,
                 verificationCodeExpires, isEmailVerified: false, isProfileComplete: false, age: 0, isKid: false, section: "adults", role, hasConsentedToPrivacyPolicy: false }, verificationFlags));
-            yield (0, mailer_1.sendVerificationEmail)(newUser.email, newUser.firstName, verificationCode);
             return {
                 id: newUser._id,
                 email: newUser.email,
@@ -259,7 +269,7 @@ class AuthService {
                 "christian reggae",
                 "christian electronic",
             ];
-            const invalidGenres = genre.filter((g) => !validGenres.includes(g.toLowerCase()));
+            const invalidGenres = genre.filter(g => !validGenres.includes(g.toLowerCase()));
             if (invalidGenres.length > 0) {
                 throw new Error(`Invalid genres: ${invalidGenres.join(", ")}. Valid genres: ${validGenres.join(", ")}`);
             }
@@ -272,6 +282,15 @@ class AuthService {
                 }
                 const uploadResult = yield fileUpload_service_1.default.uploadMedia(avatarBuffer, "artist-avatars", avatarMimeType);
                 avatarUrl = uploadResult.secure_url;
+            }
+            // Send welcome email BEFORE creating user record
+            // This ensures we don't create orphaned user records if email fails
+            try {
+                yield (0, mailer_1.sendWelcomeEmail)(email, firstName || "Artist");
+            }
+            catch (emailError) {
+                console.error("Failed to send welcome email:", emailError);
+                throw new Error("Unable to send welcome email. Please try again later.");
             }
             const newArtist = yield user_model_1.User.create({
                 email,
@@ -290,7 +309,7 @@ class AuthService {
                 isVerifiedArtist: false,
                 artistProfile: {
                     artistName: artistName.trim(),
-                    genre: genre.map((g) => g.toLowerCase()),
+                    genre: genre.map(g => g.toLowerCase()),
                     bio: bio === null || bio === void 0 ? void 0 : bio.trim(),
                     socialMedia,
                     recordLabel: recordLabel === null || recordLabel === void 0 ? void 0 : recordLabel.trim(),
@@ -298,8 +317,6 @@ class AuthService {
                     verificationDocuments: [],
                 },
             });
-            // Send welcome email for artists
-            yield (0, mailer_1.sendWelcomeEmail)(newArtist.email, newArtist.firstName || "Artist");
             return {
                 id: newArtist._id,
                 email: newArtist.email,
@@ -356,7 +373,7 @@ class AuthService {
                 throw new Error("At least one genre must be specified");
             }
             // Update artist profile
-            const updatedProfile = Object.assign(Object.assign(Object.assign({}, user.artistProfile), updates), { artistName: ((_a = updates.artistName) === null || _a === void 0 ? void 0 : _a.trim()) || user.artistProfile.artistName, genre: ((_b = updates.genre) === null || _b === void 0 ? void 0 : _b.map((g) => g.toLowerCase())) || user.artistProfile.genre, bio: ((_c = updates.bio) === null || _c === void 0 ? void 0 : _c.trim()) || user.artistProfile.bio, recordLabel: ((_d = updates.recordLabel) === null || _d === void 0 ? void 0 : _d.trim()) || user.artistProfile.recordLabel });
+            const updatedProfile = Object.assign(Object.assign(Object.assign({}, user.artistProfile), updates), { artistName: ((_a = updates.artistName) === null || _a === void 0 ? void 0 : _a.trim()) || user.artistProfile.artistName, genre: ((_b = updates.genre) === null || _b === void 0 ? void 0 : _b.map(g => g.toLowerCase())) || user.artistProfile.genre, bio: ((_c = updates.bio) === null || _c === void 0 ? void 0 : _c.trim()) || user.artistProfile.bio, recordLabel: ((_d = updates.recordLabel) === null || _d === void 0 ? void 0 : _d.trim()) || user.artistProfile.recordLabel });
             user.artistProfile = updatedProfile;
             yield user.save();
             return {

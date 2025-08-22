@@ -16,9 +16,9 @@ export interface EmailTemplate {
   text: string;
 }
 
-// Email configuration
+// Email configuration for Zoho SMTP
 export const emailConfig: EmailConfiguration = {
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  host: process.env.SMTP_HOST || "smtp.zoho.com",
   port: parseInt(process.env.SMTP_PORT || "587"),
   secure: process.env.SMTP_SECURE === "true",
   auth: {

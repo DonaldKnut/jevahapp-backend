@@ -1,4 +1,3 @@
-
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -226,6 +225,8 @@ class AuthService {
 
     const verificationFlags = this.setVerificationFlags(role);
     let avatarUrl: string | undefined;
+
+    // Handle avatar upload first
     if (avatarBuffer && avatarMimeType) {
       const validImageMimeTypes = ["image/jpeg", "image/png", "image/gif"];
       if (!validImageMimeTypes.includes(avatarMimeType)) {
@@ -240,6 +241,22 @@ class AuthService {
       avatarUrl = uploadResult.secure_url;
     }
 
+    // Send verification email BEFORE creating user record
+    // This ensures we don't create orphaned user records if email fails
+    try {
+      await sendVerificationEmail(
+        email,
+        firstName || email.split("@")[0],
+        verificationCode
+      );
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+      throw new Error(
+        "Unable to send verification email. Please try again later."
+      );
+    }
+
+    // Only create user record after email is sent successfully
     const newUser = await User.create({
       email,
       firstName: firstName || email.split("@")[0], // Use email prefix as fallback
@@ -258,12 +275,6 @@ class AuthService {
       hasConsentedToPrivacyPolicy: false,
       ...verificationFlags,
     });
-
-    await sendVerificationEmail(
-      newUser.email,
-      newUser.firstName,
-      verificationCode
-    );
 
     return {
       id: newUser._id,
@@ -329,7 +340,7 @@ class AuthService {
     ];
 
     const invalidGenres = genre.filter(
-      (g) => !validGenres.includes(g.toLowerCase())
+      g => !validGenres.includes(g.toLowerCase())
     );
     if (invalidGenres.length > 0) {
       throw new Error(
@@ -353,6 +364,15 @@ class AuthService {
       avatarUrl = uploadResult.secure_url;
     }
 
+    // Send welcome email BEFORE creating user record
+    // This ensures we don't create orphaned user records if email fails
+    try {
+      await sendWelcomeEmail(email, firstName || "Artist");
+    } catch (emailError) {
+      console.error("Failed to send welcome email:", emailError);
+      throw new Error("Unable to send welcome email. Please try again later.");
+    }
+
     const newArtist = await User.create({
       email,
       firstName,
@@ -370,7 +390,7 @@ class AuthService {
       isVerifiedArtist: false,
       artistProfile: {
         artistName: artistName.trim(),
-        genre: genre.map((g) => g.toLowerCase()),
+        genre: genre.map(g => g.toLowerCase()),
         bio: bio?.trim(),
         socialMedia,
         recordLabel: recordLabel?.trim(),
@@ -378,9 +398,6 @@ class AuthService {
         verificationDocuments: [],
       },
     });
-
-    // Send welcome email for artists
-    await sendWelcomeEmail(newArtist.email, newArtist.firstName || "Artist");
 
     return {
       id: newArtist._id,
@@ -465,7 +482,7 @@ class AuthService {
       ...updates,
       artistName: updates.artistName?.trim() || user.artistProfile.artistName,
       genre:
-        updates.genre?.map((g) => g.toLowerCase()) || user.artistProfile.genre,
+        updates.genre?.map(g => g.toLowerCase()) || user.artistProfile.genre,
       bio: updates.bio?.trim() || user.artistProfile.bio,
       recordLabel:
         updates.recordLabel?.trim() || user.artistProfile.recordLabel,
@@ -708,9 +725,7 @@ class AuthService {
       try {
         const publicId = user.avatar.split("/").pop()?.split(".")[0];
         if (publicId) {
-          await fileUploadService.deleteMedia(
-            `user-avatars/${publicId}`
-          );
+          await fileUploadService.deleteMedia(`user-avatars/${publicId}`);
         }
       } catch (error) {
         console.error("Error deleting old avatar:", error);

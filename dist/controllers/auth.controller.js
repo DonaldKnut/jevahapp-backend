@@ -163,12 +163,25 @@ class AuthController {
                 });
             }
             catch (error) {
-                if (error instanceof Error &&
-                    error.message === "Email address is already registered") {
-                    return response.status(400).json({
-                        success: false,
-                        message: error.message,
-                    });
+                if (error instanceof Error) {
+                    if (error.message === "Email address is already registered") {
+                        return response.status(400).json({
+                            success: false,
+                            message: error.message,
+                        });
+                    }
+                    if (error.message.includes("Unable to send verification email")) {
+                        return response.status(500).json({
+                            success: false,
+                            message: error.message,
+                        });
+                    }
+                    if (error.message.includes("Unable to send welcome email")) {
+                        return response.status(500).json({
+                            success: false,
+                            message: error.message,
+                        });
+                    }
                 }
                 return next(error);
             }
@@ -631,6 +644,12 @@ class AuthController {
                 if (error instanceof Error) {
                     if (error.message === "Email address is already registered") {
                         return response.status(400).json({
+                            success: false,
+                            message: error.message,
+                        });
+                    }
+                    if (error.message.includes("Unable to send welcome email")) {
+                        return response.status(500).json({
                             success: false,
                             message: error.message,
                         });

@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { getBookmarkedMedia, addBookmark, removeBookmark } from "../controllers/bookmarks.controller";
+import {
+  getBookmarkedMedia,
+  addBookmark,
+  removeBookmark,
+} from "../controllers/bookmarks.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { asyncHandler } from "../utils/asyncHandler";
 
@@ -11,7 +15,11 @@ const router = Router();
  * @access  Protected
  * @returns { success: boolean, media: Media[] }
  */
-router.get("/get-bookmarked-media", verifyToken, asyncHandler(getBookmarkedMedia));
+router.get(
+  "/get-bookmarked-media",
+  verifyToken,
+  asyncHandler(getBookmarkedMedia)
+);
 
 /**
  * @route   POST /api/bookmarks/:mediaId

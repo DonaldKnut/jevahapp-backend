@@ -14,9 +14,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmailService = exports.emailTemplates = exports.emailTransporter = exports.emailConfig = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-// Email configuration
+// Email configuration for Zoho SMTP
 exports.emailConfig = {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    host: process.env.SMTP_HOST || "smtp.zoho.com",
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true",
     auth: {
