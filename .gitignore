@@ -1,5 +1,6 @@
 # .gitignore
 .env
+.env.local
 .env.*
 *.env
 config/*.json  # if you keep keys there
