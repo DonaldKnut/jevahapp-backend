@@ -178,6 +178,14 @@ router.get("/viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimite
  */
 router.post("/live/start", auth_middleware_1.verifyToken, rateLimiter_1.mediaUploadRateLimiter, media_controller_1.startMuxLiveStream);
 /**
+ * @route   POST /api/media/live/go-live
+ * @desc    Start live streaming immediately (go live now)
+ * @access  Protected (Authenticated users only)
+ * @body    { title: string, description?: string }
+ * @returns { success: boolean, message: string, stream: { streamKey: string, rtmpUrl: string, playbackUrl: string } }
+ */
+router.post("/live/go-live", auth_middleware_1.verifyToken, rateLimiter_1.mediaUploadRateLimiter, media_controller_1.goLive);
+/**
  * @route   POST /api/media/live/:id/end
  * @desc    End a live stream by its ID
  * @access  Protected (Authenticated users only)

@@ -31,6 +31,8 @@ import {
   stopRecording,
   getRecordingStatus,
   getUserRecordings,
+  // New go live method
+  goLive,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdminOrCreator } from "../middleware/role.middleware";
@@ -286,6 +288,15 @@ router.post(
   mediaUploadRateLimiter,
   startMuxLiveStream
 );
+
+/**
+ * @route   POST /api/media/live/go-live
+ * @desc    Start live streaming immediately (go live now)
+ * @access  Protected (Authenticated users only)
+ * @body    { title: string, description?: string }
+ * @returns { success: boolean, message: string, stream: { streamKey: string, rtmpUrl: string, playbackUrl: string } }
+ */
+router.post("/live/go-live", verifyToken, mediaUploadRateLimiter, goLive);
 
 /**
  * @route   POST /api/media/live/:id/end

@@ -1494,3 +1494,57 @@ export const getUserRecordings = async (
     });
   }
 };
+
+export const goLive = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { title, description } = request.body;
+    const userIdentifier = request.userId;
+
+    if (!userIdentifier) {
+      response.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+
+    if (!title || title.trim() === "") {
+      response.status(400).json({
+        success: false,
+        message: "Title is required for live stream",
+      });
+      return;
+    }
+
+    // Start live stream immediately with minimal info
+    const stream = await contaboStreamingService.startLiveStream({
+      title: title.trim(),
+      description: description?.trim() || "Live stream",
+      category: "live",
+      topics: ["live-stream"],
+      uploadedBy: new Types.ObjectId(userIdentifier),
+    });
+
+    response.status(201).json({
+      success: true,
+      message: "Live stream started successfully",
+      stream: {
+        streamKey: stream.streamKey,
+        rtmpUrl: stream.rtmpUrl,
+        playbackUrl: stream.playbackUrl,
+        hlsUrl: stream.hlsUrl,
+        dashUrl: stream.dashUrl,
+        streamId: stream.streamId,
+      },
+    });
+  } catch (error: any) {
+    console.error("Go live stream creation error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to start live stream",
+    });
+  }
+};

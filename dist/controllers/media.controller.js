@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -1229,3 +1229,51 @@ const getUserRecordings = (request, response) => __awaiter(void 0, void 0, void 
     }
 });
 exports.getUserRecordings = getUserRecordings;
+const goLive = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { title, description } = request.body;
+        const userIdentifier = request.userId;
+        if (!userIdentifier) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        if (!title || title.trim() === "") {
+            response.status(400).json({
+                success: false,
+                message: "Title is required for live stream",
+            });
+            return;
+        }
+        // Start live stream immediately with minimal info
+        const stream = yield contaboStreaming_service_1.default.startLiveStream({
+            title: title.trim(),
+            description: (description === null || description === void 0 ? void 0 : description.trim()) || "Live stream",
+            category: "live",
+            topics: ["live-stream"],
+            uploadedBy: new mongoose_1.Types.ObjectId(userIdentifier),
+        });
+        response.status(201).json({
+            success: true,
+            message: "Live stream started successfully",
+            stream: {
+                streamKey: stream.streamKey,
+                rtmpUrl: stream.rtmpUrl,
+                playbackUrl: stream.playbackUrl,
+                hlsUrl: stream.hlsUrl,
+                dashUrl: stream.dashUrl,
+                streamId: stream.streamId,
+            },
+        });
+    }
+    catch (error) {
+        console.error("Go live stream creation error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to start live stream",
+        });
+    }
+});
+exports.goLive = goLive;

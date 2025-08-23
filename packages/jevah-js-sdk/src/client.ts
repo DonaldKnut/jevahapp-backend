@@ -26,6 +26,7 @@ import {
   AIMessageRequest,
   JevahConfig,
   RequestOptions,
+  GoLiveRequest,
 } from "./types";
 
 export class JevahClient {
@@ -268,6 +269,13 @@ export class JevahClient {
     return this.request<ApiResponse>(`/api/media/live/${streamId}/stats`);
   }
 
+  async goLive(streamData: GoLiveRequest): Promise<ApiResponse<LiveStream>> {
+    return this.request<ApiResponse<LiveStream>>("/api/media/live/go-live", {
+      method: "POST",
+      body: JSON.stringify(streamData),
+    });
+  }
+
   // ===== AI CHATBOT =====
 
   async getChatbotInfo(): Promise<ApiResponse<ChatbotInfo>> {
@@ -384,9 +392,3 @@ export default JevahClient;
 
 // Export types
 export * from "./types";
-
-
-
-
-
-

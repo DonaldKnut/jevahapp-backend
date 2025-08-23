@@ -263,6 +263,11 @@ export interface LiveStreamRequest {
   topics?: string[];
 }
 
+export interface GoLiveRequest {
+  title: string;
+  description?: string;
+}
+
 export interface ScheduledLiveStreamRequest extends LiveStreamRequest {
   scheduledStart: string;
   scheduledEnd?: string;
@@ -285,9 +290,3 @@ export interface RequestOptions {
   timeout?: number;
   retries?: number;
 }
-
-
-
-
-
-
