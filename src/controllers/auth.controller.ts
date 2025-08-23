@@ -127,44 +127,40 @@ class AuthController {
 
   async registerUser(request: Request, response: Response, next: NextFunction) {
     try {
-      const { email, password, firstName, lastName, desiredRole } =
-        request.body;
+      const { email, password, firstName, lastName } = request.body;
 
-      // Only require email and password for basic registration
-      if (!email || !password) {
+      // Validate required fields according to BRD
+      if (!email || !password || !firstName || !lastName) {
         return response.status(400).json({
           success: false,
-          message: "Email and password are required for registration",
+          message:
+            "First name, last name, email, and password are required for registration",
         });
       }
 
-      // Make firstName optional, use email prefix as fallback
-      const displayName = firstName || email.split("@")[0];
-
-      // Check if user wants to register as artist
-      if (desiredRole === "artist") {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
         return response.status(400).json({
           success: false,
-          message: "Artist registration requires additional information",
-          redirectToArtistRegistration: true,
-          artistRegistrationEndpoint: "/api/auth/artist/register",
-          requiredArtistFields: ["artistName", "genre"],
-          optionalArtistFields: [
-            "bio",
-            "socialMedia",
-            "recordLabel",
-            "yearsActive",
-            "avatar",
-          ],
+          message: "Please provide a valid email address",
         });
       }
 
+      // Validate password strength (minimum 6 characters)
+      if (password.length < 6) {
+        return response.status(400).json({
+          success: false,
+          message: "Password must be at least 6 characters long",
+        });
+      }
+
+      // Register user with default 'learner' role (future feature ready)
       const user = await authService.registerUser(
         email,
         password,
-        displayName,
-        lastName,
-        desiredRole
+        firstName,
+        lastName
       );
 
       return response.status(201).json({
@@ -192,71 +188,6 @@ class AuthController {
             message: error.message,
           });
         }
-      }
-      return next(error);
-    }
-  }
-
-  async registerUserWithAvatar(
-    request: Request,
-    response: Response,
-    next: NextFunction
-  ) {
-    try {
-      const { email, password, firstName, lastName, desiredRole } =
-        request.body;
-      const avatarFile = request.file;
-
-      // Only require email and password for basic registration
-      if (!email || !password) {
-        return response.status(400).json({
-          success: false,
-          message: "Email and password are required for registration",
-        });
-      }
-
-      if (!avatarFile) {
-        return response.status(400).json({
-          success: false,
-          message: "Avatar image is required",
-        });
-      }
-
-      const validImageMimeTypes = ["image/jpeg", "image/png", "image/gif"];
-      if (!validImageMimeTypes.includes(avatarFile.mimetype)) {
-        return response.status(400).json({
-          success: false,
-          message: `Invalid image type: ${avatarFile.mimetype}`,
-        });
-      }
-
-      // Make firstName optional, use email prefix as fallback
-      const displayName = firstName || email.split("@")[0];
-
-      const user = await authService.registerUser(
-        email,
-        password,
-        displayName,
-        lastName,
-        desiredRole,
-        avatarFile.buffer,
-        avatarFile.mimetype
-      );
-
-      return response.status(201).json({
-        success: true,
-        message: "User registered successfully. Please verify your email.",
-        user,
-      });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === "Email address is already registered"
-      ) {
-        return response.status(400).json({
-          success: false,
-          message: error.message,
-        });
       }
       return next(error);
     }

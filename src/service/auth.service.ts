@@ -184,9 +184,8 @@ class AuthService {
   async registerUser(
     email: string,
     password: string,
-    firstName?: string,
-    lastName?: string,
-    desiredRole?: string,
+    firstName: string,
+    lastName: string,
     avatarBuffer?: Buffer,
     avatarMimeType?: string
   ) {
@@ -195,26 +194,8 @@ class AuthService {
       throw new Error("Email address is already registered");
     }
 
-    // Check if user wants to register as artist
-    if (desiredRole === "artist") {
-      throw new Error(
-        "Artist registration requires additional information. Please use the artist registration endpoint."
-      );
-    }
-
-    const allowedRoles = [
-      "learner",
-      "parent",
-      "educator",
-      "content_creator",
-      "vendor",
-      "church_admin",
-    ];
-
-    const role =
-      desiredRole && allowedRoles.includes(desiredRole)
-        ? desiredRole
-        : "learner";
+    // Default role for all new users (future feature ready)
+    const role = "learner";
 
     const verificationCode = crypto
       .randomBytes(3)
@@ -244,11 +225,7 @@ class AuthService {
     // Send verification email BEFORE creating user record
     // This ensures we don't create orphaned user records if email fails
     try {
-      await sendVerificationEmail(
-        email,
-        firstName || email.split("@")[0],
-        verificationCode
-      );
+      await sendVerificationEmail(email, firstName, verificationCode);
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
       throw new Error(
@@ -259,7 +236,7 @@ class AuthService {
     // Only create user record after email is sent successfully
     const newUser = await User.create({
       email,
-      firstName: firstName || email.split("@")[0], // Use email prefix as fallback
+      firstName,
       lastName,
       avatar: avatarUrl,
       provider: "email",

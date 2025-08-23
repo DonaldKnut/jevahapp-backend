@@ -176,27 +176,14 @@ class AuthService {
             }
         });
     }
-    registerUser(email, password, firstName, lastName, desiredRole, avatarBuffer, avatarMimeType) {
+    registerUser(email, password, firstName, lastName, avatarBuffer, avatarMimeType) {
         return __awaiter(this, void 0, void 0, function* () {
             const existingUser = yield user_model_1.User.findOne({ email });
             if (existingUser) {
                 throw new Error("Email address is already registered");
             }
-            // Check if user wants to register as artist
-            if (desiredRole === "artist") {
-                throw new Error("Artist registration requires additional information. Please use the artist registration endpoint.");
-            }
-            const allowedRoles = [
-                "learner",
-                "parent",
-                "educator",
-                "content_creator",
-                "vendor",
-                "church_admin",
-            ];
-            const role = desiredRole && allowedRoles.includes(desiredRole)
-                ? desiredRole
-                : "learner";
+            // Default role for all new users (future feature ready)
+            const role = "learner";
             const verificationCode = crypto_1.default
                 .randomBytes(3)
                 .toString("hex")
@@ -218,14 +205,15 @@ class AuthService {
             // Send verification email BEFORE creating user record
             // This ensures we don't create orphaned user records if email fails
             try {
-                yield (0, mailer_1.sendVerificationEmail)(email, firstName || email.split("@")[0], verificationCode);
+                yield (0, mailer_1.sendVerificationEmail)(email, firstName, verificationCode);
             }
             catch (emailError) {
                 console.error("Failed to send verification email:", emailError);
                 throw new Error("Unable to send verification email. Please try again later.");
             }
             // Only create user record after email is sent successfully
-            const newUser = yield user_model_1.User.create(Object.assign({ email, firstName: firstName || email.split("@")[0], // Use email prefix as fallback
+            const newUser = yield user_model_1.User.create(Object.assign({ email,
+                firstName,
                 lastName, avatar: avatarUrl, provider: "email", password: hashedPassword, verificationCode,
                 verificationCodeExpires, isEmailVerified: false, isProfileComplete: false, age: 0, isKid: false, section: "adults", role, hasConsentedToPrivacyPolicy: false }, verificationFlags));
             return {
