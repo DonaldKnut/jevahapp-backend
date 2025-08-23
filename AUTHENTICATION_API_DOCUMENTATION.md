@@ -131,11 +131,13 @@ const loginUser = async (email, password) => {
 The authentication system follows a **3-step registration process**:
 
 1. **Step 1**: Basic Registration (Required)
+
    - First name, last name, email, password
    - User gets `learner` role by default
    - Email verification code sent
 
 2. **Step 2**: Email Verification (Required)
+
    - Verify email with 6-character code
    - Required before login
 
@@ -146,11 +148,13 @@ The authentication system follows a **3-step registration process**:
 ---
 
 ### 1. **User Registration (Step 1)**
+
 **POST** `/api/auth/register`
 
 Register a new user with basic information. This is the first step in the registration process.
 
 #### Request Body:
+
 ```json
 {
   "firstName": "John",
@@ -161,12 +165,14 @@ Register a new user with basic information. This is the first step in the regist
 ```
 
 #### Required Fields:
+
 - `firstName` (string) - User's first name
 - `lastName` (string) - User's last name
 - `email` (string) - Valid email address
 - `password` (string) - Minimum 6 characters
 
 #### Response (Success - 201):
+
 ```json
 {
   "success": true,
@@ -183,6 +189,7 @@ Register a new user with basic information. This is the first step in the regist
 ```
 
 #### React Native Implementation:
+
 ```javascript
 const registerUser = async userData => {
   try {

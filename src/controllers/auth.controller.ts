@@ -833,6 +833,68 @@ class AuthController {
       return next(error);
     }
   }
+
+  async getUserNameAndAge(
+    request: Request,
+    response: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = request.userId;
+      if (!userId) {
+        return response.status(401).json({
+          success: false,
+          message: "Unauthorized: User ID missing",
+        });
+      }
+
+      const userInfo = await authService.getUserNameAndAge(userId);
+
+      return response.status(200).json({
+        success: true,
+        user: userInfo,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "User not found") {
+        return response.status(404).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      return next(error);
+    }
+  }
+
+  async getUserProfilePicture(
+    request: Request,
+    response: Response,
+    next: NextFunction
+  ) {
+    try {
+      const userId = request.userId;
+      if (!userId) {
+        return response.status(401).json({
+          success: false,
+          message: "Unauthorized: User ID missing",
+        });
+      }
+
+      const profilePicture = await authService.getUserProfilePicture(userId);
+
+      return response.status(200).json({
+        success: true,
+        profilePicture,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "User not found") {
+        return response.status(404).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      return next(error);
+    }
+  }
 }
 
 export default new AuthController();

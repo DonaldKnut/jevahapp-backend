@@ -607,5 +607,46 @@ class AuthService {
             return { message: "User logged out successfully" };
         });
     }
+    getUserNameAndAge(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield user_model_1.User.findById(userId).select("firstName lastName age isKid section");
+            if (!user) {
+                throw new Error("User not found");
+            }
+            // Determine if user is adult or kid based on age and isKid field
+            let userType = "adult";
+            if (user.isKid === true) {
+                userType = "kid";
+            }
+            else if (user.age) {
+                userType = user.age < 18 ? "kid" : "adult";
+            }
+            else if (user.section) {
+                userType = user.section === "kids" ? "kid" : "adult";
+            }
+            return {
+                firstName: user.firstName,
+                lastName: user.lastName,
+                fullName: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+                age: user.age,
+                isKid: user.isKid,
+                section: user.section,
+                userType, // "kid" or "adult"
+            };
+        });
+    }
+    getUserProfilePicture(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield user_model_1.User.findById(userId).select("avatar avatarUpload");
+            if (!user) {
+                throw new Error("User not found");
+            }
+            const profilePicture = user.avatar || user.avatarUpload || null;
+            return {
+                profilePicture,
+                hasProfilePicture: !!profilePicture,
+            };
+        });
+    }
 }
 exports.default = new AuthService();

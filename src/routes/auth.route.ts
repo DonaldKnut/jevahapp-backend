@@ -122,6 +122,26 @@ router.post(
 // - Calls authController.getCurrentUser to return user data
 router.get("/me", verifyToken, asyncHandler(authController.getCurrentUser));
 
+// GET /user/name-age
+// Retrieves the current user's name and age information to determine if they're adult or kid
+// - Uses verifyToken to ensure user is authenticated
+// - Calls authController.getUserNameAndAge to return user name and age classification
+router.get(
+  "/user/name-age",
+  verifyToken,
+  asyncHandler(authController.getUserNameAndAge)
+);
+
+// GET /user/profile-picture
+// Retrieves the current user's profile picture
+// - Uses verifyToken to ensure user is authenticated
+// - Calls authController.getUserProfilePicture to return profile picture URL
+router.get(
+  "/user/profile-picture",
+  verifyToken,
+  asyncHandler(authController.getUserProfilePicture)
+);
+
 // GET /session
 // Retrieves the current user's session information
 // - Uses verifyToken to ensure user is authenticated

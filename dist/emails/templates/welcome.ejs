@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Jevah</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: linear-gradient(135deg, #1a4a4a 0%, #0f3d3d 100%);
+        color: #ffffff;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .email-container {
+        max-width: 600px;
+        width: 100%;
+        background: linear-gradient(
+          145deg,
+          #0f3d3d 0%,
+          #1a4a4a 50%,
+          #0f3d3d 100%
+        );
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow:
+          0 20px 40px rgba(0, 0, 0, 0.3),
+          0 0 0 1px rgba(255, 107, 53, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        position: relative;
+      }
+
+      .email-container::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #ff6b35, #ff8c42, #ff6b35);
+        background-size: 200% 100%;
+        animation: shimmer 3s ease-in-out infinite;
+      }
+
+      @keyframes shimmer {
+        0%,
+        100% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+      }
+
+      .header {
+        padding: 40px 50px 30px;
+        text-align: center;
+        position: relative;
+      }
+
+      .logo-container {
+        margin-bottom: 30px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .logo {
+        height: 80px;
+        width: auto;
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+        transition: transform 0.3s ease;
+      }
+
+      .logo:hover {
+        transform: scale(1.05);
+      }
+
+      .welcome-title {
+        font-size: 32px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ffffff 0%, #ff6b35 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 15px;
+        letter-spacing: -0.5px;
+      }
+
+      .welcome-subtitle {
+        font-size: 18px;
+        color: #e0e0e0;
+        font-weight: 500;
+        margin-bottom: 30px;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 0 50px 40px;
+        text-align: center;
+      }
+
+      .welcome-message {
+        font-size: 16px;
+        color: #d0d0d0;
+        line-height: 1.7;
+        margin-bottom: 35px;
+        font-weight: 400;
+      }
+
+      .highlight {
+        color: #ff6b35;
+        font-weight: 600;
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 20px;
+        margin: 35px 0;
+      }
+
+      .feature-item {
+        background: rgba(255, 107, 53, 0.1);
+        border: 1px solid rgba(255, 107, 53, 0.2);
+        border-radius: 12px;
+        padding: 20px 15px;
+        text-align: center;
+        transition: all 0.3s ease;
+      }
+
+      .feature-item:hover {
+        background: rgba(255, 107, 53, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(255, 107, 53, 0.2);
+      }
+
+      .feature-icon {
+        font-size: 24px;
+        margin-bottom: 10px;
+        display: block;
+      }
+
+      .feature-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #ff6b35;
+        margin-bottom: 5px;
+      }
+
+      .feature-desc {
+        font-size: 12px;
+        color: #b0b0b0;
+        line-height: 1.4;
+      }
+
+      .divider {
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(255, 107, 53, 0.3) 50%,
+          transparent 100%
+        );
+        margin: 35px 0;
+        position: relative;
+      }
+
+      .divider::after {
+        content: "✦";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #0f3d3d;
+        padding: 0 15px;
+        color: #ff6b35;
+        font-size: 14px;
+      }
+
+      .footer {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 25px 50px;
+        text-align: center;
+        border-top: 1px solid rgba(255, 107, 53, 0.1);
+      }
+
+      .footer-address {
+        font-size: 13px;
+        color: #a0a0a0;
+        margin-bottom: 15px;
+        line-height: 1.5;
+      }
+
+      .social-links {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-top: 15px;
+      }
+
+      .social-link {
+        color: #ff6b35;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        transition: color 0.3s ease;
+      }
+
+      .social-link:hover {
+        color: #ff8c42;
+      }
+
+      .cta-section {
+        margin: 30px 0;
+        padding: 25px;
+        background: linear-gradient(
+          135deg,
+          rgba(255, 107, 53, 0.1) 0%,
+          rgba(255, 140, 66, 0.05) 100%
+        );
+        border-radius: 16px;
+        border: 1px solid rgba(255, 107, 53, 0.2);
+      }
+
+      .cta-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #ff6b35;
+        margin-bottom: 10px;
+      }
+
+      .cta-text {
+        font-size: 14px;
+        color: #d0d0d0;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 600px) {
+        body {
+          padding: 10px;
+        }
+
+        .email-container {
+          border-radius: 16px;
+        }
+
+        .header,
+        .content,
+        .footer {
+          padding: 30px 25px;
+        }
+
+        .welcome-title {
+          font-size: 28px;
+        }
+
+        .features-grid {
+          grid-template-columns: 1fr;
+          gap: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <div class="header">
+        <div class="logo-container">
+          <img
+            src="https://res.cloudinary.com/ddgzzjp4x/image/upload/v1755907362/jevah-hq-removebg-preview_tv9rtc.png"
+            alt="Jevah Logo"
+            class="logo"
+          />
+        </div>
+
+        <h1 class="welcome-title">Welcome, <%= firstName %>!</h1>
+        <p class="welcome-subtitle">Your journey with Jevah begins now</p>
+      </div>
+
+      <div class="content">
+        <p class="welcome-message">
+          Thank you for joining <span class="highlight">Jevah</span>! We're
+          thrilled to have you as part of our community dedicated to spreading
+          the gospel through innovative media. Your account has been
+          successfully created and you're now ready to explore all the amazing
+          features we have to offer.
+        </p>
+
+        <div class="features-grid">
+          <div class="feature-item">
+            <span class="feature-icon">🎯</span>
+            <div class="feature-title">Gospel Content</div>
+            <div class="feature-desc">
+              Access inspiring Christian media and resources
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">🤝</span>
+            <div class="feature-title">Community</div>
+            <div class="feature-desc">
+              Connect with fellow believers worldwide
+            </div>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">📱</span>
+            <div class="feature-title">Mobile Ready</div>
+            <div class="feature-desc">Access Jevah anywhere, anytime</div>
+          </div>
+        </div>
+
+        <div class="cta-section">
+          <div class="cta-title">Ready to get started?</div>
+          <div class="cta-text">
+            Explore our platform and discover how Jevah can enhance your
+            spiritual journey through modern media.
+          </div>
+        </div>
+
+        <div class="divider"></div>
+      </div>
+
+      <div class="footer">
+        <p class="footer-address">
+          23A, Bashorun Okusanya Street, Off Admiralty Road, Off Admiralty
+          Wy,<br />
+          Lekki Phase 1, Lagos, Nigeria
+        </p>
+        <div class="social-links">
+          <a href="#" class="social-link">Website</a>
+          <a href="#" class="social-link">Support</a>
+          <a href="#" class="social-link">Privacy</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

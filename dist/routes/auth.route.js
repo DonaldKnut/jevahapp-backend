@@ -74,6 +74,16 @@ router.post("/complete-profile", auth_middleware_1.verifyToken, (0, asyncHandler
 // - Uses verifyToken to ensure user is authenticated
 // - Calls authController.getCurrentUser to return user data
 router.get("/me", auth_middleware_1.verifyToken, (0, asyncHandler_1.asyncHandler)(auth_controller_1.default.getCurrentUser));
+// GET /user/name-age
+// Retrieves the current user's name and age information to determine if they're adult or kid
+// - Uses verifyToken to ensure user is authenticated
+// - Calls authController.getUserNameAndAge to return user name and age classification
+router.get("/user/name-age", auth_middleware_1.verifyToken, (0, asyncHandler_1.asyncHandler)(auth_controller_1.default.getUserNameAndAge));
+// GET /user/profile-picture
+// Retrieves the current user's profile picture
+// - Uses verifyToken to ensure user is authenticated
+// - Calls authController.getUserProfilePicture to return profile picture URL
+router.get("/user/profile-picture", auth_middleware_1.verifyToken, (0, asyncHandler_1.asyncHandler)(auth_controller_1.default.getUserProfilePicture));
 // GET /session
 // Retrieves the current user's session information
 // - Uses verifyToken to ensure user is authenticated

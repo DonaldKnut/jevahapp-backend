@@ -704,5 +704,59 @@ class AuthController {
             }
         });
     }
+    getUserNameAndAge(request, response, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const userId = request.userId;
+                if (!userId) {
+                    return response.status(401).json({
+                        success: false,
+                        message: "Unauthorized: User ID missing",
+                    });
+                }
+                const userInfo = yield auth_service_1.default.getUserNameAndAge(userId);
+                return response.status(200).json({
+                    success: true,
+                    user: userInfo,
+                });
+            }
+            catch (error) {
+                if (error instanceof Error && error.message === "User not found") {
+                    return response.status(404).json({
+                        success: false,
+                        message: error.message,
+                    });
+                }
+                return next(error);
+            }
+        });
+    }
+    getUserProfilePicture(request, response, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const userId = request.userId;
+                if (!userId) {
+                    return response.status(401).json({
+                        success: false,
+                        message: "Unauthorized: User ID missing",
+                    });
+                }
+                const profilePicture = yield auth_service_1.default.getUserProfilePicture(userId);
+                return response.status(200).json({
+                    success: true,
+                    profilePicture,
+                });
+            }
+            catch (error) {
+                if (error instanceof Error && error.message === "User not found") {
+                    return response.status(404).json({
+                        success: false,
+                        message: error.message,
+                    });
+                }
+                return next(error);
+            }
+        });
+    }
 }
 exports.default = new AuthController();

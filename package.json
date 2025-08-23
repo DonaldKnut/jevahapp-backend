@@ -4,7 +4,8 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy-templates",
+    "copy-templates": "cp -r src/emails dist/",
     "start": "node dist/index.js",
     "seed-cities": "ts-node src/scripts/seedStateCities.ts",
     "test": "jest",
