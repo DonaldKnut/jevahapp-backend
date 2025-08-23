@@ -13,6 +13,37 @@ const rateLimiter_1 = require("../middleware/rateLimiter");
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 const router = (0, express_1.Router)();
 /**
+ * @route   GET /api/media/public
+ * @desc    Retrieve all media items with optional filters (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
+ * @returns { success: boolean, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
+ */
+router.get("/public", rateLimiter_1.apiRateLimiter, media_controller_1.getPublicMedia);
+/**
+ * @route   GET /api/media/public/all-content
+ * @desc    Retrieve ALL media content for the "All" tab (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @returns { success: boolean, media: object[], total: number }
+ */
+router.get("/public/all-content", rateLimiter_1.apiRateLimiter, media_controller_1.getPublicAllContent);
+/**
+ * @route   GET /api/media/public/search
+ * @desc    Search media items by title, type, category, topics, etc. (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
+ * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
+ */
+router.get("/public/search", rateLimiter_1.apiRateLimiter, media_controller_1.searchPublicMedia);
+/**
+ * @route   GET /api/media/public/:id
+ * @desc    Retrieve a single media item by its identifier (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @returns { success: boolean, media: object }
+ */
+router.get("/public/:id", rateLimiter_1.apiRateLimiter, media_controller_1.getPublicMediaByIdentifier);
+/**
  * @route   POST /api/media/upload
  * @desc    Upload a new media item (music, video, or book) with thumbnail
  * @access  Protected (Authenticated users only)

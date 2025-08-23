@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -1277,3 +1277,130 @@ const goLive = (request, response) => __awaiter(void 0, void 0, void 0, function
     }
 });
 exports.goLive = goLive;
+// Public endpoints for viewing media (no authentication required)
+const getPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const filters = request.query;
+        const mediaList = yield media_service_1.mediaService.getAllMedia(filters);
+        response.status(200).json({
+            success: true,
+            media: mediaList.media,
+            pagination: mediaList.pagination,
+        });
+    }
+    catch (error) {
+        console.error("Fetch public media error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve media",
+        });
+    }
+});
+exports.getPublicMedia = getPublicMedia;
+const getPublicAllContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const result = yield media_service_1.mediaService.getAllContentForAllTab();
+        response.status(200).json({
+            success: true,
+            media: result.media,
+            total: result.total,
+        });
+    }
+    catch (error) {
+        console.error("Fetch public all content error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve all content",
+        });
+    }
+});
+exports.getPublicAllContent = getPublicAllContent;
+const getPublicMediaByIdentifier = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = request.params;
+        if (!mongoose_1.Types.ObjectId.isValid(id)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media identifier",
+            });
+            return;
+        }
+        const media = yield media_service_1.mediaService.getMediaByIdentifier(id);
+        if (!media) {
+            response.status(404).json({
+                success: false,
+                message: "Media not found",
+            });
+            return;
+        }
+        response.status(200).json({
+            success: true,
+            media,
+        });
+    }
+    catch (error) {
+        console.error("Fetch public media by ID error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve media",
+        });
+    }
+});
+exports.getPublicMediaByIdentifier = getPublicMediaByIdentifier;
+const searchPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { search, contentType, category, topics, sort, page, limit, creator, duration, startDate, endDate, } = request.query;
+        if (page && isNaN(parseInt(page))) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid page number",
+            });
+            return;
+        }
+        if (limit && isNaN(parseInt(limit))) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid limit",
+            });
+            return;
+        }
+        const filters = {};
+        if (search)
+            filters.search = search;
+        if (contentType)
+            filters.contentType = contentType;
+        if (category)
+            filters.category = category;
+        if (topics)
+            filters.topics = topics;
+        if (sort)
+            filters.sort = sort;
+        if (page)
+            filters.page = page;
+        if (limit)
+            filters.limit = limit;
+        if (creator)
+            filters.creator = creator;
+        if (duration)
+            filters.duration = duration;
+        if (startDate)
+            filters.startDate = startDate;
+        if (endDate)
+            filters.endDate = endDate;
+        const result = yield media_service_1.mediaService.getAllMedia(filters);
+        response.status(200).json({
+            success: true,
+            message: "Media search completed",
+            media: result.media,
+            pagination: result.pagination,
+        });
+    }
+    catch (error) {
+        console.error("Search public media error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to search media",
+        });
+    }
+});
+exports.searchPublicMedia = searchPublicMedia;

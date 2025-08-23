@@ -33,6 +33,11 @@ import {
   getUserRecordings,
   // New go live method
   goLive,
+  // Public methods (no authentication required)
+  getPublicMedia,
+  getPublicAllContent,
+  getPublicMediaByIdentifier,
+  searchPublicMedia,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdminOrCreator } from "../middleware/role.middleware";
@@ -51,6 +56,41 @@ interface UserActionRequestBody {
 const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
+
+/**
+ * @route   GET /api/media/public
+ * @desc    Retrieve all media items with optional filters (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
+ * @returns { success: boolean, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
+ */
+router.get("/public", apiRateLimiter, getPublicMedia);
+
+/**
+ * @route   GET /api/media/public/all-content
+ * @desc    Retrieve ALL media content for the "All" tab (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @returns { success: boolean, media: object[], total: number }
+ */
+router.get("/public/all-content", apiRateLimiter, getPublicAllContent);
+
+/**
+ * @route   GET /api/media/public/search
+ * @desc    Search media items by title, type, category, topics, etc. (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
+ * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
+ */
+router.get("/public/search", apiRateLimiter, searchPublicMedia);
+
+/**
+ * @route   GET /api/media/public/:id
+ * @desc    Retrieve a single media item by its identifier (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @returns { success: boolean, media: object }
+ */
+router.get("/public/:id", apiRateLimiter, getPublicMediaByIdentifier);
 
 /**
  * @route   POST /api/media/upload

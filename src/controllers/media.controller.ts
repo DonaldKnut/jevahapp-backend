@@ -1548,3 +1548,150 @@ export const goLive = async (
     });
   }
 };
+
+// Public endpoints for viewing media (no authentication required)
+export const getPublicMedia = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const filters = request.query;
+    const mediaList = await mediaService.getAllMedia(filters);
+
+    response.status(200).json({
+      success: true,
+      media: mediaList.media,
+      pagination: mediaList.pagination,
+    });
+  } catch (error: any) {
+    console.error("Fetch public media error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve media",
+    });
+  }
+};
+
+export const getPublicAllContent = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const result = await mediaService.getAllContentForAllTab();
+
+    response.status(200).json({
+      success: true,
+      media: result.media,
+      total: result.total,
+    });
+  } catch (error: any) {
+    console.error("Fetch public all content error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve all content",
+    });
+  }
+};
+
+export const getPublicMediaByIdentifier = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { id } = request.params;
+
+    if (!Types.ObjectId.isValid(id)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media identifier",
+      });
+      return;
+    }
+
+    const media = await mediaService.getMediaByIdentifier(id);
+
+    if (!media) {
+      response.status(404).json({
+        success: false,
+        message: "Media not found",
+      });
+      return;
+    }
+
+    response.status(200).json({
+      success: true,
+      media,
+    });
+  } catch (error: any) {
+    console.error("Fetch public media by ID error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve media",
+    });
+  }
+};
+
+export const searchPublicMedia = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const {
+      search,
+      contentType,
+      category,
+      topics,
+      sort,
+      page,
+      limit,
+      creator,
+      duration,
+      startDate,
+      endDate,
+    } = request.query;
+
+    if (page && isNaN(parseInt(page as string))) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid page number",
+      });
+      return;
+    }
+
+    if (limit && isNaN(parseInt(limit as string))) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid limit",
+      });
+      return;
+    }
+
+    const filters: any = {};
+    if (search) filters.search = search;
+    if (contentType) filters.contentType = contentType;
+    if (category) filters.category = category;
+    if (topics) filters.topics = topics;
+    if (sort) filters.sort = sort;
+    if (page) filters.page = page;
+    if (limit) filters.limit = limit;
+    if (creator) filters.creator = creator;
+    if (duration) filters.duration = duration;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+
+    const result = await mediaService.getAllMedia(filters);
+
+    response.status(200).json({
+      success: true,
+      message: "Media search completed",
+      media: result.media,
+      pagination: result.pagination,
+    });
+  } catch (error: any) {
+    console.error("Search public media error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to search media",
+    });
+  }
+};
