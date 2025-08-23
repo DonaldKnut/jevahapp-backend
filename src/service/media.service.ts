@@ -312,7 +312,7 @@ export class MediaService {
     }
 
     const page = parseInt(filters.page as string) || 1;
-    const limit = parseInt(filters.limit as string) || 10;
+    const limit = parseInt(filters.limit as string) || 50; // Increased from 10 to 50
     const skip = (page - 1) * limit;
 
     const mediaList = await Media.find(query)
@@ -327,6 +327,21 @@ export class MediaService {
     return {
       media: mediaList,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    };
+  }
+
+  // New method specifically for the "All" tab - returns all content without pagination
+  async getAllContentForAllTab() {
+    const query: any = {}; // No filters - return all content for all users
+
+    const mediaList = await Media.find(query)
+      .sort("-createdAt") // Latest first
+      .populate("uploadedBy", "firstName lastName avatar")
+      .lean();
+
+    return {
+      media: mediaList,
+      total: mediaList.length,
     };
   }
 
@@ -622,7 +637,7 @@ export class MediaService {
     }).select("actionType");
 
     const status = { isFavorited: false, isShared: false };
-    actions.forEach((action) => {
+    actions.forEach(action => {
       if (action.actionType === "favorite") status.isFavorited = true;
       if (action.actionType === "share") status.isShared = true;
     });
@@ -712,7 +727,7 @@ export class MediaService {
       live: 0,
     };
 
-    result.forEach((item) => {
+    result.forEach(item => {
       counts[item.contentType as keyof typeof counts] = item.count;
     });
 
@@ -788,7 +803,7 @@ export class MediaService {
       live: 0,
     };
 
-    result.forEach((item) => {
+    result.forEach(item => {
       counts[item.contentType as keyof typeof counts] = item.count;
     });
 
@@ -818,7 +833,7 @@ export class MediaService {
       totalDownloads: 0,
     };
 
-    result.forEach((item) => {
+    result.forEach(item => {
       if (item.interactionType === "view") counts.totalViews = item.count;
       if (item.interactionType === "listen") counts.totalListens = item.count;
       if (item.interactionType === "read") counts.totalReads = item.count;

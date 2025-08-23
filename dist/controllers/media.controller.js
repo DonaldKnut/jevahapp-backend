@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -236,6 +236,25 @@ const getAllMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.getAllMedia = getAllMedia;
+// New endpoint specifically for the "All" tab - returns all content for all users
+const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const result = yield media_service_1.mediaService.getAllContentForAllTab();
+        response.status(200).json({
+            success: true,
+            media: result.media,
+            total: result.total,
+        });
+    }
+    catch (error) {
+        console.error("Fetch all content error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve all content",
+        });
+    }
+});
+exports.getAllContentForAllTab = getAllContentForAllTab;
 const searchMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { search, contentType, category, topics, sort, page, limit, creator, duration, startDate, endDate, } = request.query;

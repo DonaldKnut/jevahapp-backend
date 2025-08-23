@@ -316,6 +316,28 @@ export const getAllMedia = async (
   }
 };
 
+// New endpoint specifically for the "All" tab - returns all content for all users
+export const getAllContentForAllTab = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const result = await mediaService.getAllContentForAllTab();
+
+    response.status(200).json({
+      success: true,
+      media: result.media,
+      total: result.total,
+    });
+  } catch (error: any) {
+    console.error("Fetch all content error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve all content",
+    });
+  }
+};
+
 export const searchMedia = async (
   request: Request,
   response: Response

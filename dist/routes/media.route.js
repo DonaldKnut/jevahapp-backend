@@ -37,6 +37,13 @@ router.post("/upload", auth_middleware_1.verifyToken, rateLimiter_1.mediaUploadR
  */
 router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getAllMedia);
 /**
+ * @route   GET /api/media/all-content
+ * @desc    Retrieve ALL media content for the "All" tab - no pagination, no user-specific filtering
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, media: object[], total: number }
+ */
+router.get("/all-content", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getAllContentForAllTab);
+/**
  * @route   GET /api/media/search
  * @desc    Search media items by title, type, category, topics, etc.
  * @access  Protected (Authenticated users only)

@@ -1,9 +1,9 @@
-
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import {
   uploadMedia,
   getAllMedia,
+  getAllContentForAllTab,
   getMediaByIdentifier,
   deleteMedia,
   bookmarkMedia,
@@ -83,6 +83,14 @@ router.post(
  * @returns { success: boolean, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
  */
 router.get("/", verifyToken, apiRateLimiter, getAllMedia);
+
+/**
+ * @route   GET /api/media/all-content
+ * @desc    Retrieve ALL media content for the "All" tab - no pagination, no user-specific filtering
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, media: object[], total: number }
+ */
+router.get("/all-content", verifyToken, apiRateLimiter, getAllContentForAllTab);
 
 /**
  * @route   GET /api/media/search

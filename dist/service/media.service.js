@@ -202,7 +202,7 @@ class MediaService {
                 sort = "-viewCount -listenCount -readCount";
             }
             const page = parseInt(filters.page) || 1;
-            const limit = parseInt(filters.limit) || 10;
+            const limit = parseInt(filters.limit) || 50; // Increased from 10 to 50
             const skip = (page - 1) * limit;
             const mediaList = yield media_model_1.Media.find(query)
                 .sort(sort)
@@ -214,6 +214,20 @@ class MediaService {
             return {
                 media: mediaList,
                 pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+            };
+        });
+    }
+    // New method specifically for the "All" tab - returns all content without pagination
+    getAllContentForAllTab() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const query = {}; // No filters - return all content for all users
+            const mediaList = yield media_model_1.Media.find(query)
+                .sort("-createdAt") // Latest first
+                .populate("uploadedBy", "firstName lastName avatar")
+                .lean();
+            return {
+                media: mediaList,
+                total: mediaList.length,
             };
         });
     }
@@ -438,7 +452,7 @@ class MediaService {
                 media: new mongoose_1.Types.ObjectId(mediaIdentifier),
             }).select("actionType");
             const status = { isFavorited: false, isShared: false };
-            actions.forEach((action) => {
+            actions.forEach(action => {
                 if (action.actionType === "favorite")
                     status.isFavorited = true;
                 if (action.actionType === "share")
@@ -511,7 +525,7 @@ class MediaService {
                 books: 0,
                 live: 0,
             };
-            result.forEach((item) => {
+            result.forEach(item => {
                 counts[item.contentType] = item.count;
             });
             return counts;
@@ -581,7 +595,7 @@ class MediaService {
                 books: 0,
                 live: 0,
             };
-            result.forEach((item) => {
+            result.forEach(item => {
                 counts[item.contentType] = item.count;
             });
             return counts;
@@ -603,7 +617,7 @@ class MediaService {
                 totalReads: 0,
                 totalDownloads: 0,
             };
-            result.forEach((item) => {
+            result.forEach(item => {
                 if (item.interactionType === "view")
                     counts.totalViews = item.count;
                 if (item.interactionType === "listen")
