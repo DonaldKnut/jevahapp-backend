@@ -50,6 +50,7 @@ const userSchema = new mongoose_1.Schema({
     verificationCodeExpires: { type: Date },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+    resetCodeVerified: { type: Boolean },
     age: { type: Number },
     isKid: { type: Boolean },
     section: { type: String, enum: ["kids", "adults"] },

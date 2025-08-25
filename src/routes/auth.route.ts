@@ -83,6 +83,36 @@ router.post(
   asyncHandler(authController.verifyEmail)
 );
 
+// POST /forgot-password
+// Initiates password reset by sending a verification code to user's email
+// - Uses emailRateLimiter to prevent abuse
+// - Calls authController.initiatePasswordReset to generate and send reset code
+router.post(
+  "/forgot-password",
+  emailRateLimiter,
+  asyncHandler(authController.initiatePasswordReset)
+);
+
+// POST /verify-reset-code
+// Verifies the reset code sent to user's email
+// - Uses sensitiveEndpointRateLimiter for stricter rate limiting
+// - Calls authController.verifyResetCode to validate the code
+router.post(
+  "/verify-reset-code",
+  sensitiveEndpointRateLimiter,
+  asyncHandler(authController.verifyResetCode)
+);
+
+// POST /reset-password-with-code
+// Resets user's password using the verified reset code
+// - Uses sensitiveEndpointRateLimiter to prevent abuse
+// - Calls authController.resetPasswordWithCode to update password
+router.post(
+  "/reset-password-with-code",
+  sensitiveEndpointRateLimiter,
+  asyncHandler(authController.resetPasswordWithCode)
+);
+
 // POST /reset-password
 // Resets a user's password using a reset token
 // - Uses sensitiveEndpointRateLimiter to prevent abuse

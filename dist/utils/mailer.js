@@ -125,12 +125,12 @@ const sendVerificationEmail = (email, firstName, code) => __awaiter(void 0, void
     });
 });
 exports.sendVerificationEmail = sendVerificationEmail;
-const sendResetPasswordEmail = (email, firstName, resetLink) => __awaiter(void 0, void 0, void 0, function* () {
+const sendResetPasswordEmail = (email, firstName, resetCode) => __awaiter(void 0, void 0, void 0, function* () {
     return sendEmail({
         to: email,
-        subject: "Reset Your Password",
+        subject: "Reset Your Password - Verification Code",
         templateName: "reset",
-        context: { firstName, resetLink },
+        context: { firstName, resetCode },
     });
 });
 exports.sendResetPasswordEmail = sendResetPasswordEmail;

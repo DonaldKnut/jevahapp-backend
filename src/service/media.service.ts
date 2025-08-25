@@ -40,6 +40,7 @@ interface MediaUserActionInput {
   userIdentifier: string;
   mediaIdentifier: string;
   actionType: "favorite" | "share";
+  metadata?: Record<string, any>;
 }
 
 interface ViewTrackingInput {
@@ -312,7 +313,7 @@ export class MediaService {
     }
 
     const page = parseInt(filters.page as string) || 1;
-    const limit = parseInt(filters.limit as string) || 50; // Increased from 10 to 50
+    const limit = parseInt(filters.limit as string) || 10;
     const skip = (page - 1) * limit;
 
     const mediaList = await Media.find(query)
@@ -330,19 +331,130 @@ export class MediaService {
     };
   }
 
-  // New method specifically for the "All" tab - returns all content without pagination
   async getAllContentForAllTab() {
-    const query: any = {}; // No filters - return all content for all users
+    try {
+      // Aggregate media with author information and engagement metrics
+      const mediaList = await Media.aggregate([
+        {
+          $lookup: {
+            from: "users",
+            localField: "uploadedBy",
+            foreignField: "_id",
+            as: "author",
+          },
+        },
+        {
+          $unwind: "$author",
+        },
+        {
+          $lookup: {
+            from: "mediauseractions",
+            localField: "_id",
+            foreignField: "media",
+            as: "userActions",
+          },
+        },
+        {
+          $lookup: {
+            from: "mediainteractions",
+            localField: "_id",
+            foreignField: "media",
+            as: "interactions",
+          },
+        },
+        {
+          $addFields: {
+            // Calculate engagement metrics
+            totalLikes: {
+              $size: {
+                $filter: {
+                  input: "$userActions",
+                  as: "action",
+                  cond: { $eq: ["$$action.actionType", "like"] },
+                },
+              },
+            },
+            totalShares: {
+              $size: {
+                $filter: {
+                  input: "$userActions",
+                  as: "action",
+                  cond: { $eq: ["$$action.actionType", "share"] },
+                },
+              },
+            },
+            totalViews: {
+              $size: {
+                $filter: {
+                  input: "$interactions",
+                  as: "interaction",
+                  cond: { $eq: ["$$interaction.interactionType", "view"] },
+                },
+              },
+            },
+            // Author information
+            authorInfo: {
+              _id: "$author._id",
+              firstName: "$author.firstName",
+              lastName: "$author.lastName",
+              fullName: {
+                $concat: [
+                  { $ifNull: ["$author.firstName", ""] },
+                  " ",
+                  { $ifNull: ["$author.lastName", ""] },
+                ],
+              },
+              avatar: "$author.avatar",
+              section: "$author.section",
+            },
+            // Format creation date
+            formattedCreatedAt: {
+              $dateToString: {
+                format: "%Y-%m-%dT%H:%M:%S.%LZ",
+                date: "$createdAt",
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            description: 1,
+            contentType: 1,
+            category: 1,
+            fileUrl: 1,
+            thumbnailUrl: 1,
+            topics: 1,
+            duration: 1,
+            authorInfo: 1,
+            totalLikes: 1,
+            totalShares: 1,
+            totalViews: 1,
+            likeCount: 1,
+            shareCount: 1,
+            viewCount: 1,
+            commentCount: 1,
+            createdAt: 1,
+            formattedCreatedAt: 1,
+            updatedAt: 1,
+            // Ensure thumbnail is always included
+            thumbnail: "$thumbnailUrl",
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+      ]);
 
-    const mediaList = await Media.find(query)
-      .sort("-createdAt") // Latest first
-      .populate("uploadedBy", "firstName lastName avatar")
-      .lean();
-
-    return {
-      media: mediaList,
-      total: mediaList.length,
-    };
+      return {
+        media: mediaList,
+        total: mediaList.length,
+      };
+    } catch (error) {
+      console.error("Error fetching all content:", error);
+      throw new Error("Failed to retrieve all content");
+    }
   }
 
   async getMediaByIdentifier(mediaIdentifier: string) {
@@ -987,179 +1099,105 @@ export class MediaService {
     }
   }
 
-  async downloadMedia(data: DownloadInput) {
-    const { userIdentifier, mediaIdentifier, fileSize } = data;
-
-    if (!userIdentifier || !mediaIdentifier) {
-      throw new Error("User identifier and media identifier are required");
-    }
-
-    const media = await Media.findById(mediaIdentifier);
-    if (!media) {
-      throw new Error("Media not found");
-    }
-
-    if (!media.isDownloadable) {
-      throw new Error("This media is not available for download");
-    }
-
-    const user = await User.findById(userIdentifier);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    const session: ClientSession = await Media.startSession();
+  async getMediaWithEngagement(mediaId: string, userId: string) {
     try {
-      await session.withTransaction(async () => {
-        await Media.findByIdAndUpdate(
-          mediaIdentifier,
-          { $inc: { downloadCount: 1 } },
-          { session }
-        );
+      const media = await Media.findById(mediaId).populate(
+        "uploadedBy",
+        "firstName lastName avatar"
+      );
+      if (!media) {
+        throw new Error("Media not found");
+      }
 
-        await MediaInteraction.findOneAndUpdate(
-          {
-            user: new Types.ObjectId(userIdentifier),
-            media: new Types.ObjectId(mediaIdentifier),
-            interactionType: "download",
-          },
-          {
-            $inc: { count: 1 },
-            $set: { lastInteraction: new Date() },
-            $push: {
-              interactions: {
-                timestamp: new Date(),
-                fileSize,
-              },
-            },
-          },
-          { upsert: true, session }
-        );
-
-        await User.findByIdAndUpdate(
-          userIdentifier,
-          {
-            $push: {
-              offlineDownloads: {
-                mediaId: new Types.ObjectId(mediaIdentifier),
-                mediaTitle: media.title,
-                mediaType:
-                  media.contentType === "music"
-                    ? "audio"
-                    : media.contentType === "books"
-                      ? "books"
-                      : media.contentType,
-                downloadDate: new Date(),
-                fileSize,
-              },
-            },
-          },
-          { session }
-        );
-
-        if (media.uploadedBy.toString() !== userIdentifier) {
-          try {
-            const artist = await User.findById(media.uploadedBy);
-            if (
-              artist &&
-              artist.email &&
-              artist.emailNotifications?.songDownloads
-            ) {
-              await EmailService.sendSongDownloadedEmail(
-                artist.email,
-                artist.firstName ||
-                  artist.artistProfile?.artistName ||
-                  "Artist",
-                media.title,
-                user.firstName || user.email
-              );
-            }
-          } catch (emailError) {
-            console.error(
-              "Failed to send download notification email:",
-              emailError
-            );
-          }
-        }
+      // Get user's interaction status
+      const userAction = await MediaUserAction.findOne({
+        user: userId,
+        media: mediaId,
       });
-    } finally {
-      session.endSession();
-    }
 
-    return { success: true, downloadUrl: media.downloadUrl };
+      return {
+        ...media.toObject(),
+        userAction: userAction
+          ? {
+              isFavorited: userAction.actionType === "favorite",
+              isShared: userAction.actionType === "share",
+            }
+          : {
+              isFavorited: false,
+              isShared: false,
+            },
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
-  async shareMedia(data: ShareInput) {
-    const { userIdentifier, mediaIdentifier, platform } = data;
-
-    if (!userIdentifier || !mediaIdentifier) {
-      throw new Error("User identifier and media identifier are required");
-    }
-
-    const media = await Media.findById(mediaIdentifier);
-    if (!media) {
-      throw new Error("Media not found");
-    }
-
-    const user = await User.findById(userIdentifier);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    const session: ClientSession = await Media.startSession();
+  async downloadMedia(data: {
+    mediaId: string;
+    userId: string;
+    fileSize: number;
+  }) {
     try {
-      await session.withTransaction(async () => {
-        await Media.findByIdAndUpdate(
-          mediaIdentifier,
-          { $inc: { shareCount: 1 } },
-          { session }
-        );
+      const { mediaId, userId, fileSize } = data;
 
-        await MediaUserAction.findOneAndUpdate(
-          {
-            user: new Types.ObjectId(userIdentifier),
-            media: new Types.ObjectId(mediaIdentifier),
-            actionType: "share",
-          },
-          {
-            $set: { createdAt: new Date() },
-            $push: {
-              metadata: {
-                platform,
-                sharedAt: new Date(),
-              },
-            },
-          },
-          { upsert: true, session }
-        );
+      const media = await Media.findById(mediaId);
+      if (!media) {
+        throw new Error("Media not found");
+      }
 
-        if (media.uploadedBy.toString() !== userIdentifier) {
-          try {
-            const artist = await User.findById(media.uploadedBy);
-            if (
-              artist &&
-              artist.email &&
-              artist.emailNotifications?.mediaShares
-            ) {
-              await EmailService.sendMediaSharedEmail(
-                artist.email,
-                media.title,
-                artist.firstName || artist.artistProfile?.artistName || "Artist"
-              );
-            }
-          } catch (emailError) {
-            console.error(
-              "Failed to send share notification email:",
-              emailError
-            );
-          }
-        }
+      // Record download interaction
+      await this.recordInteraction({
+        userIdentifier: userId,
+        mediaIdentifier: mediaId,
+        interactionType: "download",
+        duration: 0,
       });
-    } finally {
-      session.endSession();
-    }
 
-    return { success: true, shareUrl: media.shareUrl };
+      // Generate download URL (this would typically be a signed URL from your storage service)
+      const downloadUrl = `${process.env.API_BASE_URL}/api/media/${mediaId}/download`;
+
+      return {
+        success: true,
+        downloadUrl,
+        message: "Download initiated successfully",
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async shareMedia(data: {
+    mediaId: string;
+    userId: string;
+    platform?: string;
+  }) {
+    try {
+      const { mediaId, userId, platform } = data;
+
+      const media = await Media.findById(mediaId);
+      if (!media) {
+        throw new Error("Media not found");
+      }
+
+      // Record share interaction
+      await this.recordUserAction({
+        userIdentifier: userId,
+        mediaIdentifier: mediaId,
+        actionType: "share",
+        metadata: { platform },
+      });
+
+      // Generate share URL
+      const shareUrl = `${process.env.FRONTEND_URL}/media/${mediaId}`;
+
+      return {
+        success: true,
+        shareUrl,
+        message: "Media shared successfully",
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 }
 

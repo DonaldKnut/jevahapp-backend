@@ -518,16 +518,78 @@ class AuthController {
                         message: "Email is required",
                     });
                 }
-                const resetToken = yield auth_service_1.default.initiatePasswordReset(email);
+                const result = yield auth_service_1.default.initiatePasswordReset(email);
                 return response.status(200).json({
                     success: true,
-                    message: "Password reset initiated",
-                    resetToken,
+                    message: "Password reset code sent to your email",
                 });
             }
             catch (error) {
                 if (error instanceof Error && error.message === "User not found") {
                     return response.status(404).json({
+                        success: false,
+                        message: error.message,
+                    });
+                }
+                return next(error);
+            }
+        });
+    }
+    verifyResetCode(request, response, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { email, code } = request.body;
+                if (!email || !code) {
+                    return response.status(400).json({
+                        success: false,
+                        message: "Email and verification code are required",
+                    });
+                }
+                const result = yield auth_service_1.default.verifyResetCode(email, code);
+                return response.status(200).json({
+                    success: true,
+                    message: "Reset code verified successfully",
+                });
+            }
+            catch (error) {
+                if (error instanceof Error &&
+                    error.message === "Invalid or expired reset code") {
+                    return response.status(400).json({
+                        success: false,
+                        message: error.message,
+                    });
+                }
+                return next(error);
+            }
+        });
+    }
+    resetPasswordWithCode(request, response, next) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { email, code, newPassword } = request.body;
+                if (!email || !code || !newPassword) {
+                    return response.status(400).json({
+                        success: false,
+                        message: "Email, verification code, and new password are required",
+                    });
+                }
+                // Validate password strength (minimum 6 characters)
+                if (newPassword.length < 6) {
+                    return response.status(400).json({
+                        success: false,
+                        message: "Password must be at least 6 characters long",
+                    });
+                }
+                yield auth_service_1.default.resetPasswordWithCode(email, code, newPassword);
+                return response.status(200).json({
+                    success: true,
+                    message: "Password reset successfully",
+                });
+            }
+            catch (error) {
+                if (error instanceof Error &&
+                    error.message === "Invalid or expired reset code") {
+                    return response.status(400).json({
                         success: false,
                         message: error.message,
                     });

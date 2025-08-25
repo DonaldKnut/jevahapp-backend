@@ -1,15 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reset Your Password - Jevah</title>
+    <title>Reset Your Password</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
       }
+      .container {
+        background-color: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .logo {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4caf50;
+        margin-bottom: 10px;
+      }
+      .code-container {
+        background-color: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+      }
+      .reset-code {
+        font-size: 32px;
+        font-weight: bold;
+        color: #007bff;
+        letter-spacing: 4px;
+        font-family: "Courier New", monospace;
+      }
+      .instructions {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        color: #666;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="logo">🎵 Tevah</div>
+        <h1>Reset Your Password</h1>
+      </div>
+
+      <p>Hello <%= firstName %>,</p>
+
+      <p>
+        We received a request to reset your password for your Tevah account. To
+        proceed with the password reset, please use the verification code below:
+      </p>
+
+      <div class="code-container">
+        <div class="reset-code"><%= resetCode %></div>
+        </div>
+
+      <div class="instructions">
+        <strong>Instructions:</strong>
+        <ul>
+          <li>Enter this 6-digit code in the password reset form</li>
+          <li>This code will expire in 10 minutes</li>
+          <li>If you didn't request this reset, please ignore this email</li>
+        </ul>
+        </div>
+
+      <div class="warning">
+        <strong>Security Notice:</strong>
+        <ul>
+          <li>Never share this code with anyone</li>
+          <li>Tevah will never ask for this code via phone or text</li>
+          <li>
+            If you suspect unauthorized access, contact support immediately
+          </li>
+        </ul>
+      </div>
+
+      <p>
+        If you have any questions or need assistance, please don't hesitate to
+        contact our support team.
+      </p>
+
+      <p>Best regards,<br />The Tevah Team</p>
+
+      <div class="footer">
+        <p>This is an automated message. Please do not reply to this email.</p>
+        <p>
+          If you didn't request a password reset, please ignore this email or
+          contact support if you have concerns.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
 
       body {
         background: linear-gradient(135deg, #112e2a 0%, #0a1f1c 100%);

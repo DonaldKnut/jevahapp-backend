@@ -652,74 +652,79 @@ export const trackViewWithDuration = async (
   response: Response
 ): Promise<void> => {
   try {
-    const { id } = request.params;
-    const { duration, isComplete } = request.body as ViewTrackingRequestBody;
-    const userIdentifier = request.userId;
+    const userId = request.userId;
+    const { mediaId, duration, isComplete } = request.body;
 
-    if (!userIdentifier) {
+    if (!userId) {
       response.status(401).json({
         success: false,
-        message: "Unauthorized: User not authenticated",
+        message: "Unauthorized: User ID missing",
       });
       return;
     }
 
-    if (!id || !Types.ObjectId.isValid(id)) {
+    if (
+      !mediaId ||
+      typeof duration !== "number" ||
+      typeof isComplete !== "boolean"
+    ) {
       response.status(400).json({
         success: false,
-        message: "Invalid media ID",
-      });
-      return;
-    }
-
-    if (typeof duration !== "number" || duration < 0) {
-      response.status(400).json({
-        success: false,
-        message: "Duration must be a positive number",
+        message: "Missing required fields: mediaId, duration, isComplete",
       });
       return;
     }
 
     const result = await mediaService.trackViewWithDuration({
-      userIdentifier,
-      mediaIdentifier: id,
+      userIdentifier: userId,
+      mediaIdentifier: mediaId,
       duration,
-      isComplete: isComplete || false,
+      isComplete,
     });
 
     response.status(200).json({
       success: true,
-      message: "View tracked successfully",
-      countedAsView: result.countedAsView,
-      duration,
+      data: result,
     });
-  } catch (error: unknown) {
-    console.error("Track view with duration error:", error);
-
-    if (error instanceof Error) {
-      if (error.message.includes("not found")) {
-        response.status(404).json({
-          success: false,
-          message: error.message,
-        });
-        return;
-      }
-
-      if (
-        error.message.includes("Invalid") ||
-        error.message.includes("required")
-      ) {
-        response.status(400).json({
-          success: false,
-          message: error.message,
-        });
-        return;
-      }
-    }
-
+  } catch (error: any) {
+    console.error("Track view error:", error);
     response.status(500).json({
       success: false,
       message: "Failed to track view",
+    });
+  }
+};
+
+export const getMediaWithEngagement = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { mediaId } = request.params;
+    const userId = request.userId; // Optional for public access
+
+    if (!mediaId) {
+      response.status(400).json({
+        success: false,
+        message: "Media ID is required",
+      });
+      return;
+    }
+
+    const media = await mediaService.getMediaWithEngagement(
+      mediaId,
+      userId || ""
+    );
+
+    response.status(200).json({
+      success: true,
+      data: media,
+    });
+  } catch (error: any) {
+    console.error("Get media with engagement error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve media with engagement data",
     });
   }
 };
@@ -759,8 +764,8 @@ export const downloadMedia = async (
     }
 
     const result = await mediaService.downloadMedia({
-      userIdentifier,
-      mediaIdentifier: id,
+      userId: userIdentifier,
+      mediaId: id,
       fileSize,
     });
 
@@ -835,8 +840,8 @@ export const shareMedia = async (
     }
 
     const result = await mediaService.shareMedia({
-      userIdentifier,
-      mediaIdentifier: id,
+      userId: userIdentifier,
+      mediaId: id,
       platform,
     });
 

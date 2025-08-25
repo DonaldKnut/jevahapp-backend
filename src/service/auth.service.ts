@@ -3,7 +3,11 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
-import { sendVerificationEmail, sendWelcomeEmail } from "../utils/mailer";
+import {
+  sendVerificationEmail,
+  sendWelcomeEmail,
+  sendResetPasswordEmail,
+} from "../utils/mailer";
 import {
   verifyClerkToken,
   extractUserInfoFromToken,
@@ -526,6 +530,75 @@ class AuthService {
     return user;
   }
 
+  async initiatePasswordReset(email: string) {
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Generate a 6-digit OTP code (same as email verification)
+    const resetCode = crypto.randomBytes(3).toString("hex").toUpperCase();
+    const resetCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.resetPasswordToken = resetCode;
+    user.resetPasswordExpires = resetCodeExpires;
+    await user.save();
+
+    // Send reset password email with OTP code
+    await sendResetPasswordEmail(
+      user.email,
+      user.firstName || "User",
+      resetCode
+    );
+
+    return { message: "Password reset code sent to your email" };
+  }
+
+  async verifyResetCode(email: string, code: string) {
+    const user = await User.findOne({
+      email,
+      resetPasswordToken: code,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      throw new Error("Invalid or expired reset code");
+    }
+
+    // Mark the code as verified (we'll use a separate field to track this)
+    user.resetCodeVerified = true;
+    await user.save();
+
+    return { message: "Reset code verified successfully" };
+  }
+
+  async resetPasswordWithCode(
+    email: string,
+    code: string,
+    newPassword: string
+  ) {
+    const user = await User.findOne({
+      email,
+      resetPasswordToken: code,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      throw new Error("Invalid or expired reset code");
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    user.resetCodeVerified = undefined;
+    await user.save();
+
+    return user;
+  }
+
+  // Keep the old method for backward compatibility
   async resetPassword(email: string, token: string, newPassword: string) {
     const user = await User.findOne({
       email,
@@ -541,6 +614,7 @@ class AuthService {
     user.password = hashedPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+    user.resetCodeVerified = undefined;
     await user.save();
 
     return user;
@@ -729,22 +803,6 @@ class AuthService {
       avatarUrl: user.avatar,
       userId: user._id,
     };
-  }
-
-  async initiatePasswordReset(email: string) {
-    const user = await User.findOne({ email });
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    const resetTokenExpires = new Date(Date.now() + 3600000);
-
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = resetTokenExpires;
-    await user.save();
-
-    return resetToken;
   }
 
   async logout(userId: string, token: string) {

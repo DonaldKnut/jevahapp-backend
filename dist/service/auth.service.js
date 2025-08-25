@@ -415,6 +415,60 @@ class AuthService {
             return user;
         });
     }
+    initiatePasswordReset(email) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield user_model_1.User.findOne({ email });
+            if (!user) {
+                throw new Error("User not found");
+            }
+            // Generate a 6-digit OTP code (same as email verification)
+            const resetCode = crypto_1.default.randomBytes(3).toString("hex").toUpperCase();
+            const resetCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+            user.resetPasswordToken = resetCode;
+            user.resetPasswordExpires = resetCodeExpires;
+            yield user.save();
+            // Send reset password email with OTP code
+            yield (0, mailer_1.sendResetPasswordEmail)(user.email, user.firstName || "User", resetCode);
+            return { message: "Password reset code sent to your email" };
+        });
+    }
+    verifyResetCode(email, code) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield user_model_1.User.findOne({
+                email,
+                resetPasswordToken: code,
+                resetPasswordExpires: { $gt: Date.now() },
+            });
+            if (!user) {
+                throw new Error("Invalid or expired reset code");
+            }
+            // Mark the code as verified (we'll use a separate field to track this)
+            user.resetCodeVerified = true;
+            yield user.save();
+            return { message: "Reset code verified successfully" };
+        });
+    }
+    resetPasswordWithCode(email, code, newPassword) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield user_model_1.User.findOne({
+                email,
+                resetPasswordToken: code,
+                resetPasswordExpires: { $gt: Date.now() },
+            });
+            if (!user) {
+                throw new Error("Invalid or expired reset code");
+            }
+            // Hash the new password
+            const hashedPassword = yield bcrypt_1.default.hash(newPassword, 10);
+            user.password = hashedPassword;
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpires = undefined;
+            user.resetCodeVerified = undefined;
+            yield user.save();
+            return user;
+        });
+    }
+    // Keep the old method for backward compatibility
     resetPassword(email, token, newPassword) {
         return __awaiter(this, void 0, void 0, function* () {
             const user = yield user_model_1.User.findOne({
@@ -429,6 +483,7 @@ class AuthService {
             user.password = hashedPassword;
             user.resetPasswordToken = undefined;
             user.resetPasswordExpires = undefined;
+            user.resetCodeVerified = undefined;
             yield user.save();
             return user;
         });
@@ -565,20 +620,6 @@ class AuthService {
                 avatarUrl: user.avatar,
                 userId: user._id,
             };
-        });
-    }
-    initiatePasswordReset(email) {
-        return __awaiter(this, void 0, void 0, function* () {
-            const user = yield user_model_1.User.findOne({ email });
-            if (!user) {
-                throw new Error("User not found");
-            }
-            const resetToken = crypto_1.default.randomBytes(20).toString("hex");
-            const resetTokenExpires = new Date(Date.now() + 3600000);
-            user.resetPasswordToken = resetToken;
-            user.resetPasswordExpires = resetTokenExpires;
-            yield user.save();
-            return resetToken;
         });
     }
     logout(userId, token) {

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -523,62 +523,37 @@ exports.recordMediaInteraction = recordMediaInteraction;
 // New method for tracking views with duration
 const trackViewWithDuration = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = request.params;
-        const { duration, isComplete } = request.body;
-        const userIdentifier = request.userId;
-        if (!userIdentifier) {
+        const userId = request.userId;
+        const { mediaId, duration, isComplete } = request.body;
+        if (!userId) {
             response.status(401).json({
                 success: false,
-                message: "Unauthorized: User not authenticated",
+                message: "Unauthorized: User ID missing",
             });
             return;
         }
-        if (!id || !mongoose_1.Types.ObjectId.isValid(id)) {
+        if (!mediaId ||
+            typeof duration !== "number" ||
+            typeof isComplete !== "boolean") {
             response.status(400).json({
                 success: false,
-                message: "Invalid media ID",
-            });
-            return;
-        }
-        if (typeof duration !== "number" || duration < 0) {
-            response.status(400).json({
-                success: false,
-                message: "Duration must be a positive number",
+                message: "Missing required fields: mediaId, duration, isComplete",
             });
             return;
         }
         const result = yield media_service_1.mediaService.trackViewWithDuration({
-            userIdentifier,
-            mediaIdentifier: id,
+            userIdentifier: userId,
+            mediaIdentifier: mediaId,
             duration,
-            isComplete: isComplete || false,
+            isComplete,
         });
         response.status(200).json({
             success: true,
-            message: "View tracked successfully",
-            countedAsView: result.countedAsView,
-            duration,
+            data: result,
         });
     }
     catch (error) {
-        console.error("Track view with duration error:", error);
-        if (error instanceof Error) {
-            if (error.message.includes("not found")) {
-                response.status(404).json({
-                    success: false,
-                    message: error.message,
-                });
-                return;
-            }
-            if (error.message.includes("Invalid") ||
-                error.message.includes("required")) {
-                response.status(400).json({
-                    success: false,
-                    message: error.message,
-                });
-                return;
-            }
-        }
+        console.error("Track view error:", error);
         response.status(500).json({
             success: false,
             message: "Failed to track view",
@@ -586,6 +561,32 @@ const trackViewWithDuration = (request, response) => __awaiter(void 0, void 0, v
     }
 });
 exports.trackViewWithDuration = trackViewWithDuration;
+const getMediaWithEngagement = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { mediaId } = request.params;
+        const userId = request.userId; // Optional for public access
+        if (!mediaId) {
+            response.status(400).json({
+                success: false,
+                message: "Media ID is required",
+            });
+            return;
+        }
+        const media = yield media_service_1.mediaService.getMediaWithEngagement(mediaId, userId || "");
+        response.status(200).json({
+            success: true,
+            data: media,
+        });
+    }
+    catch (error) {
+        console.error("Get media with engagement error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve media with engagement data",
+        });
+    }
+});
+exports.getMediaWithEngagement = getMediaWithEngagement;
 // New method for downloading media
 const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -614,8 +615,8 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
             return;
         }
         const result = yield media_service_1.mediaService.downloadMedia({
-            userIdentifier,
-            mediaIdentifier: id,
+            userId: userIdentifier,
+            mediaId: id,
             fileSize,
         });
         response.status(200).json({
@@ -678,8 +679,8 @@ const shareMedia = (request, response) => __awaiter(void 0, void 0, void 0, func
             return;
         }
         const result = yield media_service_1.mediaService.shareMedia({
-            userIdentifier,
-            mediaIdentifier: id,
+            userId: userIdentifier,
+            mediaId: id,
             platform,
         });
         response.status(200).json({

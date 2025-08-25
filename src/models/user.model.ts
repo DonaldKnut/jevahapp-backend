@@ -106,6 +106,7 @@ export interface IUser {
   verificationCodeExpires?: Date;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
+  resetCodeVerified?: boolean;
 
   age?: number;
   isKid?: boolean;
@@ -181,6 +182,7 @@ const userSchema = new Schema<IUserDocument>(
     verificationCodeExpires: { type: Date },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+    resetCodeVerified: { type: Boolean },
 
     age: { type: Number },
     isKid: { type: Boolean },

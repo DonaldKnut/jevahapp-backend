@@ -227,3 +227,4 @@ This fix ensures that:
 - ✅ Backward compatibility maintained
 
 The frontend team should update their integration to use the new `/api/media/all-content` endpoint for the "All" tab.
+

@@ -139,6 +139,21 @@ router.post("/:id/save", auth_middleware_1.verifyToken, rateLimiter_1.mediaInter
  */
 router.post("/:id/interact", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.recordMediaInteraction);
 /**
+ * @route   POST /api/media/track-view
+ * @desc    Track view with duration for media content
+ * @access  Protected (Authenticated users only)
+ * @body    { mediaId: string, duration: number, isComplete: boolean }
+ * @returns { success: boolean, data: { countedAsView: boolean, viewThreshold: number, duration: number } }
+ */
+router.post("/track-view", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.trackViewWithDuration);
+/**
+ * @route   GET /api/media/:mediaId/engagement
+ * @desc    Get media with engagement metrics and user-specific data
+ * @access  Public (Optional authentication for user-specific data)
+ * @returns { success: boolean, data: MediaWithEngagement }
+ */
+router.get("/:mediaId/engagement", media_controller_1.getMediaWithEngagement);
+/**
  * @route   POST /api/media/:id/track-view
  * @desc    Track view with duration for accurate view counting
  * @access  Protected (Authenticated users only)
