@@ -45,6 +45,25 @@
         letter-spacing: 4px;
         font-family: "Courier New", monospace;
       }
+
+      .verification-code {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 2px solid #007bff;
+        border-radius: 12px;
+        padding: 25px;
+        text-align: center;
+        margin: 30px 0;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.1);
+      }
+
+      .code-text {
+        font-size: 36px;
+        font-weight: bold;
+        color: #007bff;
+        letter-spacing: 6px;
+        font-family: "Courier New", monospace;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
       .instructions {
         background-color: #e7f3ff;
         border-left: 4px solid #007bff;
@@ -83,16 +102,16 @@
 
       <div class="code-container">
         <div class="reset-code"><%= resetCode %></div>
-        </div>
+      </div>
 
       <div class="instructions">
         <strong>Instructions:</strong>
         <ul>
-          <li>Enter this 6-digit code in the password reset form</li>
+          <li>Enter this 6-digit code in the password reset form in your app</li>
           <li>This code will expire in 10 minutes</li>
           <li>If you didn't request this reset, please ignore this email</li>
         </ul>
-        </div>
+      </div>
 
       <div class="warning">
         <strong>Security Notice:</strong>
@@ -239,51 +258,7 @@
         font-weight: 600;
       }
 
-      .reset-button {
-        display: inline-block;
-        background: linear-gradient(135deg, #f9c833 0%, #ffd700 100%);
-        color: #112e2a;
-        text-decoration: none;
-        padding: 18px 40px;
-        border-radius: 16px;
-        font-size: 16px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        margin: 30px 0;
-        position: relative;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        box-shadow:
-          0 8px 25px rgba(249, 200, 51, 0.3),
-          0 0 0 1px rgba(249, 200, 51, 0.2);
-      }
-
-      .reset-button::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-          90deg,
-          transparent,
-          rgba(255, 255, 255, 0.2),
-          transparent
-        );
-        transition: left 0.5s ease;
-      }
-
-      .reset-button:hover {
-        transform: translateY(-2px);
-        box-shadow:
-          0 12px 35px rgba(249, 200, 51, 0.4),
-          0 0 0 1px rgba(249, 200, 51, 0.3);
-      }
-
-      .reset-button:hover::before {
-        left: 100%;
-      }
+      /* Reset button styles removed - OTP-only flow */
 
       .security-notice {
         background: rgba(249, 200, 51, 0.1);
@@ -458,10 +433,17 @@
           font-size: 24px;
         }
 
-        .reset-button {
-          padding: 16px 30px;
-          font-size: 15px;
+        .verification-code {
+          padding: 20px;
+          margin: 20px 0;
         }
+
+        .code-text {
+          font-size: 28px;
+          letter-spacing: 4px;
+        }
+
+        /* Reset button styles removed - OTP-only flow */
       }
     </style>
   </head>
@@ -484,16 +466,18 @@
           Hi <span class="highlight"><%= firstName %></span>,
         </p>
         <p class="instruction">
-          We received a request to reset your password. Click the button below
-          to securely reset your password:
+          We received a request to reset your password. Use the verification code below
+          to securely reset your password in your app:
         </p>
 
-        <a href="<%= resetLink %>" class="reset-button">Reset Password</a>
+        <div class="verification-code">
+          <div class="code-text"><%= resetCode %></div>
+        </div>
 
         <div class="security-notice">
           <span class="security-icon">🔒</span>
           <span class="security-text">
-            <strong>Security Notice:</strong> This link was requested from your
+            <strong>Security Notice:</strong> This verification code was requested from your
             account. If you didn't make this request, please ignore this email
             and ensure your account is secure.
           </span>
@@ -502,16 +486,16 @@
         <div class="expiry-notice">
           <span class="expiry-icon">⏰</span>
           <span class="expiry-text">
-            <strong>Link expires in 1 hour</strong> for security purposes. If
+            <strong>Code expires in 10 minutes</strong> for security purposes. If
             you don't reset your password within this time, you'll need to
-            request a new link.
+            request a new code.
           </span>
         </div>
 
         <div class="warning-box">
           <div class="warning-title">⚠️ Important Security Reminder</div>
           <div class="warning-text">
-            For your security, please don't share this link with anyone. Jevah
+            For your security, please don't share this verification code with anyone. Jevah
             will never ask for your password via email or phone calls.
           </div>
         </div>

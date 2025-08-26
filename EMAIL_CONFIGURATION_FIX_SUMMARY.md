@@ -197,3 +197,4 @@ All email configuration issues have been resolved:
 The email system is now fully aligned with the Jevah brand identity and will provide a professional, consistent experience for all users.
 
 
+
