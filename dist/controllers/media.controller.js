@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -1405,3 +1405,107 @@ const searchPublicMedia = (request, response) => __awaiter(void 0, void 0, void 
     }
 });
 exports.searchPublicMedia = searchPublicMedia;
+const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { contentType, limit = "10" } = request.query;
+        const limitNum = parseInt(limit) || 10;
+        // Build filter for default content
+        const filter = {
+            isDefaultContent: true,
+            isOnboardingContent: true
+        };
+        // Add contentType filter if provided
+        if (contentType) {
+            filter.contentType = contentType;
+        }
+        // Get default content with pagination
+        const defaultContent = yield media_model_1.Media.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(limitNum)
+            .populate('uploadedBy', 'username email')
+            .lean();
+        // Group content by type for better organization
+        const groupedContent = {
+            music: defaultContent.filter(item => item.contentType === 'music'),
+            videos: defaultContent.filter(item => item.contentType === 'videos' || item.contentType === 'sermon'),
+            audio: defaultContent.filter(item => item.contentType === 'audio' || item.contentType === 'devotional'),
+            books: defaultContent.filter(item => item.contentType === 'ebook'),
+            shortClips: defaultContent.filter(item => item.contentType === 'audio' && item.duration && item.duration <= 300 // 5 minutes or less
+            )
+        };
+        response.status(200).json({
+            success: true,
+            message: "Default content retrieved successfully",
+            data: {
+                total: defaultContent.length,
+                grouped: groupedContent,
+                all: defaultContent
+            }
+        });
+    }
+    catch (error) {
+        console.error("Get default content error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve default content",
+        });
+    }
+});
+exports.getDefaultContent = getDefaultContent;
+const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userIdentifier = request.userId;
+        if (!userIdentifier) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        // Get a curated selection of onboarding content
+        const onboardingContent = yield media_model_1.Media.find({
+            isOnboardingContent: true,
+            isDefaultContent: true
+        })
+            .sort({ createdAt: -1 })
+            .limit(15) // Show 15 items for onboarding
+            .populate('uploadedBy', 'username email')
+            .lean();
+        // Create onboarding experience with different sections
+        const onboardingExperience = {
+            welcome: {
+                title: "Welcome to Jevah",
+                subtitle: "Your spiritual journey starts here",
+                content: onboardingContent.slice(0, 3) // First 3 items
+            },
+            quickStart: {
+                title: "Quick Start",
+                subtitle: "Short content to get you started",
+                content: onboardingContent.filter(item => item.contentType === 'audio' && item.duration && item.duration <= 300).slice(0, 3)
+            },
+            featured: {
+                title: "Featured Content",
+                subtitle: "Popular gospel content",
+                content: onboardingContent.filter(item => item.contentType === 'music' || item.contentType === 'sermon').slice(0, 3)
+            },
+            devotionals: {
+                title: "Daily Devotionals",
+                subtitle: "Start your day with prayer",
+                content: onboardingContent.filter(item => item.contentType === 'devotional').slice(0, 2)
+            }
+        };
+        response.status(200).json({
+            success: true,
+            message: "Onboarding content retrieved successfully",
+            data: onboardingExperience
+        });
+    }
+    catch (error) {
+        console.error("Get onboarding content error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to retrieve onboarding content",
+        });
+    }
+});
+exports.getOnboardingContent = getOnboardingContent;

@@ -39,6 +39,9 @@ import {
   getPublicMediaByIdentifier,
   searchPublicMedia,
   getMediaWithEngagement,
+  // Default content methods
+  getDefaultContent,
+  getOnboardingContent,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdminOrCreator } from "../middleware/role.middleware";
@@ -475,5 +478,23 @@ router.get(
  * @returns { success: boolean, recordings: object[] }
  */
 router.get("/recordings", verifyToken, apiRateLimiter, getUserRecordings);
+
+// Default Content routes
+/**
+ * @route   GET /api/media/default
+ * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { contentType?: string, limit?: string }
+ * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
+ */
+router.get("/default", apiRateLimiter, getDefaultContent);
+
+/**
+ * @route   GET /api/media/onboarding
+ * @desc    Get curated onboarding content experience for new users
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, data: { welcome: object, quickStart: object, featured: object, devotionals: object } }
+ */
+router.get("/onboarding", verifyToken, apiRateLimiter, getOnboardingContent);
 
 export default router;

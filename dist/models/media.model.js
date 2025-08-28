@@ -310,6 +310,15 @@ const mediaSchema = new mongoose_1.Schema({
     libraryAddedAt: {
         type: Date,
     },
+    // Default content fields
+    isDefaultContent: {
+        type: Boolean,
+        default: false,
+    },
+    isOnboardingContent: {
+        type: Boolean,
+        default: false,
+    },
 }, {
     timestamps: true,
 });

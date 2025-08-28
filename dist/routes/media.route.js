@@ -302,4 +302,20 @@ router.get("/recording/:streamId/status", auth_middleware_1.verifyToken, rateLim
  * @returns { success: boolean, recordings: object[] }
  */
 router.get("/recordings", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getUserRecordings);
+// Default Content routes
+/**
+ * @route   GET /api/media/default
+ * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { contentType?: string, limit?: string }
+ * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
+ */
+router.get("/default", rateLimiter_1.apiRateLimiter, media_controller_1.getDefaultContent);
+/**
+ * @route   GET /api/media/onboarding
+ * @desc    Get curated onboarding content experience for new users
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, data: { welcome: object, quickStart: object, featured: object, devotionals: object } }
+ */
+router.get("/onboarding", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getOnboardingContent);
 exports.default = router;

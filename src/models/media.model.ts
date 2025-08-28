@@ -88,6 +88,11 @@ export interface IMedia extends Document {
   // Library fields
   isInLibrary?: boolean;
   libraryAddedAt?: Date;
+  
+  // Default content fields
+  isDefaultContent?: boolean;
+  isOnboardingContent?: boolean;
+  
   createdAt: Date;
   updatedAt: Date;
 }
@@ -360,14 +365,23 @@ const mediaSchema = new Schema<IMedia>(
       min: 0,
       max: 100,
     },
-    // Library fields
-    isInLibrary: {
-      type: Boolean,
-      default: false,
-    },
-    libraryAddedAt: {
-      type: Date,
-    },
+      // Library fields
+  isInLibrary: {
+    type: Boolean,
+    default: false,
+  },
+  libraryAddedAt: {
+    type: Date,
+  },
+  // Default content fields
+  isDefaultContent: {
+    type: Boolean,
+    default: false,
+  },
+  isOnboardingContent: {
+    type: Boolean,
+    default: false,
+  },
   },
   {
     timestamps: true,

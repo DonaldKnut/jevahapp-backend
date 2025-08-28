@@ -1700,3 +1700,130 @@ export const searchPublicMedia = async (
     });
   }
 };
+
+export const getDefaultContent = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { contentType, limit = "10" } = request.query;
+    
+    const limitNum = parseInt(limit as string) || 10;
+    
+    // Build filter for default content
+    const filter: any = {
+      isDefaultContent: true,
+      isOnboardingContent: true
+    };
+    
+    // Add contentType filter if provided
+    if (contentType) {
+      filter.contentType = contentType;
+    }
+    
+    // Get default content with pagination
+    const defaultContent = await Media.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limitNum)
+      .populate('uploadedBy', 'username email')
+      .lean();
+    
+    // Group content by type for better organization
+    const groupedContent = {
+      music: defaultContent.filter(item => item.contentType === 'music'),
+      videos: defaultContent.filter(item => item.contentType === 'videos' || item.contentType === 'sermon'),
+      audio: defaultContent.filter(item => item.contentType === 'audio' || item.contentType === 'devotional'),
+      books: defaultContent.filter(item => item.contentType === 'ebook'),
+      shortClips: defaultContent.filter(item => 
+        item.contentType === 'audio' && item.duration && item.duration <= 300 // 5 minutes or less
+      )
+    };
+    
+    response.status(200).json({
+      success: true,
+      message: "Default content retrieved successfully",
+      data: {
+        total: defaultContent.length,
+        grouped: groupedContent,
+        all: defaultContent
+      }
+    });
+    
+  } catch (error: any) {
+    console.error("Get default content error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve default content",
+    });
+  }
+};
+
+export const getOnboardingContent = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const userIdentifier = request.userId;
+    
+    if (!userIdentifier) {
+      response.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+    
+    // Get a curated selection of onboarding content
+    const onboardingContent = await Media.find({
+      isOnboardingContent: true,
+      isDefaultContent: true
+    })
+    .sort({ createdAt: -1 })
+    .limit(15) // Show 15 items for onboarding
+    .populate('uploadedBy', 'username email')
+    .lean();
+    
+    // Create onboarding experience with different sections
+    const onboardingExperience = {
+      welcome: {
+        title: "Welcome to Jevah",
+        subtitle: "Your spiritual journey starts here",
+        content: onboardingContent.slice(0, 3) // First 3 items
+      },
+      quickStart: {
+        title: "Quick Start",
+        subtitle: "Short content to get you started",
+        content: onboardingContent.filter(item => 
+          item.contentType === 'audio' && item.duration && item.duration <= 300
+        ).slice(0, 3)
+      },
+      featured: {
+        title: "Featured Content",
+        subtitle: "Popular gospel content",
+        content: onboardingContent.filter(item => 
+          item.contentType === 'music' || item.contentType === 'sermon'
+        ).slice(0, 3)
+      },
+      devotionals: {
+        title: "Daily Devotionals",
+        subtitle: "Start your day with prayer",
+        content: onboardingContent.filter(item => 
+          item.contentType === 'devotional'
+        ).slice(0, 2)
+      }
+    };
+    
+    response.status(200).json({
+      success: true,
+      message: "Onboarding content retrieved successfully",
+      data: onboardingExperience
+    });
+    
+  } catch (error: any) {
+    console.error("Get onboarding content error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to retrieve onboarding content",
+    });
+  }
+};
