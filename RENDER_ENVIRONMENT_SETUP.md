@@ -15,7 +15,7 @@ NODE_ENV=production
 PORT=4000
 MONGODB_URI=mongodb+srv://tevahapp:z4AGZU26ZLM1dg8A@tevahdb.cerc7kk.mongodb.net/tevahdb
 JWT_SECRET=9be9d057725020b38287773b920c416c2d1b89bdac3080cbe1df9182a75cef5f66e715ebf744d4c1086b364648309d0a9e4c571ba5851100152627d97a8a8adc
-JWT_EXPIRES_IN=30d
+JWT_EXPIRES_IN=7d
 ```
 
 ### 🔑 Authentication

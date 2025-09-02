@@ -36,6 +36,14 @@ router.get("/public/all-content", rateLimiter_1.apiRateLimiter, media_controller
  */
 router.get("/public/search", rateLimiter_1.apiRateLimiter, media_controller_1.searchPublicMedia);
 /**
+ * @route   GET /api/media/default
+ * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { contentType?: string, limit?: string }
+ * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
+ */
+router.get("/default", rateLimiter_1.apiRateLimiter, media_controller_1.getDefaultContent);
+/**
  * @route   GET /api/media/public/:id
  * @desc    Retrieve a single media item by its identifier (PUBLIC - no authentication required)
  * @access  Public (No authentication required)
@@ -303,14 +311,6 @@ router.get("/recording/:streamId/status", auth_middleware_1.verifyToken, rateLim
  */
 router.get("/recordings", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getUserRecordings);
 // Default Content routes
-/**
- * @route   GET /api/media/default
- * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
- * @access  Public (No authentication required)
- * @query   { contentType?: string, limit?: string }
- * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
- */
-router.get("/default", rateLimiter_1.apiRateLimiter, media_controller_1.getDefaultContent);
 /**
  * @route   GET /api/media/onboarding
  * @desc    Get curated onboarding content experience for new users

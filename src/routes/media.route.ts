@@ -88,6 +88,15 @@ router.get("/public/all-content", apiRateLimiter, getPublicAllContent);
 router.get("/public/search", apiRateLimiter, searchPublicMedia);
 
 /**
+ * @route   GET /api/media/default
+ * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
+ * @access  Public (No authentication required)
+ * @query   { contentType?: string, limit?: string }
+ * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
+ */
+router.get("/default", apiRateLimiter, getDefaultContent);
+
+/**
  * @route   GET /api/media/public/:id
  * @desc    Retrieve a single media item by its identifier (PUBLIC - no authentication required)
  * @access  Public (No authentication required)
@@ -480,14 +489,6 @@ router.get(
 router.get("/recordings", verifyToken, apiRateLimiter, getUserRecordings);
 
 // Default Content routes
-/**
- * @route   GET /api/media/default
- * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)
- * @access  Public (No authentication required)
- * @query   { contentType?: string, limit?: string }
- * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
- */
-router.get("/default", apiRateLimiter, getDefaultContent);
 
 /**
  * @route   GET /api/media/onboarding
