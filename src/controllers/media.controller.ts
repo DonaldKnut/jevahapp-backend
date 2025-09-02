@@ -1725,7 +1725,7 @@ export const getDefaultContent = async (
     const defaultContent = await Media.find(filter)
       .sort({ createdAt: -1 })
       .limit(limitNum)
-      .populate('uploadedBy', 'username email')
+      .populate('uploadedBy', 'firstName lastName username email avatar')
       .lean();
     
     // Group content by type for better organization
@@ -1780,7 +1780,7 @@ export const getOnboardingContent = async (
     })
     .sort({ createdAt: -1 })
     .limit(15) // Show 15 items for onboarding
-    .populate('uploadedBy', 'username email')
+    .populate('uploadedBy', 'firstName lastName username email avatar')
     .lean();
     
     // Create onboarding experience with different sections

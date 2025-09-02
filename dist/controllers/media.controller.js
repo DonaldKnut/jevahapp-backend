@@ -1422,7 +1422,7 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
         const defaultContent = yield media_model_1.Media.find(filter)
             .sort({ createdAt: -1 })
             .limit(limitNum)
-            .populate('uploadedBy', 'username email')
+            .populate('uploadedBy', 'firstName lastName username email avatar')
             .lean();
         // Group content by type for better organization
         const groupedContent = {
@@ -1469,7 +1469,7 @@ const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, vo
         })
             .sort({ createdAt: -1 })
             .limit(15) // Show 15 items for onboarding
-            .populate('uploadedBy', 'username email')
+            .populate('uploadedBy', 'firstName lastName username email avatar')
             .lean();
         // Create onboarding experience with different sections
         const onboardingExperience = {
