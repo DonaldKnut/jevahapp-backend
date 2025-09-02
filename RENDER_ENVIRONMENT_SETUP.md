@@ -9,20 +9,24 @@
 You need to add these environment variables to your Render service dashboard:
 
 ### 🔐 Core Application Variables
+
 ```bash
 NODE_ENV=production
 PORT=4000
 MONGODB_URI=mongodb+srv://tevahapp:z4AGZU26ZLM1dg8A@tevahdb.cerc7kk.mongodb.net/tevahdb
 JWT_SECRET=9be9d057725020b38287773b920c416c2d1b89bdac3080cbe1df9182a75cef5f66e715ebf744d4c1086b364648309d0a9e4c571ba5851100152627d97a8a8adc
+JWT_EXPIRES_IN=30d
 ```
 
 ### 🔑 Authentication
+
 ```bash
 CLERK_SECRET_KEY=sk_test_DUdljAMc2BY6aT7x8Q1BmYDrrSP4403FxE64CpHhMG
 CLERK_PUBLISHABLE_KEY=pk_test_Y2FzdWFsLXJheS0zNi5jbGVyay5hY2NvdW50cy5kZXYk
 ```
 
 ### 📧 Email Configuration (CRITICAL for user registration)
+
 ```bash
 SMTP_HOST=smtp.zoho.com
 SMTP_PORT=587
@@ -32,6 +36,7 @@ SMTP_PASS=JRynT5k4cXc6
 ```
 
 ### ☁️ Cloudflare R2 Configuration (CRITICAL for avatar uploads)
+
 ```bash
 R2_ENDPOINT=https://870e0e55f75d0d9434531d7518f57e92.r2.cloudflarestorage.com/jevah
 R2_ACCESS_KEY_ID=92dafeb76f86a6bb3e5dbcc37f4c1a1c
@@ -42,6 +47,7 @@ R2_CUSTOM_DOMAIN=bDp9npjM_CVBCOUtyrsgKjLle3shpuJ64W_y7DYY
 ```
 
 ### 🤖 AI & External Services
+
 ```bash
 GOOGLE_AI_API_KEY=AIzaSyA8JM8Xwwi_8WCzS2OolkNkuHJ6B3Qb4u8
 CLOUDINARY_CLOUD_NAME=dv70tsyz2
@@ -53,6 +59,7 @@ RESEND_API_KEY=re_ZBNvE2Pb_7gE6T8aEunA816YG8SkWUAto
 ```
 
 ### 🌐 URLs & CORS
+
 ```bash
 FRONTEND_URL=https://jevah-app.vercel.app
 API_BASE_URL=https://jevahapp-backend.onrender.com
@@ -62,11 +69,13 @@ CORS_ORIGIN=https://jevah-app.vercel.app
 ## 🛠️ Step-by-Step Setup Instructions
 
 ### 1. Access Render Dashboard
+
 1. Go to [Render Dashboard](https://dashboard.render.com/)
 2. Sign in to your account
 3. Navigate to your `jevah-backend` service
 
 ### 2. Add Environment Variables
+
 1. Click on your service name
 2. Go to the **"Environment"** tab
 3. Click **"Add Environment Variable"**
@@ -75,27 +84,33 @@ CORS_ORIGIN=https://jevah-app.vercel.app
    - **Value**: Variable value (e.g., `jevah`)
 
 ### 3. Critical Variables to Verify
+
 Make sure these are set correctly (they're essential for core functionality):
 
 #### ✅ For Avatar Uploads:
+
 - `R2_ENDPOINT`
-- `R2_ACCESS_KEY_ID` 
+- `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 - `R2_ACCOUNT_ID`
 
 #### ✅ For Email Verification:
+
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_USER`
 - `SMTP_PASS`
 
 #### ✅ For Authentication:
+
 - `JWT_SECRET`
+- `JWT_EXPIRES_IN`
 - `CLERK_SECRET_KEY`
 - `CLERK_PUBLISHABLE_KEY`
 
 ### 4. Deploy and Test
+
 1. After adding all variables, Render will automatically redeploy
 2. Wait for deployment to complete
 3. Test the following functionality:
@@ -134,14 +149,17 @@ curl -X POST https://jevahapp-backend.onrender.com/auth/avatar \
 ## 🔧 Troubleshooting
 
 ### Avatar Upload Fails
+
 - **Error**: "No value provided for input HTTP label: Bucket"
 - **Solution**: Verify all R2 environment variables are set correctly
 
 ### Email Verification Fails
+
 - **Error**: "Unable to send verification email"
 - **Solution**: Check SMTP environment variables
 
 ### Authentication Issues
+
 - **Error**: "Invalid token" or "Unauthorized"
 - **Solution**: Verify JWT_SECRET and Clerk variables
 
@@ -164,6 +182,7 @@ curl -X POST https://jevahapp-backend.onrender.com/auth/avatar \
 ## 📞 Support
 
 If you encounter issues:
+
 1. Check Render service logs for specific error messages
 2. Verify environment variables match exactly (no extra spaces)
 3. Test locally first to isolate production-specific issues
