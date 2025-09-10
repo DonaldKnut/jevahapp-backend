@@ -1706,24 +1706,31 @@ export const getDefaultContent = async (
   response: Response
 ): Promise<void> => {
   try {
-    const { contentType, limit = "10" } = request.query;
+    const { contentType, limit = "10", page = "1" } = request.query;
     
     const limitNum = parseInt(limit as string) || 10;
+    const pageNum = parseInt(page as string) || 1;
+    const skip = (pageNum - 1) * limitNum;
     
     // Build filter for default content
     const filter: any = {
       isDefaultContent: true,
-      isOnboardingContent: true
+      isOnboardingContent: true,
+      status: 'published'
     };
     
     // Add contentType filter if provided
-    if (contentType) {
+    if (contentType && contentType !== 'all') {
       filter.contentType = contentType;
     }
+    
+    // Get total count for pagination
+    const total = await Media.countDocuments(filter);
     
     // Get default content with pagination
     const defaultContentRaw = await Media.find(filter)
       .sort({ createdAt: -1 })
+      .skip(skip)
       .limit(limitNum)
       .populate('uploadedBy', 'firstName lastName username email avatar')
       .lean();
@@ -1751,39 +1758,55 @@ export const getDefaultContent = async (
     // Lazy import to avoid circular deps
     const { default: fileUploadService } = await import('../service/fileUpload.service');
 
-    const defaultContent = await Promise.all(
+    const content = await Promise.all(
       defaultContentRaw.map(async (item: any) => {
         const objectKey = toObjectKey(item.fileUrl);
+        let mediaUrl = item.fileUrl;
+        
         if (objectKey) {
           try {
             const signed = await fileUploadService.getPresignedGetUrl(objectKey, 3600);
-            return { ...item, fileUrl: signed };
+            mediaUrl = signed;
           } catch (_e) {
-            return item; // fallback to stored URL if signing fails
+            // fallback to stored URL if signing fails
           }
         }
-        return item;
+
+        // Transform to frontend-expected format
+        return {
+          _id: item._id,
+          title: item.title || 'Untitled',
+          description: item.description || '',
+          mediaUrl: mediaUrl,
+          thumbnailUrl: item.thumbnailUrl || item.fileUrl,
+          contentType: mapContentType(item.contentType),
+          duration: item.duration || null,
+          author: {
+            _id: item.uploadedBy?._id || item.uploadedBy,
+            firstName: item.uploadedBy?.firstName || 'Unknown',
+            lastName: item.uploadedBy?.lastName || 'User',
+            avatar: item.uploadedBy?.avatar || null
+          },
+          likeCount: item.likeCount || 0,
+          commentCount: item.commentCount || 0,
+          shareCount: item.shareCount || 0,
+          viewCount: item.viewCount || 0,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt
+        };
       })
     );
     
-    // Group content by type for better organization
-    const groupedContent = {
-      music: defaultContent.filter(item => item.contentType === 'music'),
-      videos: defaultContent.filter(item => item.contentType === 'videos' || item.contentType === 'sermon'),
-      audio: defaultContent.filter(item => item.contentType === 'audio' || item.contentType === 'devotional'),
-      books: defaultContent.filter(item => item.contentType === 'ebook'),
-      shortClips: defaultContent.filter(item => 
-        item.contentType === 'audio' && item.duration && item.duration <= 300 // 5 minutes or less
-      )
-    };
-    
     response.status(200).json({
       success: true,
-      message: "Default content retrieved successfully",
       data: {
-        total: defaultContent.length,
-        grouped: groupedContent,
-        all: defaultContent
+        content,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum)
+        }
       }
     });
     
@@ -1793,6 +1816,24 @@ export const getDefaultContent = async (
       success: false,
       message: "Failed to retrieve default content",
     });
+  }
+};
+
+// Helper function to map content types
+const mapContentType = (contentType: string): 'video' | 'audio' | 'image' => {
+  switch (contentType) {
+    case 'videos':
+    case 'sermon':
+      return 'video';
+    case 'audio':
+    case 'music':
+    case 'devotional':
+      return 'audio';
+    case 'ebook':
+    case 'books':
+      return 'image';
+    default:
+      return 'video';
   }
 };
 

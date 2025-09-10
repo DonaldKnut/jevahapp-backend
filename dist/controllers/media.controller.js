@@ -1440,20 +1440,26 @@ const searchPublicMedia = (request, response) => __awaiter(void 0, void 0, void 
 exports.searchPublicMedia = searchPublicMedia;
 const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { contentType, limit = "10" } = request.query;
+        const { contentType, limit = "10", page = "1" } = request.query;
         const limitNum = parseInt(limit) || 10;
+        const pageNum = parseInt(page) || 1;
+        const skip = (pageNum - 1) * limitNum;
         // Build filter for default content
         const filter = {
             isDefaultContent: true,
-            isOnboardingContent: true
+            isOnboardingContent: true,
+            status: 'published'
         };
         // Add contentType filter if provided
-        if (contentType) {
+        if (contentType && contentType !== 'all') {
             filter.contentType = contentType;
         }
+        // Get total count for pagination
+        const total = yield media_model_1.Media.countDocuments(filter);
         // Get default content with pagination
         const defaultContentRaw = yield media_model_1.Media.find(filter)
             .sort({ createdAt: -1 })
+            .skip(skip)
             .limit(limitNum)
             .populate('uploadedBy', 'firstName lastName username email avatar')
             .lean();
@@ -1481,35 +1487,52 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
         };
         // Lazy import to avoid circular deps
         const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require('../service/fileUpload.service')));
-        const defaultContent = yield Promise.all(defaultContentRaw.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+        const content = yield Promise.all(defaultContentRaw.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a, _b, _c, _d;
             const objectKey = toObjectKey(item.fileUrl);
+            let mediaUrl = item.fileUrl;
             if (objectKey) {
                 try {
                     const signed = yield fileUploadService.getPresignedGetUrl(objectKey, 3600);
-                    return Object.assign(Object.assign({}, item), { fileUrl: signed });
+                    mediaUrl = signed;
                 }
                 catch (_e) {
-                    return item; // fallback to stored URL if signing fails
+                    // fallback to stored URL if signing fails
                 }
             }
-            return item;
+            // Transform to frontend-expected format
+            return {
+                _id: item._id,
+                title: item.title || 'Untitled',
+                description: item.description || '',
+                mediaUrl: mediaUrl,
+                thumbnailUrl: item.thumbnailUrl || item.fileUrl,
+                contentType: mapContentType(item.contentType),
+                duration: item.duration || null,
+                author: {
+                    _id: ((_a = item.uploadedBy) === null || _a === void 0 ? void 0 : _a._id) || item.uploadedBy,
+                    firstName: ((_b = item.uploadedBy) === null || _b === void 0 ? void 0 : _b.firstName) || 'Unknown',
+                    lastName: ((_c = item.uploadedBy) === null || _c === void 0 ? void 0 : _c.lastName) || 'User',
+                    avatar: ((_d = item.uploadedBy) === null || _d === void 0 ? void 0 : _d.avatar) || null
+                },
+                likeCount: item.likeCount || 0,
+                commentCount: item.commentCount || 0,
+                shareCount: item.shareCount || 0,
+                viewCount: item.viewCount || 0,
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt
+            };
         })));
-        // Group content by type for better organization
-        const groupedContent = {
-            music: defaultContent.filter(item => item.contentType === 'music'),
-            videos: defaultContent.filter(item => item.contentType === 'videos' || item.contentType === 'sermon'),
-            audio: defaultContent.filter(item => item.contentType === 'audio' || item.contentType === 'devotional'),
-            books: defaultContent.filter(item => item.contentType === 'ebook'),
-            shortClips: defaultContent.filter(item => item.contentType === 'audio' && item.duration && item.duration <= 300 // 5 minutes or less
-            )
-        };
         response.status(200).json({
             success: true,
-            message: "Default content retrieved successfully",
             data: {
-                total: defaultContent.length,
-                grouped: groupedContent,
-                all: defaultContent
+                content,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                }
             }
         });
     }
@@ -1522,6 +1545,23 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
     }
 });
 exports.getDefaultContent = getDefaultContent;
+// Helper function to map content types
+const mapContentType = (contentType) => {
+    switch (contentType) {
+        case 'videos':
+        case 'sermon':
+            return 'video';
+        case 'audio':
+        case 'music':
+        case 'devotional':
+            return 'audio';
+        case 'ebook':
+        case 'books':
+            return 'image';
+        default:
+            return 'video';
+    }
+};
 const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userIdentifier = request.userId;
