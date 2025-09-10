@@ -1715,8 +1715,7 @@ export const getDefaultContent = async (
     // Build filter for default content
     const filter: any = {
       isDefaultContent: true,
-      isOnboardingContent: true,
-      status: 'published'
+      isOnboardingContent: true
     };
     
     // Add contentType filter if provided

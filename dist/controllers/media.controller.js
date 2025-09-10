@@ -1447,8 +1447,7 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
         // Build filter for default content
         const filter = {
             isDefaultContent: true,
-            isOnboardingContent: true,
-            status: 'published'
+            isOnboardingContent: true
         };
         // Add contentType filter if provided
         if (contentType && contentType !== 'all') {
