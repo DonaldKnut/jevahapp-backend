@@ -7,12 +7,14 @@ Your frontend structure is perfect! Here's how to implement the interaction func
 ## 📡 **API Endpoints for Interactions**
 
 ### **1. Like/Unlike Content**
+
 ```http
 POST /api/content/media/{contentId}/like
 DELETE /api/content/media/{contentId}/like
 ```
 
 ### **2. Comment on Content**
+
 ```http
 POST /api/content/media/{contentId}/comment
 GET /api/content/media/{contentId}/comments
@@ -20,11 +22,13 @@ DELETE /api/content/comments/{commentId}
 ```
 
 ### **3. Share Content**
+
 ```http
 POST /api/content/media/{contentId}/share
 ```
 
 ### **4. Save to Library (Bookmark)**
+
 ```http
 POST /api/media/{mediaId}/bookmark
 DELETE /api/media/{mediaId}/bookmark
@@ -42,13 +46,16 @@ Add these interaction methods to your existing `allMediaAPI.ts`:
 // Like/Unlike Content
 export const toggleLike = async (contentType: string, contentId: string) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/content/${contentType}/${contentId}/like`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await getAuthHeaders()),
-      },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/content/${contentType}/${contentId}/like`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -57,25 +64,33 @@ export const toggleLike = async (contentType: string, contentId: string) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error toggling like:', error);
+    console.error("Error toggling like:", error);
     return { success: false, error: error.message };
   }
 };
 
 // Add Comment
-export const addComment = async (contentType: string, contentId: string, comment: string, parentCommentId?: string) => {
+export const addComment = async (
+  contentType: string,
+  contentId: string,
+  comment: string,
+  parentCommentId?: string
+) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/content/${contentType}/${contentId}/comment`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await getAuthHeaders()),
-      },
-      body: JSON.stringify({
-        comment,
-        parentCommentId
-      }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/content/${contentType}/${contentId}/comment`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+        body: JSON.stringify({
+          comment,
+          parentCommentId,
+        }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -84,21 +99,29 @@ export const addComment = async (contentType: string, contentId: string, comment
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error adding comment:', error);
+    console.error("Error adding comment:", error);
     return { success: false, error: error.message };
   }
 };
 
 // Get Comments
-export const getComments = async (contentType: string, contentId: string, page = 1, limit = 10) => {
+export const getComments = async (
+  contentType: string,
+  contentId: string,
+  page = 1,
+  limit = 10
+) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/content/${contentType}/${contentId}/comments?page=${page}&limit=${limit}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await getAuthHeaders()),
-      },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/content/${contentType}/${contentId}/comments?page=${page}&limit=${limit}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -107,7 +130,7 @@ export const getComments = async (contentType: string, contentId: string, page =
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching comments:', error);
+    console.error("Error fetching comments:", error);
     return { success: false, error: error.message };
   }
 };
@@ -115,13 +138,16 @@ export const getComments = async (contentType: string, contentId: string, page =
 // Delete Comment
 export const deleteComment = async (commentId: string) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/content/comments/${commentId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await getAuthHeaders()),
-      },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/content/comments/${commentId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -130,25 +156,33 @@ export const deleteComment = async (commentId: string) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error deleting comment:', error);
+    console.error("Error deleting comment:", error);
     return { success: false, error: error.message };
   }
 };
 
 // Share Content
-export const shareContent = async (contentType: string, contentId: string, platform: string, message: string) => {
+export const shareContent = async (
+  contentType: string,
+  contentId: string,
+  platform: string,
+  message: string
+) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/content/${contentType}/${contentId}/share`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(await getAuthHeaders()),
-      },
-      body: JSON.stringify({
-        platform,
-        message
-      }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/content/${contentType}/${contentId}/share`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        },
+        body: JSON.stringify({
+          platform,
+          message,
+        }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -157,7 +191,7 @@ export const shareContent = async (contentType: string, contentId: string, platf
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error sharing content:', error);
+    console.error("Error sharing content:", error);
     return { success: false, error: error.message };
   }
 };
@@ -166,9 +200,9 @@ export const shareContent = async (contentType: string, contentId: string, platf
 export const bookmarkContent = async (mediaId: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/media/${mediaId}/bookmark`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(await getAuthHeaders()),
       },
     });
@@ -180,7 +214,7 @@ export const bookmarkContent = async (mediaId: string) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error bookmarking content:', error);
+    console.error("Error bookmarking content:", error);
     return { success: false, error: error.message };
   }
 };
@@ -189,9 +223,9 @@ export const bookmarkContent = async (mediaId: string) => {
 export const unbookmarkContent = async (mediaId: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/media/${mediaId}/bookmark`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(await getAuthHeaders()),
       },
     });
@@ -203,14 +237,14 @@ export const unbookmarkContent = async (mediaId: string) => {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error unbookmarking content:', error);
+    console.error("Error unbookmarking content:", error);
     return { success: false, error: error.message };
   }
 };
 
 // Helper function to get auth headers
 const getAuthHeaders = async () => {
-  const token = await AsyncStorage.getItem('auth_token');
+  const token = await AsyncStorage.getItem("auth_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 ```
@@ -226,13 +260,13 @@ Replace your existing interaction handlers with these:
 const handleLike = useCallback(async (contentId: string, liked: boolean) => {
   try {
     console.log("Like action:", contentId, liked);
-    
-    const response = await toggleLike('media', contentId);
-    
+
+    const response = await toggleLike("media", contentId);
+
     if (response.success) {
       // Update local state - you can add this to your store
       console.log("Like successful:", response.data);
-      
+
       // Optional: Update the content in your store
       // updateContentLikeStatus(contentId, response.data.isLiked, response.data.likeCount);
     } else {
@@ -248,7 +282,7 @@ const handleLike = useCallback(async (contentId: string, liked: boolean) => {
 // Handle comment
 const handleComment = useCallback((contentId: string) => {
   console.log("Navigate to comments for:", contentId);
-  
+
   // Navigate to comments screen
   // You can implement this based on your navigation setup
   // Example: navigation.navigate('Comments', { contentId, contentType: 'media' });
@@ -258,9 +292,14 @@ const handleComment = useCallback((contentId: string) => {
 const handleShare = useCallback(async (contentId: string) => {
   try {
     console.log("Share action:", contentId);
-    
-    const response = await shareContent('media', contentId, 'general', 'Check this out!');
-    
+
+    const response = await shareContent(
+      "media",
+      contentId,
+      "general",
+      "Check this out!"
+    );
+
     if (response.success) {
       console.log("Share successful:", response.data);
       Alert.alert("Success", "Content shared successfully!");
@@ -275,26 +314,32 @@ const handleShare = useCallback(async (contentId: string) => {
 }, []);
 
 // Handle save to library
-const handleSaveToLibrary = useCallback(async (contentId: string, isBookmarked: boolean) => {
-  try {
-    console.log("Save to library action:", contentId, isBookmarked);
-    
-    const response = isBookmarked 
-      ? await unbookmarkContent(contentId)
-      : await bookmarkContent(contentId);
-    
-    if (response.success) {
-      console.log("Bookmark successful:", response.data);
-      Alert.alert("Success", isBookmarked ? "Removed from library" : "Saved to library");
-    } else {
-      console.error("Bookmark failed:", response.error);
+const handleSaveToLibrary = useCallback(
+  async (contentId: string, isBookmarked: boolean) => {
+    try {
+      console.log("Save to library action:", contentId, isBookmarked);
+
+      const response = isBookmarked
+        ? await unbookmarkContent(contentId)
+        : await bookmarkContent(contentId);
+
+      if (response.success) {
+        console.log("Bookmark successful:", response.data);
+        Alert.alert(
+          "Success",
+          isBookmarked ? "Removed from library" : "Saved to library"
+        );
+      } else {
+        console.error("Bookmark failed:", response.error);
+        Alert.alert("Error", "Failed to update library");
+      }
+    } catch (error) {
+      console.error("Bookmark error:", error);
       Alert.alert("Error", "Failed to update library");
     }
-  } catch (error) {
-    console.error("Bookmark error:", error);
-    Alert.alert("Error", "Failed to update library");
-  }
-}, []);
+  },
+  []
+);
 
 // Handle author press
 const handleAuthorPress = useCallback((authorId: string) => {
@@ -324,10 +369,10 @@ const handleSaveToLibrary = async () => {
 
 // Update your bookmark button in the actions section
 <TouchableOpacity style={styles.bookmarkButton} onPress={handleSaveToLibrary}>
-  <Icon 
-    name={content.isBookmarked ? "bookmark" : "bookmark-border"} 
-    size={24} 
-    color={content.isBookmarked ? "#e91e63" : "#666"} 
+  <Icon
+    name={content.isBookmarked ? "bookmark" : "bookmark-border"}
+    size={24}
+    color={content.isBookmarked ? "#e91e63" : "#666"}
   />
 </TouchableOpacity>
 ```
@@ -365,7 +410,7 @@ const CommentsScreen = ({ route, navigation }) => {
     try {
       setLoading(true);
       const response = await getComments(contentType, contentId);
-      
+
       if (response.success) {
         setComments(response.data.comments);
       } else {
@@ -390,7 +435,7 @@ const CommentsScreen = ({ route, navigation }) => {
     try {
       setSubmitting(true);
       const response = await addComment(contentType, contentId, commentText.trim());
-      
+
       if (response.success) {
         setCommentText('');
         loadComments(); // Reload comments
@@ -410,7 +455,7 @@ const CommentsScreen = ({ route, navigation }) => {
   const handleDeleteComment = async (commentId: string) => {
     try {
       const response = await deleteComment(commentId);
-      
+
       if (response.success) {
         loadComments(); // Reload comments
         Alert.alert('Success', 'Comment deleted successfully');
@@ -454,8 +499,8 @@ const CommentsScreen = ({ route, navigation }) => {
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.header}>
@@ -596,53 +641,292 @@ export default CommentsScreen;
 
 ## 📱 **Expected Response Formats**
 
-### **Like Response**
+### **1. Like/Unlike Response**
+
+**Success Response:**
 ```json
 {
   "success": true,
+  "message": "Like toggled successfully",
   "data": {
     "isLiked": true,
-    "likeCount": 43
+    "likeCount": 43,
+    "contentId": "64f8a1b2c3d4e5f6a7b8c9d0",
+    "contentType": "media"
   }
 }
 ```
 
-### **Comment Response**
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Content not found",
+  "error": "Media with ID 64f8a1b2c3d4e5f6a7b8c9d0 does not exist"
+}
+```
+
+### **2. Add Comment Response**
+
+**Success Response:**
 ```json
 {
   "success": true,
+  "message": "Comment added successfully",
   "data": {
     "comment": {
       "_id": "64f8a1b2c3d4e5f6a7b8c9d0",
-      "comment": "Great content!",
+      "comment": "Great content! This is amazing.",
       "author": {
         "_id": "64f8a1b2c3d4e5f6a7b8c9d1",
         "firstName": "John",
-        "lastName": "Doe"
+        "lastName": "Doe",
+        "avatar": "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/avatars/john-doe.jpg"
+      },
+      "contentId": "64f8a1b2c3d4e5f6a7b8c9d2",
+      "contentType": "media",
+      "parentCommentId": null,
+      "replies": [],
+      "likeCount": 0,
+      "isLiked": false,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z"
+    },
+    "commentCount": 8
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to add comment",
+  "error": "Comment text is required"
+}
+```
+
+### **3. Get Comments Response**
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Comments retrieved successfully",
+  "data": {
+    "comments": [
+      {
+        "_id": "64f8a1b2c3d4e5f6a7b8c9d0",
+        "comment": "This is amazing content!",
+        "author": {
+          "_id": "64f8a1b2c3d4e5f6a7b8c9d1",
+          "firstName": "John",
+          "lastName": "Doe",
+          "avatar": "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/avatars/john-doe.jpg"
+        },
+        "contentId": "64f8a1b2c3d4e5f6a7b8c9d2",
+        "contentType": "media",
+        "parentCommentId": null,
+        "replies": [
+          {
+            "_id": "64f8a1b2c3d4e5f6a7b8c9d3",
+            "comment": "I agree!",
+            "author": {
+              "_id": "64f8a1b2c3d4e5f6a7b8c9d4",
+              "firstName": "Jane",
+              "lastName": "Smith",
+              "avatar": "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/avatars/jane-smith.jpg"
+            },
+            "parentCommentId": "64f8a1b2c3d4e5f6a7b8c9d0",
+            "likeCount": 2,
+            "isLiked": false,
+            "createdAt": "2024-01-15T11:00:00.000Z",
+            "updatedAt": "2024-01-15T11:00:00.000Z"
+          }
+        ],
+        "likeCount": 5,
+        "isLiked": true,
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 25,
+      "pages": 3
+    },
+    "totalComments": 25
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to retrieve comments",
+  "error": "Content not found"
+}
+```
+
+### **4. Delete Comment Response**
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Comment deleted successfully",
+  "data": {
+    "deletedCommentId": "64f8a1b2c3d4e5f6a7b8c9d0",
+    "commentCount": 7
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to delete comment",
+  "error": "Comment not found or unauthorized"
+}
+```
+
+### **5. Share Content Response**
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "message": "Content shared successfully",
+  "data": {
+    "shareCount": 13,
+    "contentId": "64f8a1b2c3d4e5f6a7b8c9d0",
+    "contentType": "media",
+    "platform": "general",
+    "message": "Check this out!",
+    "sharedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to share content",
+  "error": "Content not found"
+}
+```
+
+### **6. Bookmark/Save to Library Response**
+
+**Success Response (Add Bookmark):**
+```json
+{
+  "success": true,
+  "message": "Content saved to library successfully",
+  "data": {
+    "bookmark": {
+      "_id": "64f8a1b2c3d4e5f6a7b8c9d0",
+      "userId": "64f8a1b2c3d4e5f6a7b8c9d1",
+      "mediaId": "64f8a1b2c3d4e5f6a7b8c9d2",
+      "media": {
+        "_id": "64f8a1b2c3d4e5f6a7b8c9d2",
+        "title": "Amazing Gospel Video",
+        "contentType": "video",
+        "thumbnailUrl": "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/thumbnails/amazing-gospel.jpg"
       },
       "createdAt": "2024-01-15T10:30:00.000Z"
-    }
-  }
-}
-```
-
-### **Share Response**
-```json
-{
-  "success": true,
-  "data": {
-    "shareCount": 13
-  }
-}
-```
-
-### **Bookmark Response**
-```json
-{
-  "success": true,
-  "data": {
+    },
     "isBookmarked": true
   }
+}
+```
+
+**Success Response (Remove Bookmark):**
+```json
+{
+  "success": true,
+  "message": "Content removed from library successfully",
+  "data": {
+    "deletedBookmarkId": "64f8a1b2c3d4e5f6a7b8c9d0",
+    "isBookmarked": false
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to update library",
+  "error": "Media not found"
+}
+```
+
+### **7. Authentication Error Response**
+
+**Unauthorized Response:**
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "error": "Authentication token required"
+}
+```
+
+**Invalid Token Response:**
+```json
+{
+  "success": false,
+  "message": "Invalid authentication token",
+  "error": "Token has expired or is invalid"
+}
+```
+
+### **8. Rate Limiting Error Response**
+
+**Too Many Requests Response:**
+```json
+{
+  "success": false,
+  "message": "Too many requests",
+  "error": "Rate limit exceeded. Please try again later.",
+  "retryAfter": 60
+}
+```
+
+### **9. Validation Error Response**
+
+**Validation Error Response:**
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "error": "Invalid input data",
+  "details": [
+    {
+      "field": "comment",
+      "message": "Comment text is required"
+    },
+    {
+      "field": "comment",
+      "message": "Comment must be at least 1 character long"
+    }
+  ]
+}
+```
+
+### **10. Server Error Response**
+
+**Internal Server Error Response:**
+```json
+{
+  "success": false,
+  "message": "Internal server error",
+  "error": "Something went wrong on our end. Please try again later."
 }
 ```
 
