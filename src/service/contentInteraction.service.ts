@@ -162,6 +162,90 @@ export class ContentInteractionService {
   }
 
   /**
+   * Get comments for content
+   */
+  async getContentComments(
+    contentId: string,
+    contentType: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<any> {
+    if (!Types.ObjectId.isValid(contentId)) {
+      throw new Error("Invalid content ID");
+    }
+
+    if (!["media", "devotional"].includes(contentType)) {
+      throw new Error("Comments not supported for this content type");
+    }
+
+    const skip = (page - 1) * limit;
+
+    // For now, we'll use MediaInteraction for both media and devotional
+    // TODO: Create a more generic ContentInteraction model in the future
+    const comments = await MediaInteraction.find({
+      media: new Types.ObjectId(contentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    })
+      .populate("user", "firstName lastName avatar")
+      .populate("parentCommentId", "content user")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await MediaInteraction.countDocuments({
+      media: new Types.ObjectId(contentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    });
+
+    return {
+      comments,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Remove comment
+   */
+  async removeContentComment(commentId: string, userId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId)) {
+      throw new Error("Invalid comment or user ID");
+    }
+
+    const comment = await MediaInteraction.findOne({
+      _id: commentId,
+      user: userId,
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    });
+
+    if (!comment) {
+      throw new Error(
+        "Comment not found or you don't have permission to delete it"
+      );
+    }
+
+    // Soft delete the comment
+    await MediaInteraction.findByIdAndUpdate(commentId, {
+      isRemoved: true,
+      content: "[Comment removed]",
+    });
+
+    // Decrement comment count on the content
+    if (comment.media) {
+      await Media.findByIdAndUpdate(comment.media, {
+        $inc: { commentCount: -1 },
+      });
+    }
+  }
+
+  /**
    * Get content metadata for frontend UI
    */
   async getContentMetadata(

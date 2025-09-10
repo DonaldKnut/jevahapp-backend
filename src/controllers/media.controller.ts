@@ -1722,11 +1722,49 @@ export const getDefaultContent = async (
     }
     
     // Get default content with pagination
-    const defaultContent = await Media.find(filter)
+    const defaultContentRaw = await Media.find(filter)
       .sort({ createdAt: -1 })
       .limit(limitNum)
       .populate('uploadedBy', 'firstName lastName username email avatar')
       .lean();
+
+    // Convert stored R2 object URLs to short-lived presigned URLs for private access
+    const toObjectKey = (urlString?: string): string | null => {
+      if (!urlString) return null;
+      try {
+        const u = new URL(urlString);
+        // Expected: https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
+        // Extract pathname and drop leading '/<bucket>/' segment if present
+        let pathname = u.pathname; // starts with '/'
+        if (pathname.startsWith('/')) pathname = pathname.slice(1);
+        const bucket = process.env.R2_BUCKET;
+        if (bucket && pathname.startsWith(bucket + '/')) {
+          return pathname.slice(bucket.length + 1);
+        }
+        // If bucket not included, return remaining path
+        return pathname;
+      } catch (_e) {
+        return null;
+      }
+    };
+
+    // Lazy import to avoid circular deps
+    const { default: fileUploadService } = await import('../service/fileUpload.service');
+
+    const defaultContent = await Promise.all(
+      defaultContentRaw.map(async (item: any) => {
+        const objectKey = toObjectKey(item.fileUrl);
+        if (objectKey) {
+          try {
+            const signed = await fileUploadService.getPresignedGetUrl(objectKey, 3600);
+            return { ...item, fileUrl: signed };
+          } catch (_e) {
+            return item; // fallback to stored URL if signing fails
+          }
+        }
+        return item;
+      })
+    );
     
     // Group content by type for better organization
     const groupedContent = {

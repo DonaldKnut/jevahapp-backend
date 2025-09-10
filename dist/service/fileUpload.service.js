@@ -111,5 +111,14 @@ class FileUploadService {
             }
         });
     }
+    getPresignedGetUrl(objectKey_1) {
+        return __awaiter(this, arguments, void 0, function* (objectKey, expiresInSeconds = 3600) {
+            const signedUrl = yield (0, s3_request_presigner_1.getSignedUrl)(s3Client, new client_s3_1.GetObjectCommand({
+                Bucket: process.env.R2_BUCKET,
+                Key: objectKey,
+            }), { expiresIn: expiresInSeconds });
+            return signedUrl;
+        });
+    }
 }
 exports.default = new FileUploadService();

@@ -4,6 +4,7 @@ import { rateLimiter } from "../middleware/rateLimiter";
 import {
   toggleContentLike,
   addContentComment,
+  removeContentComment,
   getContentMetadata,
   getContentComments,
   shareContent,
@@ -59,6 +60,15 @@ router.post(
  * @returns { success: boolean, data: ContentMetadata }
  */
 router.get("/:contentType/:contentId/metadata", getContentMetadata);
+
+/**
+ * @route   DELETE /api/content/comments/:commentId
+ * @desc    Remove comment
+ * @access  Protected (Comment owner only)
+ * @param   { commentId: string } - MongoDB ObjectId of the comment
+ * @returns { success: boolean, message: string }
+ */
+router.delete("/comments/:commentId", verifyToken, removeContentComment);
 
 /**
  * @route   GET /api/content/:contentType/:contentId/comments

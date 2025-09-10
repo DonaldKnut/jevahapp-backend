@@ -134,6 +134,21 @@ class FileUploadService {
       );
     }
   }
+
+  async getPresignedGetUrl(
+    objectKey: string,
+    expiresInSeconds: number = 3600
+  ): Promise<string> {
+    const signedUrl = await getSignedUrl(
+      s3Client,
+      new GetObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+      }),
+      { expiresIn: expiresInSeconds }
+    );
+    return signedUrl;
+  }
 }
 
 export default new FileUploadService();

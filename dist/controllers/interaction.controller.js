@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -12,116 +45,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getShareStats = exports.getShareUrls = exports.deleteMessage = exports.getUserConversations = exports.getConversationMessages = exports.sendMessage = exports.getComments = exports.shareMedia = exports.addCommentReaction = exports.removeComment = exports.addComment = exports.toggleLike = void 0;
+exports.getShareStats = exports.getShareUrls = exports.deleteMessage = exports.getUserConversations = exports.getConversationMessages = exports.sendMessage = exports.addCommentReaction = exports.removeComment = void 0;
 const mongoose_1 = require("mongoose");
 const interaction_service_1 = __importDefault(require("../service/interaction.service"));
 const share_service_1 = __importDefault(require("../service/share.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
-// Like/Unlike media
-const toggleLike = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { mediaId } = req.params;
-        const userId = req.userId;
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                message: "Unauthorized: User not authenticated",
-            });
-            return;
-        }
-        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid media ID",
-            });
-            return;
-        }
-        const result = yield interaction_service_1.default.toggleLike({ userId, mediaId });
-        res.status(200).json({
-            success: true,
-            message: result.liked ? "Media liked successfully" : "Media unliked successfully",
-            data: result,
-        });
-    }
-    catch (error) {
-        logger_1.default.error("Toggle like error", {
-            error: error.message,
-            userId: req.userId,
-            mediaId: req.params.mediaId,
-        });
-        if (error.message.includes("not found")) {
-            res.status(404).json({
-                success: false,
-                message: error.message,
-            });
-            return;
-        }
-        res.status(500).json({
-            success: false,
-            message: "Failed to toggle like",
-        });
-    }
-});
-exports.toggleLike = toggleLike;
-// Add comment
-const addComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { mediaId } = req.params;
-        const { content, parentCommentId } = req.body;
-        const userId = req.userId;
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                message: "Unauthorized: User not authenticated",
-            });
-            return;
-        }
-        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid media ID",
-            });
-            return;
-        }
-        if (!content || content.trim().length === 0) {
-            res.status(400).json({
-                success: false,
-                message: "Comment content is required",
-            });
-            return;
-        }
-        const comment = yield interaction_service_1.default.addComment({
-            userId,
-            mediaId,
-            content,
-            parentCommentId,
-        });
-        res.status(201).json({
-            success: true,
-            message: "Comment added successfully",
-            data: comment,
-        });
-    }
-    catch (error) {
-        logger_1.default.error("Add comment error", {
-            error: error.message,
-            userId: req.userId,
-            mediaId: req.params.mediaId,
-        });
-        if (error.message.includes("not found")) {
-            res.status(404).json({
-                success: false,
-                message: error.message,
-            });
-            return;
-        }
-        res.status(500).json({
-            success: false,
-            message: "Failed to add comment",
-        });
-    }
-});
-exports.addComment = addComment;
 // Remove comment
 const removeComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -141,7 +69,9 @@ const removeComment = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             });
             return;
         }
-        yield interaction_service_1.default.removeComment(commentId, userId);
+        // Use the new content interaction service
+        const contentInteractionService = yield Promise.resolve().then(() => __importStar(require("../service/contentInteraction.service")));
+        yield contentInteractionService.default.removeContentComment(commentId, userId);
         res.status(200).json({
             success: true,
             message: "Comment removed successfully",
@@ -232,102 +162,6 @@ const addCommentReaction = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.addCommentReaction = addCommentReaction;
-// Share media
-const shareMedia = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { mediaId } = req.params;
-        const { platform, message } = req.body;
-        const userId = req.userId;
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                message: "Unauthorized: User not authenticated",
-            });
-            return;
-        }
-        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid media ID",
-            });
-            return;
-        }
-        // Record share interaction
-        yield interaction_service_1.default.shareMedia({
-            userId,
-            mediaId,
-            platform,
-            message,
-        });
-        // Generate share URLs
-        const shareUrls = yield share_service_1.default.generateSocialShareUrls(mediaId, message);
-        res.status(200).json({
-            success: true,
-            message: "Media shared successfully",
-            data: {
-                shareUrls,
-                platform,
-            },
-        });
-    }
-    catch (error) {
-        logger_1.default.error("Share media error", {
-            error: error.message,
-            userId: req.userId,
-            mediaId: req.params.mediaId,
-        });
-        if (error.message.includes("not found")) {
-            res.status(404).json({
-                success: false,
-                message: error.message,
-            });
-            return;
-        }
-        res.status(500).json({
-            success: false,
-            message: "Failed to share media",
-        });
-    }
-});
-exports.shareMedia = shareMedia;
-// Get comments
-const getComments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { mediaId } = req.params;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid media ID",
-            });
-            return;
-        }
-        const result = yield interaction_service_1.default.getComments(mediaId, page, limit);
-        res.status(200).json({
-            success: true,
-            data: result,
-        });
-    }
-    catch (error) {
-        logger_1.default.error("Get comments error", {
-            error: error.message,
-            mediaId: req.params.mediaId,
-        });
-        if (error.message.includes("Invalid")) {
-            res.status(400).json({
-                success: false,
-                message: error.message,
-            });
-            return;
-        }
-        res.status(500).json({
-            success: false,
-            message: "Failed to get comments",
-        });
-    }
-});
-exports.getComments = getComments;
 // Send message
 const sendMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -415,7 +249,8 @@ const getConversationMessages = (req, res) => __awaiter(void 0, void 0, void 0, 
             userId: req.userId,
             conversationId: req.params.conversationId,
         });
-        if (error.message.includes("not found") || error.message.includes("access denied")) {
+        if (error.message.includes("not found") ||
+            error.message.includes("access denied")) {
             res.status(404).json({
                 success: false,
                 message: error.message,

@@ -105,6 +105,76 @@ class ContentInteractionService {
         });
     }
     /**
+     * Get comments for content
+     */
+    getContentComments(contentId_1, contentType_1) {
+        return __awaiter(this, arguments, void 0, function* (contentId, contentType, page = 1, limit = 20) {
+            if (!mongoose_1.Types.ObjectId.isValid(contentId)) {
+                throw new Error("Invalid content ID");
+            }
+            if (!["media", "devotional"].includes(contentType)) {
+                throw new Error("Comments not supported for this content type");
+            }
+            const skip = (page - 1) * limit;
+            // For now, we'll use MediaInteraction for both media and devotional
+            // TODO: Create a more generic ContentInteraction model in the future
+            const comments = yield mediaInteraction_model_1.MediaInteraction.find({
+                media: new mongoose_1.Types.ObjectId(contentId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            })
+                .populate("user", "firstName lastName avatar")
+                .populate("parentCommentId", "content user")
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit);
+            const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+                media: new mongoose_1.Types.ObjectId(contentId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            });
+            return {
+                comments,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit),
+                },
+            };
+        });
+    }
+    /**
+     * Remove comment
+     */
+    removeContentComment(commentId, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+                throw new Error("Invalid comment or user ID");
+            }
+            const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                _id: commentId,
+                user: userId,
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            });
+            if (!comment) {
+                throw new Error("Comment not found or you don't have permission to delete it");
+            }
+            // Soft delete the comment
+            yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentId, {
+                isRemoved: true,
+                content: "[Comment removed]",
+            });
+            // Decrement comment count on the content
+            if (comment.media) {
+                yield media_model_1.Media.findByIdAndUpdate(comment.media, {
+                    $inc: { commentCount: -1 },
+                });
+            }
+        });
+    }
+    /**
      * Get content metadata for frontend UI
      */
     getContentMetadata(userId, contentId, contentType) {

@@ -231,6 +231,62 @@ export const getContentMetadata = async (
   }
 };
 
+// Remove comment
+export const removeContentComment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid comment ID",
+      });
+      return;
+    }
+
+    await contentInteractionService.removeContentComment(commentId, userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Comment removed successfully",
+    });
+  } catch (error: any) {
+    logger.error("Remove content comment error", {
+      error: error.message,
+      userId: req.userId,
+      commentId: req.params.commentId,
+    });
+
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("permission")
+    ) {
+      res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to remove comment",
+    });
+  }
+};
+
 // Get comments for content
 export const getContentComments = async (
   req: Request,
@@ -257,32 +313,17 @@ export const getContentComments = async (
       return;
     }
 
-    // For now, we'll use the existing interaction service for comments
-    // TODO: Extend this to support devotionals
-    const { getComments } = await import("./interaction.controller");
+    const result = await contentInteractionService.getContentComments(
+      contentId,
+      contentType,
+      page,
+      limit
+    );
 
-    // Mock the request object for the existing service
-    const mockReq = {
-      params: { mediaId: contentId },
-      query: { page, limit },
-    } as any;
-
-    const mockRes = {
-      status: (code: number) => ({
-        json: (data: any) => {
-          if (code === 200) {
-            res.status(200).json({
-              success: true,
-              data: data,
-            });
-          } else {
-            res.status(code).json(data);
-          }
-        },
-      }),
-    } as any;
-
-    await getComments(mockReq, mockRes);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
   } catch (error: any) {
     logger.error("Get content comments error", {
       error: error.message,

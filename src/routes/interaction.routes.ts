@@ -2,12 +2,8 @@ import express from "express";
 import { verifyToken } from "../middleware/auth.middleware";
 import { rateLimiter } from "../middleware/rateLimiter";
 import {
-  toggleLike,
-  addComment,
   removeComment,
   addCommentReaction,
-  shareMedia,
-  getComments,
   sendMessage,
   getConversationMessages,
   getUserConversations,
@@ -28,39 +24,11 @@ const messageRateLimiter = rateLimiter(20, 60000); // 20 messages per minute
 // =============================================================================
 
 /**
- * @route   POST /api/interactions/media/:mediaId/like
- * @desc    Toggle like/unlike on media
- * @access  Protected
- */
-router.post(
-  "/media/:mediaId/like",
-  verifyToken,
-  interactionRateLimiter,
-  toggleLike
-);
-
-/**
- * @route   POST /api/interactions/media/:mediaId/comment
- * @desc    Add comment to media
- * @access  Protected
- */
-router.post(
-  "/media/:mediaId/comment",
-  verifyToken,
-  commentRateLimiter,
-  addComment
-);
-
-/**
  * @route   DELETE /api/interactions/comments/:commentId
  * @desc    Remove comment
  * @access  Protected (Comment owner only)
  */
-router.delete(
-  "/comments/:commentId",
-  verifyToken,
-  removeComment
-);
+router.delete("/comments/:commentId", verifyToken, removeComment);
 
 /**
  * @route   POST /api/interactions/comments/:commentId/reaction
@@ -75,46 +43,18 @@ router.post(
 );
 
 /**
- * @route   POST /api/interactions/media/:mediaId/share
- * @desc    Share media
- * @access  Protected
- */
-router.post(
-  "/media/:mediaId/share",
-  verifyToken,
-  interactionRateLimiter,
-  shareMedia
-);
-
-/**
- * @route   GET /api/interactions/media/:mediaId/comments
- * @desc    Get comments for media
- * @access  Public
- */
-router.get(
-  "/media/:mediaId/comments",
-  getComments
-);
-
-/**
  * @route   GET /api/interactions/media/:mediaId/share-urls
  * @desc    Get share URLs for media
  * @access  Public
  */
-router.get(
-  "/media/:mediaId/share-urls",
-  getShareUrls
-);
+router.get("/media/:mediaId/share-urls", getShareUrls);
 
 /**
  * @route   GET /api/interactions/media/:mediaId/share-stats
  * @desc    Get share statistics for media
  * @access  Public
  */
-router.get(
-  "/media/:mediaId/share-stats",
-  getShareStats
-);
+router.get("/media/:mediaId/share-stats", getShareStats);
 
 // =============================================================================
 // Messaging System
@@ -137,11 +77,7 @@ router.post(
  * @desc    Get user conversations
  * @access  Protected
  */
-router.get(
-  "/conversations",
-  verifyToken,
-  getUserConversations
-);
+router.get("/conversations", verifyToken, getUserConversations);
 
 /**
  * @route   GET /api/interactions/conversations/:conversationId/messages
@@ -159,10 +95,6 @@ router.get(
  * @desc    Delete message
  * @access  Protected (Message sender only)
  */
-router.delete(
-  "/messages/:messageId",
-  verifyToken,
-  deleteMessage
-);
+router.delete("/messages/:messageId", verifyToken, deleteMessage);
 
 export default router;

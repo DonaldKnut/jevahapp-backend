@@ -541,12 +541,15 @@ class SocketService {
       const { mediaId, actionType } = data;
 
       if (actionType === "like") {
-        // Handle like/unlike using the interaction service
-        const interactionService = await import("./interaction.service");
-        const result = await interactionService.default.toggleLike({
-          userId: user.userId,
+        // Handle like/unlike using the new content interaction service
+        const contentInteractionService = await import(
+          "./contentInteraction.service"
+        );
+        const result = await contentInteractionService.default.toggleLike(
+          user.userId,
           mediaId,
-        });
+          "media"
+        );
 
         this.io.to(`media:${mediaId}`).emit("media-reaction", {
           mediaId,

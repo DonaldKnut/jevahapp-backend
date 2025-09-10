@@ -43,6 +43,14 @@ router.post("/:contentType/:contentId/comment", auth_middleware_1.verifyToken, c
  */
 router.get("/:contentType/:contentId/metadata", contentInteraction_controller_1.getContentMetadata);
 /**
+ * @route   DELETE /api/content/comments/:commentId
+ * @desc    Remove comment
+ * @access  Protected (Comment owner only)
+ * @param   { commentId: string } - MongoDB ObjectId of the comment
+ * @returns { success: boolean, message: string }
+ */
+router.delete("/comments/:commentId", auth_middleware_1.verifyToken, contentInteraction_controller_1.removeContentComment);
+/**
  * @route   GET /api/content/:contentType/:contentId/comments
  * @desc    Get comments for content (media, devotional)
  * @access  Public

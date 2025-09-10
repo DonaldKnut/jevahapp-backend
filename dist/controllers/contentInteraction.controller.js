@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.shareContent = exports.getContentComments = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
+exports.shareContent = exports.getContentComments = exports.removeContentComment = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
 const mongoose_1 = require("mongoose");
 const contentInteraction_service_1 = __importDefault(require("../service/contentInteraction.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
@@ -223,6 +223,52 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getContentMetadata = getContentMetadata;
+// Remove comment
+const removeContentComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { commentId } = req.params;
+        const userId = req.userId;
+        if (!userId) {
+            res.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        if (!commentId || !mongoose_1.Types.ObjectId.isValid(commentId)) {
+            res.status(400).json({
+                success: false,
+                message: "Invalid comment ID",
+            });
+            return;
+        }
+        yield contentInteraction_service_1.default.removeContentComment(commentId, userId);
+        res.status(200).json({
+            success: true,
+            message: "Comment removed successfully",
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Remove content comment error", {
+            error: error.message,
+            userId: req.userId,
+            commentId: req.params.commentId,
+        });
+        if (error.message.includes("not found") ||
+            error.message.includes("permission")) {
+            res.status(404).json({
+                success: false,
+                message: error.message,
+            });
+            return;
+        }
+        res.status(500).json({
+            success: false,
+            message: "Failed to remove comment",
+        });
+    }
+});
+exports.removeContentComment = removeContentComment;
 // Get comments for content
 const getContentComments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -243,30 +289,11 @@ const getContentComments = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        // For now, we'll use the existing interaction service for comments
-        // TODO: Extend this to support devotionals
-        const { getComments } = yield Promise.resolve().then(() => __importStar(require("./interaction.controller")));
-        // Mock the request object for the existing service
-        const mockReq = {
-            params: { mediaId: contentId },
-            query: { page, limit },
-        };
-        const mockRes = {
-            status: (code) => ({
-                json: (data) => {
-                    if (code === 200) {
-                        res.status(200).json({
-                            success: true,
-                            data: data,
-                        });
-                    }
-                    else {
-                        res.status(code).json(data);
-                    }
-                },
-            }),
-        };
-        yield getComments(mockReq, mockRes);
+        const result = yield contentInteraction_service_1.default.getContentComments(contentId, contentType, page, limit);
+        res.status(200).json({
+            success: true,
+            data: result,
+        });
     }
     catch (error) {
         logger_1.default.error("Get content comments error", {

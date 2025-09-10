@@ -4,124 +4,11 @@ import interactionService from "../service/interaction.service";
 import shareService from "../service/share.service";
 import logger from "../utils/logger";
 
-// Like/Unlike media
-export const toggleLike = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { mediaId } = req.params;
-    const userId = req.userId;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Unauthorized: User not authenticated",
-      });
-      return;
-    }
-
-    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid media ID",
-      });
-      return;
-    }
-
-    const result = await interactionService.toggleLike({ userId, mediaId });
-
-    res.status(200).json({
-      success: true,
-      message: result.liked ? "Media liked successfully" : "Media unliked successfully",
-      data: result,
-    });
-  } catch (error: any) {
-    logger.error("Toggle like error", {
-      error: error.message,
-      userId: req.userId,
-      mediaId: req.params.mediaId,
-    });
-
-    if (error.message.includes("not found")) {
-      res.status(404).json({
-        success: false,
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to toggle like",
-    });
-  }
-};
-
-// Add comment
-export const addComment = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { mediaId } = req.params;
-    const { content, parentCommentId } = req.body;
-    const userId = req.userId;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Unauthorized: User not authenticated",
-      });
-      return;
-    }
-
-    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid media ID",
-      });
-      return;
-    }
-
-    if (!content || content.trim().length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "Comment content is required",
-      });
-      return;
-    }
-
-    const comment = await interactionService.addComment({
-      userId,
-      mediaId,
-      content,
-      parentCommentId,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Comment added successfully",
-      data: comment,
-    });
-  } catch (error: any) {
-    logger.error("Add comment error", {
-      error: error.message,
-      userId: req.userId,
-      mediaId: req.params.mediaId,
-    });
-
-    if (error.message.includes("not found")) {
-      res.status(404).json({
-        success: false,
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to add comment",
-    });
-  }
-};
-
 // Remove comment
-export const removeComment = async (req: Request, res: Response): Promise<void> => {
+export const removeComment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { commentId } = req.params;
     const userId = req.userId;
@@ -142,7 +29,14 @@ export const removeComment = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    await interactionService.removeComment(commentId, userId);
+    // Use the new content interaction service
+    const contentInteractionService = await import(
+      "../service/contentInteraction.service"
+    );
+    await contentInteractionService.default.removeContentComment(
+      commentId,
+      userId
+    );
 
     res.status(200).json({
       success: true,
@@ -179,7 +73,10 @@ export const removeComment = async (req: Request, res: Response): Promise<void> 
 };
 
 // Add comment reaction
-export const addCommentReaction = async (req: Request, res: Response): Promise<void> => {
+export const addCommentReaction = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { commentId } = req.params;
     const { reactionType } = req.body;
@@ -242,114 +139,11 @@ export const addCommentReaction = async (req: Request, res: Response): Promise<v
   }
 };
 
-// Share media
-export const shareMedia = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { mediaId } = req.params;
-    const { platform, message } = req.body;
-    const userId = req.userId;
-
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        message: "Unauthorized: User not authenticated",
-      });
-      return;
-    }
-
-    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid media ID",
-      });
-      return;
-    }
-
-    // Record share interaction
-    await interactionService.shareMedia({
-      userId,
-      mediaId,
-      platform,
-      message,
-    });
-
-    // Generate share URLs
-    const shareUrls = await shareService.generateSocialShareUrls(mediaId, message);
-
-    res.status(200).json({
-      success: true,
-      message: "Media shared successfully",
-      data: {
-        shareUrls,
-        platform,
-      },
-    });
-  } catch (error: any) {
-    logger.error("Share media error", {
-      error: error.message,
-      userId: req.userId,
-      mediaId: req.params.mediaId,
-    });
-
-    if (error.message.includes("not found")) {
-      res.status(404).json({
-        success: false,
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to share media",
-    });
-  }
-};
-
-// Get comments
-export const getComments = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { mediaId } = req.params;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-
-    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid media ID",
-      });
-      return;
-    }
-
-    const result = await interactionService.getComments(mediaId, page, limit);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  } catch (error: any) {
-    logger.error("Get comments error", {
-      error: error.message,
-      mediaId: req.params.mediaId,
-    });
-
-    if (error.message.includes("Invalid")) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to get comments",
-    });
-  }
-};
-
 // Send message
-export const sendMessage = async (req: Request, res: Response): Promise<void> => {
+export const sendMessage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { recipientId } = req.params;
     const { content, messageType, mediaUrl, replyTo } = req.body;
@@ -408,7 +202,10 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
 };
 
 // Get conversation messages
-export const getConversationMessages = async (req: Request, res: Response): Promise<void> => {
+export const getConversationMessages = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { conversationId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -449,7 +246,10 @@ export const getConversationMessages = async (req: Request, res: Response): Prom
       conversationId: req.params.conversationId,
     });
 
-    if (error.message.includes("not found") || error.message.includes("access denied")) {
+    if (
+      error.message.includes("not found") ||
+      error.message.includes("access denied")
+    ) {
       res.status(404).json({
         success: false,
         message: error.message,
@@ -465,7 +265,10 @@ export const getConversationMessages = async (req: Request, res: Response): Prom
 };
 
 // Get user conversations
-export const getUserConversations = async (req: Request, res: Response): Promise<void> => {
+export const getUserConversations = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const userId = req.userId;
 
@@ -497,7 +300,10 @@ export const getUserConversations = async (req: Request, res: Response): Promise
 };
 
 // Delete message
-export const deleteMessage = async (req: Request, res: Response): Promise<void> => {
+export const deleteMessage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { messageId } = req.params;
     const userId = req.userId;
@@ -555,7 +361,10 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
 };
 
 // Get share URLs for media
-export const getShareUrls = async (req: Request, res: Response): Promise<void> => {
+export const getShareUrls = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { mediaId } = req.params;
     const { message } = req.query;
@@ -568,7 +377,10 @@ export const getShareUrls = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const shareUrls = await shareService.generateSocialShareUrls(mediaId, message as string);
+    const shareUrls = await shareService.generateSocialShareUrls(
+      mediaId,
+      message as string
+    );
     const qrCode = await shareService.generateQRCode(mediaId);
     const embedCode = await shareService.generateEmbedCode(mediaId);
 
@@ -602,7 +414,10 @@ export const getShareUrls = async (req: Request, res: Response): Promise<void> =
 };
 
 // Get share statistics
-export const getShareStats = async (req: Request, res: Response): Promise<void> => {
+export const getShareStats = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { mediaId } = req.params;
 

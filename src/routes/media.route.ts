@@ -288,17 +288,40 @@ router.post(
 
 /**
  * @route   POST /api/media/:id/share
- * @desc    Record a share action for a media item
+ * @desc    Record a share action for a media item (legacy - redirects to content interaction)
  * @access  Protected (Authenticated users only)
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @body    { platform?: string }
  * @returns { success: boolean, message: string, shareUrl: string }
  */
-router.post("/:id/share", verifyToken, mediaInteractionRateLimiter, shareMedia);
+router.post(
+  "/:id/share",
+  verifyToken,
+  mediaInteractionRateLimiter,
+  async (req: Request, res: Response) => {
+    // Redirect to new content interaction system
+    const { id } = req.params;
+    const { platform, message } = req.body;
+
+    // Import the new content interaction controller
+    const { shareContent } = await import(
+      "../controllers/contentInteraction.controller"
+    );
+
+    // Mock the request for the new system
+    const mockReq = {
+      ...req,
+      params: { contentId: id, contentType: "media" },
+      body: { platform, message },
+    } as any;
+
+    return shareContent(mockReq, res);
+  }
+);
 
 /**
  * @route   POST /api/media/:id/favorite
- * @desc    Record a favorite action for a media item (toggle like/unlike)
+ * @desc    Record a favorite action for a media item (legacy - redirects to content interaction)
  * @access  Protected (Authenticated users only)
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @body    { actionType: "favorite" }
@@ -308,9 +331,25 @@ router.post(
   "/:id/favorite",
   verifyToken,
   mediaInteractionRateLimiter,
-  (req: Request<{ id: string }, any, UserActionRequestBody>, res: Response) => {
-    req.body.actionType = "favorite";
-    return recordUserAction(req, res);
+  async (
+    req: Request<{ id: string }, any, UserActionRequestBody>,
+    res: Response
+  ) => {
+    // Redirect to new content interaction system
+    const { id } = req.params;
+
+    // Import the new content interaction controller
+    const { toggleContentLike } = await import(
+      "../controllers/contentInteraction.controller"
+    );
+
+    // Mock the request for the new system
+    const mockReq = {
+      ...req,
+      params: { contentId: id, contentType: "media" },
+    } as any;
+
+    return toggleContentLike(mockReq, res);
   }
 );
 

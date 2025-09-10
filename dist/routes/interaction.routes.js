@@ -16,18 +16,6 @@ const messageRateLimiter = (0, rateLimiter_1.rateLimiter)(20, 60000); // 20 mess
 // Media Interactions (Likes, Comments, Shares)
 // =============================================================================
 /**
- * @route   POST /api/interactions/media/:mediaId/like
- * @desc    Toggle like/unlike on media
- * @access  Protected
- */
-router.post("/media/:mediaId/like", auth_middleware_1.verifyToken, interactionRateLimiter, interaction_controller_1.toggleLike);
-/**
- * @route   POST /api/interactions/media/:mediaId/comment
- * @desc    Add comment to media
- * @access  Protected
- */
-router.post("/media/:mediaId/comment", auth_middleware_1.verifyToken, commentRateLimiter, interaction_controller_1.addComment);
-/**
  * @route   DELETE /api/interactions/comments/:commentId
  * @desc    Remove comment
  * @access  Protected (Comment owner only)
@@ -39,18 +27,6 @@ router.delete("/comments/:commentId", auth_middleware_1.verifyToken, interaction
  * @access  Protected
  */
 router.post("/comments/:commentId/reaction", auth_middleware_1.verifyToken, interactionRateLimiter, interaction_controller_1.addCommentReaction);
-/**
- * @route   POST /api/interactions/media/:mediaId/share
- * @desc    Share media
- * @access  Protected
- */
-router.post("/media/:mediaId/share", auth_middleware_1.verifyToken, interactionRateLimiter, interaction_controller_1.shareMedia);
-/**
- * @route   GET /api/interactions/media/:mediaId/comments
- * @desc    Get comments for media
- * @access  Public
- */
-router.get("/media/:mediaId/comments", interaction_controller_1.getComments);
 /**
  * @route   GET /api/interactions/media/:mediaId/share-urls
  * @desc    Get share URLs for media

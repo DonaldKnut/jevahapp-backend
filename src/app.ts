@@ -26,6 +26,8 @@ import aiChatbotRoutes from "./routes/aiChatbot.routes";
 import trendingRoutes from "./routes/trending.routes";
 import userProfileRoutes from "./routes/userProfile.routes";
 import healthRoutes from "./routes/health.routes";
+import enhancedMediaRoutes from "./routes/enhancedMedia.route";
+import merchandiseRoutes from "./routes/merchandise.route";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -180,6 +182,8 @@ app.use("/api/ai-chatbot", aiChatbotRoutes);
 app.use("/api/trending", trendingRoutes);
 app.use("/api/user-profiles", userProfileRoutes);
 app.use("/api/health", healthRoutes);
+app.use("/api/enhanced-media", enhancedMediaRoutes);
+app.use("/api/merchandise", merchandiseRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {
