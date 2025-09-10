@@ -10,7 +10,7 @@ This guide covers ALL the advanced features that make this a truly professional,
 
 ```typescript
 // Install: npm install socket.io-client
-import io from 'socket.io-client';
+import io from "socket.io-client";
 
 class SocketManager {
   private socket: any;
@@ -22,11 +22,11 @@ class SocketManager {
   }
 
   private connect() {
-    this.socket = io('https://jevahapp-backend.onrender.com', {
+    this.socket = io("https://jevahapp-backend.onrender.com", {
       auth: {
-        token: this.authToken
+        token: this.authToken,
       },
-      transports: ['websocket', 'polling']
+      transports: ["websocket", "polling"],
     });
 
     this.setupEventHandlers();
@@ -34,111 +34,115 @@ class SocketManager {
 
   private setupEventHandlers() {
     // Connection events
-    this.socket.on('connect', () => {
-      console.log('✅ Connected to real-time server');
+    this.socket.on("connect", () => {
+      console.log("✅ Connected to real-time server");
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('❌ Disconnected from real-time server');
+    this.socket.on("disconnect", () => {
+      console.log("❌ Disconnected from real-time server");
     });
 
     // Real-time comment events
-    this.socket.on('new-comment', (data) => {
+    this.socket.on("new-comment", data => {
       this.handleNewComment(data);
     });
 
     // Real-time like events
-    this.socket.on('media-reaction', (data) => {
+    this.socket.on("media-reaction", data => {
       this.handleMediaReaction(data);
     });
 
     // Real-time typing indicators
-    this.socket.on('user-typing', (data) => {
+    this.socket.on("user-typing", data => {
       this.handleTypingIndicator(data);
     });
 
     // Real-time user presence
-    this.socket.on('user-presence', (data) => {
+    this.socket.on("user-presence", data => {
       this.handleUserPresence(data);
     });
 
     // Real-time live stream events
-    this.socket.on('stream-update', (data) => {
+    this.socket.on("stream-update", data => {
       this.handleStreamUpdate(data);
     });
   }
 
   // Join content room for real-time updates
   joinContentRoom(contentId: string, contentType: string) {
-    this.socket.emit('join-content', { contentId, contentType });
+    this.socket.emit("join-content", { contentId, contentType });
   }
 
   // Leave content room
   leaveContentRoom(contentId: string, contentType: string) {
-    this.socket.emit('leave-content', { contentId, contentType });
+    this.socket.emit("leave-content", { contentId, contentType });
   }
 
   // Send real-time comment
   sendComment(contentId: string, contentType: string, comment: string) {
-    this.socket.emit('new-comment', {
+    this.socket.emit("new-comment", {
       contentId,
       contentType,
-      comment
+      comment,
     });
   }
 
   // Send real-time like
   sendLike(contentId: string, contentType: string) {
-    this.socket.emit('content-reaction', {
+    this.socket.emit("content-reaction", {
       contentId,
       contentType,
-      actionType: 'like'
+      actionType: "like",
     });
   }
 
   // Send typing indicator
-  sendTypingIndicator(contentId: string, contentType: string, isTyping: boolean) {
-    this.socket.emit('typing-indicator', {
+  sendTypingIndicator(
+    contentId: string,
+    contentType: string,
+    isTyping: boolean
+  ) {
+    this.socket.emit("typing-indicator", {
       contentId,
       contentType,
-      isTyping
+      isTyping,
     });
   }
 
   // Join live stream
   joinLiveStream(streamId: string) {
-    this.socket.emit('join-stream', { streamId, action: 'join' });
+    this.socket.emit("join-stream", { streamId, action: "join" });
   }
 
   // Leave live stream
   leaveLiveStream(streamId: string) {
-    this.socket.emit('leave-stream', { streamId, action: 'leave' });
+    this.socket.emit("leave-stream", { streamId, action: "leave" });
   }
 
   // Event handlers
   private handleNewComment(data: any) {
     // Update UI with new comment in real-time
-    console.log('New comment received:', data);
+    console.log("New comment received:", data);
   }
 
   private handleMediaReaction(data: any) {
     // Update like count in real-time
-    console.log('Media reaction received:', data);
+    console.log("Media reaction received:", data);
   }
 
   private handleTypingIndicator(data: any) {
     // Show typing indicator
-    console.log('User typing:', data);
+    console.log("User typing:", data);
   }
 
   private handleUserPresence(data: any) {
     // Update user presence status
-    console.log('User presence:', data);
+    console.log("User presence:", data);
   }
 
   private handleStreamUpdate(data: any) {
     // Update live stream status
-    console.log('Stream update:', data);
+    console.log("Stream update:", data);
   }
 }
 ```
@@ -253,7 +257,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
       socketManager.socket.off('user-typing', handleTypingIndicator);
       socketManager.socket.off('user-presence', handleUserPresence);
       socketManager.socket.off('stream-update', handleLiveStreamUpdate);
-      
+
       // Leave content room
       socketManager.leaveContentRoom(content._id, 'media');
     };
@@ -310,7 +314,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
       // Optimistic update
       const newLikedState = !isLiked;
       const newLikeCount = newLikedState ? likeCount + 1 : likeCount - 1;
-      
+
       setIsLiked(newLikedState);
       setLikeCount(newLikeCount);
       animateLike();
@@ -369,7 +373,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`;
@@ -380,8 +384,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
     <View style={styles.container}>
       {/* Header with Author Info */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.authorInfo} 
+        <TouchableOpacity
+          style={styles.authorInfo}
           onPress={handleAuthorPress}
           activeOpacity={0.7}
         >
@@ -398,7 +402,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
             <Text style={styles.timestamp}>{formatDate(content.createdAt)}</Text>
           </View>
         </TouchableOpacity>
-        
+
         <View style={styles.headerRight}>
           {isLive && (
             <View style={styles.liveIndicator}>
@@ -437,7 +441,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
                   setIsVideoLoading(false);
                 }}
               />
-              
+
               <TouchableOpacity
                 style={styles.videoOverlay}
                 onPress={() => setIsPlaying(!isPlaying)}
@@ -505,8 +509,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
       <View style={styles.actions}>
         <View style={styles.leftActions}>
           <Animated.View style={{ transform: [{ scale: likeAnimation }] }}>
-            <TouchableOpacity 
-              style={styles.actionButton} 
+            <TouchableOpacity
+              style={styles.actionButton}
               onPress={handleLike}
             >
               <Icon
@@ -521,8 +525,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
           </Animated.View>
 
           <Animated.View style={{ transform: [{ scale: commentAnimation }] }}>
-            <TouchableOpacity 
-              style={styles.actionButton} 
+            <TouchableOpacity
+              style={styles.actionButton}
               onPress={handleComment}
             >
               <Icon name="chat-bubble-outline" size={24} color="#666" />
@@ -530,8 +534,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
             </TouchableOpacity>
           </Animated.View>
 
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleShare}
           >
             <Icon name="share" size={24} color="#666" />
@@ -539,14 +543,14 @@ const ContentCard: React.FC<ContentCardProps> = ({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.bookmarkButton}
           onPress={() => setIsBookmarked(!isBookmarked)}
         >
-          <Icon 
-            name={isBookmarked ? "bookmark" : "bookmark-border"} 
-            size={24} 
-            color={isBookmarked ? "#e91e63" : "#666"} 
+          <Icon
+            name={isBookmarked ? "bookmark" : "bookmark-border"}
+            size={24}
+            color={isBookmarked ? "#e91e63" : "#666"}
           />
         </TouchableOpacity>
       </View>
@@ -563,7 +567,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
       {typingUsers.length > 0 && (
         <View style={styles.typingIndicator}>
           <Text style={styles.typingText}>
-            {typingUsers.length === 1 
+            {typingUsers.length === 1
               ? `${typingUsers[0]} is typing...`
               : `${typingUsers.length} people are typing...`
             }
@@ -796,22 +800,22 @@ const typingTimeout = useRef<NodeJS.Timeout>();
 
 const handleCommentTextChange = (text: string) => {
   setCommentText(text);
-  
+
   // Send typing indicator
   if (text.length > 0 && !isTyping) {
     setIsTyping(true);
-    socketManager.sendTypingIndicator(contentId, 'media', true);
+    socketManager.sendTypingIndicator(contentId, "media", true);
   }
-  
+
   // Clear existing timeout
   if (typingTimeout.current) {
     clearTimeout(typingTimeout.current);
   }
-  
+
   // Set new timeout to stop typing indicator
   typingTimeout.current = setTimeout(() => {
     setIsTyping(false);
-    socketManager.sendTypingIndicator(contentId, 'media', false);
+    socketManager.sendTypingIndicator(contentId, "media", false);
   }, 1000);
 };
 ```
@@ -856,7 +860,7 @@ const LiveStreamCard = ({ streamData, socketManager }) => {
         style={styles.liveVideo}
         resizeMode="cover"
       />
-      
+
       <View style={styles.liveOverlay}>
         <View style={styles.liveBadge}>
           <View style={styles.liveDot} />
@@ -896,10 +900,10 @@ const AdvancedComment = ({ comment, onReply, onLike, onDelete }) => {
     try {
       const newLikedState = !isLiked;
       const newLikeCount = newLikedState ? likeCount + 1 : likeCount - 1;
-      
+
       setIsLiked(newLikedState);
       setLikeCount(newLikeCount);
-      
+
       await onLike(comment._id, newLikedState);
     } catch (error) {
       // Revert on error
@@ -926,9 +930,9 @@ const AdvancedComment = ({ comment, onReply, onLike, onDelete }) => {
           </Text>
         </View>
       </View>
-      
+
       <Text style={styles.commentText}>{comment.comment}</Text>
-      
+
       <View style={styles.commentActions}>
         <TouchableOpacity onPress={handleLike} style={styles.commentAction}>
           <Icon
@@ -938,14 +942,14 @@ const AdvancedComment = ({ comment, onReply, onLike, onDelete }) => {
           />
           <Text style={styles.commentActionText}>{likeCount}</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity onPress={() => onReply(comment._id, '')} style={styles.commentAction}>
           <Icon name="reply" size={16} color="#666" />
           <Text style={styles.commentActionText}>Reply</Text>
         </TouchableOpacity>
-        
+
         {comment.replies.length > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowReplies(!showReplies)}
             style={styles.commentAction}
           >
@@ -955,7 +959,7 @@ const AdvancedComment = ({ comment, onReply, onLike, onDelete }) => {
           </TouchableOpacity>
         )}
       </View>
-      
+
       {showReplies && (
         <View style={styles.repliesContainer}>
           {replies.map((reply) => (
@@ -989,32 +993,32 @@ class NotificationService {
 
   private setupNotificationHandlers() {
     // New comment notification
-    this.socketManager.socket.on('new-comment-notification', (data) => {
+    this.socketManager.socket.on("new-comment-notification", data => {
       this.showNotification({
-        type: 'comment',
-        title: 'New Comment',
+        type: "comment",
+        title: "New Comment",
         message: `${data.author.firstName} commented on your content`,
-        data: data
+        data: data,
       });
     });
 
     // New like notification
-    this.socketManager.socket.on('new-like-notification', (data) => {
+    this.socketManager.socket.on("new-like-notification", data => {
       this.showNotification({
-        type: 'like',
-        title: 'New Like',
+        type: "like",
+        title: "New Like",
         message: `${data.author.firstName} liked your content`,
-        data: data
+        data: data,
       });
     });
 
     // New follower notification
-    this.socketManager.socket.on('new-follower-notification', (data) => {
+    this.socketManager.socket.on("new-follower-notification", data => {
       this.showNotification({
-        type: 'follow',
-        title: 'New Follower',
+        type: "follow",
+        title: "New Follower",
         message: `${data.follower.firstName} started following you`,
-        data: data
+        data: data,
       });
     });
   }
@@ -1022,9 +1026,9 @@ class NotificationService {
   private showNotification(notification: any) {
     // Add to queue
     this.notificationQueue.push(notification);
-    
+
     // Show notification (you can use react-native-push-notification or similar)
-    console.log('Notification:', notification);
+    console.log("Notification:", notification);
   }
 }
 ```
@@ -1032,6 +1036,7 @@ class NotificationService {
 ## 🚀 **Professional Features Checklist**
 
 ### **✅ Real-Time Features**
+
 - [x] Real-time likes with instant updates
 - [x] Real-time comments with instant broadcasting
 - [x] Real-time typing indicators
@@ -1040,6 +1045,7 @@ class NotificationService {
 - [x] Real-time notifications
 
 ### **✅ Advanced Interactions**
+
 - [x] Double-tap to like
 - [x] Long-press for options menu
 - [x] Swipe gestures
@@ -1048,6 +1054,7 @@ class NotificationService {
 - [x] Optimistic updates
 
 ### **✅ Professional UI/UX**
+
 - [x] Smooth animations
 - [x] Loading states
 - [x] Error handling
@@ -1056,6 +1063,7 @@ class NotificationService {
 - [x] Dark mode support
 
 ### **✅ Social Features**
+
 - [x] User profiles
 - [x] Follow/unfollow
 - [x] Private messaging
@@ -1064,6 +1072,7 @@ class NotificationService {
 - [x] Content reporting
 
 ### **✅ Live Features**
+
 - [x] Live streaming
 - [x] Live chat
 - [x] Viewer count

@@ -7,16 +7,19 @@ The backend is now fully fixed and ready for your Instagram-style content cards 
 ## 📡 **API Endpoint**
 
 ### **Default Content Endpoint**
+
 ```
 GET /api/media/default
 ```
 
 ### **Query Parameters**
+
 - `page` (optional) - Page number for pagination (default: 1)
 - `limit` (optional) - Number of items per page (default: 10)
 - `contentType` (optional) - Filter by content type (default: all)
 
 ### **Example Requests**
+
 ```bash
 # Basic request
 GET /api/media/default
@@ -78,25 +81,28 @@ Add this method to your existing `allMediaAPI.ts`:
 
 ```typescript
 // Add this method to allMediaAPI.ts
-export const getDefaultContent = async (params: {
-  page?: number;
-  limit?: number;
-  contentType?: string;
-} = {}) => {
+export const getDefaultContent = async (
+  params: {
+    page?: number;
+    limit?: number;
+    contentType?: string;
+  } = {}
+) => {
   try {
     const queryParams = new URLSearchParams();
-    
-    if (params.page) queryParams.append('page', params.page.toString());
-    if (params.limit) queryParams.append('limit', params.limit.toString());
-    if (params.contentType) queryParams.append('contentType', params.contentType);
+
+    if (params.page) queryParams.append("page", params.page.toString());
+    if (params.limit) queryParams.append("limit", params.limit.toString());
+    if (params.contentType)
+      queryParams.append("contentType", params.contentType);
 
     const queryString = queryParams.toString();
-    const endpoint = `/media/default${queryString ? `?${queryString}` : ''}`;
-    
+    const endpoint = `/media/default${queryString ? `?${queryString}` : ""}`;
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         // Add auth token if needed
         ...(await getAuthHeaders()),
       },
@@ -107,23 +113,26 @@ export const getDefaultContent = async (params: {
     }
 
     const data = await response.json();
-    
+
     if (!data.success) {
-      throw new Error(data.message || 'Failed to fetch default content');
+      throw new Error(data.message || "Failed to fetch default content");
     }
 
     return {
       success: true,
       data: data.data,
       content: data.data.content, // Array of content items
-      pagination: data.data.pagination
+      pagination: data.data.pagination,
     };
   } catch (error) {
-    console.error('Error fetching default content:', error);
+    console.error("Error fetching default content:", error);
     return {
       success: false,
       error: error.message,
-      data: { content: [], pagination: { page: 1, limit: 10, total: 0, pages: 0 } }
+      data: {
+        content: [],
+        pagination: { page: 1, limit: 10, total: 0, pages: 0 },
+      },
     };
   }
 };
@@ -131,7 +140,7 @@ export const getDefaultContent = async (params: {
 // Helper function to get auth headers
 const getAuthHeaders = async () => {
   // Get token from your auth store or AsyncStorage
-  const token = await AsyncStorage.getItem('auth_token');
+  const token = await AsyncStorage.getItem("auth_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 ```
@@ -153,9 +162,13 @@ interface MediaStore {
     total: number;
     pages: number;
   };
-  
+
   // ... existing methods
-  fetchDefaultContent: (params?: { page?: number; limit?: number; contentType?: string }) => Promise<void>;
+  fetchDefaultContent: (params?: {
+    page?: number;
+    limit?: number;
+    contentType?: string;
+  }) => Promise<void>;
   loadMoreDefaultContent: () => Promise<void>;
   refreshDefaultContent: () => Promise<void>;
 }
@@ -177,10 +190,10 @@ export const useMediaStore = create<MediaStore>((set, get) => ({
 
   fetchDefaultContent: async (params = {}) => {
     set({ defaultContentLoading: true, defaultContentError: null });
-    
+
     try {
       const response = await getDefaultContent(params);
-      
+
       if (response.success) {
         set({
           defaultContent: response.content,
@@ -203,19 +216,22 @@ export const useMediaStore = create<MediaStore>((set, get) => ({
 
   loadMoreDefaultContent: async () => {
     const { defaultContentPagination, defaultContentLoading } = get();
-    
-    if (defaultContentLoading || defaultContentPagination.page >= defaultContentPagination.pages) {
+
+    if (
+      defaultContentLoading ||
+      defaultContentPagination.page >= defaultContentPagination.pages
+    ) {
       return;
     }
 
     set({ defaultContentLoading: true });
-    
+
     try {
       const response = await getDefaultContent({
         page: defaultContentPagination.page + 1,
         limit: defaultContentPagination.limit,
       });
-      
+
       if (response.success) {
         set(state => ({
           defaultContent: [...state.defaultContent, ...response.content],
@@ -323,7 +339,7 @@ const AllContent = () => {
   // Render loading indicator
   const renderFooter = useCallback(() => {
     if (!defaultContentLoading) return null;
-    
+
     return (
       <View style={{ padding: 20, alignItems: 'center' }}>
         <ActivityIndicator size="small" color="#666" />
@@ -451,7 +467,7 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`;
@@ -462,8 +478,8 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
     <View style={styles.container}>
       {/* Header with Author Info */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.authorInfo} 
+        <TouchableOpacity
+          style={styles.authorInfo}
           onPress={handleAuthorPress}
           activeOpacity={0.7}
         >
@@ -481,7 +497,7 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
             <Text style={styles.timestamp}>{formatDate(content.createdAt)}</Text>
           </View>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.moreButton}>
           <Icon name="more-vert" size={24} color="#666" />
         </TouchableOpacity>
@@ -502,7 +518,7 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
                 setIsVideoLoading(false);
               }}
             />
-            
+
             <TouchableOpacity
               style={styles.videoOverlay}
               onPress={() => setIsPlaying(!isPlaying)}
@@ -538,8 +554,8 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
       {/* Action Buttons */}
       <View style={styles.actions}>
         <View style={styles.leftActions}>
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleLike}
           >
             <Icon
@@ -552,16 +568,16 @@ const ContentCard = ({ content, onLike, onComment, onShare, onAuthorPress }) => 
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleComment}
           >
             <Icon name="chat-bubble-outline" size={24} color="#666" />
             <Text style={styles.actionText}>{content.commentCount}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleShare}
           >
             <Icon name="share" size={24} color="#666" />
@@ -716,6 +732,7 @@ export default ContentCard;
 ## 🚀 **Expected Result**
 
 After implementation, your ALL tab will display:
+
 - ✅ Instagram-style content cards
 - ✅ Author information with avatars
 - ✅ Like, comment, share buttons
@@ -736,6 +753,7 @@ After implementation, your ALL tab will display:
 ## 🆘 **Support**
 
 If you encounter any issues:
+
 1. Check the console for error messages
 2. Verify the API endpoint is returning data
 3. Check your network requests in React Native debugger

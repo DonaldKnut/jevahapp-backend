@@ -644,6 +644,7 @@ export default CommentsScreen;
 ### **1. Like/Unlike Response**
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -658,6 +659,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -669,6 +671,7 @@ export default CommentsScreen;
 ### **2. Add Comment Response**
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -698,6 +701,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -709,6 +713,7 @@ export default CommentsScreen;
 ### **3. Get Comments Response**
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -762,6 +767,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -773,6 +779,7 @@ export default CommentsScreen;
 ### **4. Delete Comment Response**
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -785,6 +792,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -796,6 +804,7 @@ export default CommentsScreen;
 ### **5. Share Content Response**
 
 **Success Response:**
+
 ```json
 {
   "success": true,
@@ -812,6 +821,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -823,6 +833,7 @@ export default CommentsScreen;
 ### **6. Bookmark/Save to Library Response**
 
 **Success Response (Add Bookmark):**
+
 ```json
 {
   "success": true,
@@ -846,6 +857,7 @@ export default CommentsScreen;
 ```
 
 **Success Response (Remove Bookmark):**
+
 ```json
 {
   "success": true,
@@ -858,6 +870,7 @@ export default CommentsScreen;
 ```
 
 **Error Response:**
+
 ```json
 {
   "success": false,
@@ -869,6 +882,7 @@ export default CommentsScreen;
 ### **7. Authentication Error Response**
 
 **Unauthorized Response:**
+
 ```json
 {
   "success": false,
@@ -878,6 +892,7 @@ export default CommentsScreen;
 ```
 
 **Invalid Token Response:**
+
 ```json
 {
   "success": false,
@@ -889,6 +904,7 @@ export default CommentsScreen;
 ### **8. Rate Limiting Error Response**
 
 **Too Many Requests Response:**
+
 ```json
 {
   "success": false,
@@ -901,6 +917,7 @@ export default CommentsScreen;
 ### **9. Validation Error Response**
 
 **Validation Error Response:**
+
 ```json
 {
   "success": false,
@@ -922,6 +939,7 @@ export default CommentsScreen;
 ### **10. Server Error Response**
 
 **Internal Server Error Response:**
+
 ```json
 {
   "success": false,

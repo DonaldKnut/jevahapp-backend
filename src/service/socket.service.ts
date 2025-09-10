@@ -281,6 +281,25 @@ class SocketService {
   }
 
   /**
+   * Helper method to get content by ID and type
+   */
+  private async getContentById(contentId: string, contentType: string): Promise<any> {
+    try {
+      // For now, only handle media content type
+      // Other content types can be added as needed
+      if (contentType === 'media') {
+        return await Media.findById(contentId).lean();
+      }
+      
+      // Default to media for other content types
+      return await Media.findById(contentId).lean();
+    } catch (error) {
+      logger.error('Error getting content by ID', { contentId, contentType, error });
+      return null;
+    }
+  }
+
+  /**
    * Handle user disconnection
    */
   private handleDisconnect(socket: any, user: AuthenticatedUser): void {
@@ -343,11 +362,20 @@ class SocketService {
 
     socket.join(roomId);
 
+    // Broadcast viewer count update
+    const viewerCount = this.io.sockets.adapter.rooms.get(roomId)?.size || 0;
+    this.io.to(roomId).emit("viewer-count-update", {
+      contentId,
+      contentType,
+      viewerCount,
+    });
+
     logger.debug("User joined content room", {
       userId: user.userId,
       contentId,
       contentType,
       roomId,
+      viewerCount,
     });
   }
 
@@ -363,11 +391,20 @@ class SocketService {
 
     socket.leave(roomId);
 
+    // Broadcast viewer count update
+    const viewerCount = this.io.sockets.adapter.rooms.get(roomId)?.size || 0;
+    this.io.to(roomId).emit("viewer-count-update", {
+      contentId,
+      contentType,
+      viewerCount,
+    });
+
     logger.debug("User left content room", {
       userId: socket.data.user.userId,
       contentId,
       contentType,
       roomId,
+      viewerCount,
     });
   }
 
@@ -881,6 +918,9 @@ class SocketService {
           contentType
         );
 
+        // Get updated counts
+        const content = await this.getContentById(contentId, contentType);
+        
         // Broadcast to all users viewing this content
         this.io
           .to(`content:${contentType}:${contentId}`)
@@ -896,6 +936,35 @@ class SocketService {
               lastName: user.lastName,
             },
           });
+
+        // Broadcast real-time count updates
+        this.io
+          .to(`content:${contentType}:${contentId}`)
+          .emit("count-update", {
+            contentId,
+            contentType,
+            likeCount: content.likeCount || 0,
+            commentCount: content.commentCount || 0,
+            shareCount: content.shareCount || 0,
+            viewCount: content.viewCount || 0,
+          });
+
+        // Send notification to content owner if different from user
+        if (content.uploadedBy && content.uploadedBy.toString() !== user.userId) {
+          this.io
+            .to(`user:${content.uploadedBy}`)
+            .emit("new-like-notification", {
+              contentId,
+              contentType,
+              contentTitle: content.title,
+              liker: {
+                id: user.userId,
+                firstName: user.firstName,
+                lastName: user.lastName,
+              },
+              likeCount: result.likeCount,
+            });
+        }
       }
 
       logger.info("Content reaction added", {
@@ -926,7 +995,7 @@ class SocketService {
     }
   ): Promise<void> {
     try {
-      const { contentId, contentType, content, parentCommentId } = data;
+      const { contentId, contentType, content: commentContent, parentCommentId } = data;
 
       // Use content interaction service
       const contentInteractionService = await import(
@@ -937,7 +1006,7 @@ class SocketService {
         user.userId,
         contentId,
         contentType,
-        content,
+        commentContent,
         parentCommentId
       );
 
@@ -954,10 +1023,43 @@ class SocketService {
         contentType,
       };
 
+      // Get updated content counts
+      const content = await this.getContentById(contentId, contentType);
+
       // Broadcast to all users viewing this content
       this.io
         .to(`content:${contentType}:${contentId}`)
         .emit("content-comment", commentData);
+
+      // Broadcast real-time count updates
+      this.io
+        .to(`content:${contentType}:${contentId}`)
+        .emit("count-update", {
+          contentId,
+          contentType,
+          likeCount: content.likeCount || 0,
+          commentCount: content.commentCount || 0,
+          shareCount: content.shareCount || 0,
+          viewCount: content.viewCount || 0,
+        });
+
+      // Send notification to content owner if different from user
+      if (content.uploadedBy && content.uploadedBy.toString() !== user.userId) {
+        this.io
+          .to(`user:${content.uploadedBy}`)
+          .emit("new-comment-notification", {
+            contentId,
+            contentType,
+            contentTitle: content.title,
+            comment: commentData,
+            commenter: {
+              id: user.userId,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            },
+            commentCount: content.commentCount || 0,
+          });
+      }
 
       logger.info("Content comment created", {
         userId: user.userId,
