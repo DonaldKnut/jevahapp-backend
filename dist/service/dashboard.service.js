@@ -157,9 +157,9 @@ class DashboardService {
                 offlineDownloads: {
                     total: offlineDownloads.length,
                     byContentType: {
-                        videos: offlineDownloads.filter((download) => download.mediaType === "videos").length,
-                        music: offlineDownloads.filter((download) => download.mediaType === "audio").length,
-                        ebook: offlineDownloads.filter((download) => download.mediaType === "ebooks").length,
+                        videos: offlineDownloads.filter((download) => download.contentType === "video").length,
+                        music: offlineDownloads.filter((download) => download.contentType === "audio").length,
+                        ebook: offlineDownloads.filter((download) => download.contentType === "ebook").length,
                     },
                     totalSize: offlineDownloads.reduce((sum, download) => sum + (download.fileSize || 0), 0),
                     recent: offlineDownloads.filter((download) => new Date(download.downloadDate) >= thirtyDaysAgo).length,

@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -890,6 +923,10 @@ class MediaService {
                 if (!media) {
                     throw new Error("Media not found");
                 }
+                // Check if media is available for download
+                if (!media.fileUrl) {
+                    throw new Error("Media file not available for download");
+                }
                 // Record download interaction
                 yield this.recordInteraction({
                     userIdentifier: userId,
@@ -897,15 +934,134 @@ class MediaService {
                     interactionType: "download",
                     duration: 0,
                 });
-                // Generate download URL (this would typically be a signed URL from your storage service)
-                const downloadUrl = `${process.env.API_BASE_URL}/api/media/${mediaId}/download`;
+                // Generate signed download URL from Cloudflare R2
+                const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require("./fileUpload.service")));
+                // Extract object key from fileUrl
+                const objectKey = this.extractObjectKeyFromUrl(media.fileUrl);
+                if (!objectKey) {
+                    throw new Error("Invalid media file URL");
+                }
+                // Generate signed URL valid for 24 hours
+                const downloadUrl = yield fileUploadService.getPresignedGetUrl(objectKey, 86400);
+                // Add to user's offline downloads
+                yield this.addToOfflineDownloads(userId, mediaId, {
+                    fileName: media.title || "Untitled",
+                    fileSize: media.fileSize || fileSize,
+                    contentType: media.contentType,
+                    downloadUrl,
+                });
                 return {
                     success: true,
                     downloadUrl,
+                    fileName: media.title || "Untitled",
+                    fileSize: media.fileSize || fileSize,
+                    contentType: media.contentType,
                     message: "Download initiated successfully",
                 };
             }
             catch (error) {
+                throw error;
+            }
+        });
+    }
+    /**
+     * Extract object key from Cloudflare R2 URL
+     */
+    extractObjectKeyFromUrl(url) {
+        try {
+            // Handle different URL formats
+            if (url.includes("/")) {
+                const parts = url.split("/");
+                return parts[parts.length - 1];
+            }
+            return url;
+        }
+        catch (error) {
+            console.error("Error extracting object key from URL:", error);
+            return null;
+        }
+    }
+    /**
+     * Add media to user's offline downloads
+     */
+    addToOfflineDownloads(userId, mediaId, downloadInfo) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { User } = yield Promise.resolve().then(() => __importStar(require("../models/user.model")));
+                const offlineDownload = {
+                    mediaId: new mongoose_1.Types.ObjectId(mediaId),
+                    downloadDate: new Date(),
+                    fileName: downloadInfo.fileName,
+                    fileSize: downloadInfo.fileSize,
+                    contentType: downloadInfo.contentType,
+                    downloadUrl: downloadInfo.downloadUrl,
+                    isDownloaded: false, // Will be updated by frontend
+                };
+                yield User.findByIdAndUpdate(userId, {
+                    $push: { offlineDownloads: offlineDownload },
+                    $inc: { totalDownloads: 1 },
+                }, { upsert: true });
+                console.log("Added to offline downloads:", {
+                    userId,
+                    mediaId,
+                    fileName: downloadInfo.fileName,
+                });
+            }
+            catch (error) {
+                console.error("Error adding to offline downloads:", error);
+                // Don't throw error as this is not critical
+            }
+        });
+    }
+    /**
+     * Get user's offline downloads
+     */
+    getUserOfflineDownloads(userId_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, page = 1, limit = 20) {
+            try {
+                const { User } = yield Promise.resolve().then(() => __importStar(require("../models/user.model")));
+                const user = yield User.findById(userId)
+                    .populate("offlineDownloads.mediaId", "title description thumbnailUrl contentType duration")
+                    .lean();
+                if (!user) {
+                    throw new Error("User not found");
+                }
+                const downloads = user.offlineDownloads || [];
+                const skip = (page - 1) * limit;
+                const paginatedDownloads = downloads
+                    .sort((a, b) => new Date(b.downloadDate).getTime() -
+                    new Date(a.downloadDate).getTime())
+                    .slice(skip, skip + limit);
+                return {
+                    downloads: paginatedDownloads,
+                    pagination: {
+                        page,
+                        limit,
+                        total: downloads.length,
+                        pages: Math.ceil(downloads.length / limit),
+                    },
+                };
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
+    /**
+     * Remove media from user's offline downloads
+     */
+    removeFromOfflineDownloads(userId, mediaId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { User } = yield Promise.resolve().then(() => __importStar(require("../models/user.model")));
+                yield User.findByIdAndUpdate(userId, {
+                    $pull: { offlineDownloads: { mediaId: new mongoose_1.Types.ObjectId(mediaId) } },
+                    $inc: { totalDownloads: -1 },
+                });
+                console.log("Removed from offline downloads:", { userId, mediaId });
+            }
+            catch (error) {
+                console.error("Error removing from offline downloads:", error);
                 throw error;
             }
         });

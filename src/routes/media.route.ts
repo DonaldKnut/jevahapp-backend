@@ -22,6 +22,8 @@ import {
   trackViewWithDuration,
   downloadMedia,
   shareMedia,
+  getOfflineDownloads,
+  removeFromOfflineDownloads,
   // New Contabo streaming methods
   getStreamStatus,
   scheduleLiveStream,
@@ -246,6 +248,49 @@ router.post(
   verifyToken,
   mediaInteractionRateLimiter,
   trackViewWithDuration
+);
+
+/**
+ * @route   POST /api/media/:id/download
+ * @desc    Initiate download for offline use
+ * @access  Protected (Authenticated users only)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @body    { fileSize: number }
+ * @returns { success: boolean, message: string, data: { downloadUrl: string, fileName: string, fileSize: number, contentType: string } }
+ */
+router.post(
+  "/:id/download",
+  verifyToken,
+  mediaInteractionRateLimiter,
+  downloadMedia
+);
+
+/**
+ * @route   GET /api/media/offline-downloads
+ * @desc    Get user's offline downloads
+ * @access  Protected (Authenticated users only)
+ * @query   { page?: number, limit?: number }
+ * @returns { success: boolean, data: { downloads: array, pagination: object } }
+ */
+router.get(
+  "/offline-downloads",
+  verifyToken,
+  apiRateLimiter,
+  getOfflineDownloads
+);
+
+/**
+ * @route   DELETE /api/media/offline-downloads/:mediaId
+ * @desc    Remove media from offline downloads
+ * @access  Protected (Authenticated users only)
+ * @param   { mediaId: string } - MongoDB ObjectId of the media item
+ * @returns { success: boolean, message: string }
+ */
+router.delete(
+  "/offline-downloads/:mediaId",
+  verifyToken,
+  mediaInteractionRateLimiter,
+  removeFromOfflineDownloads
 );
 
 /**

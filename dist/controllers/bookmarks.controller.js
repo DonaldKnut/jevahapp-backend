@@ -11,17 +11,40 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.removeBookmark = exports.addBookmark = exports.getBookmarkedMedia = void 0;
 const bookmark_model_1 = require("../models/bookmark.model");
+const mongoose_1 = require("mongoose");
 /**
  * Get all bookmarked media for the current user
  */
 const getBookmarkedMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = request.userId;
-        const bookmarks = yield bookmark_model_1.Bookmark.find({ user: userId }).populate("media");
-        const bookmarkedMedia = bookmarks.map((bookmark) => bookmark.media);
+        if (!userId) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        const { page = 1, limit = 20 } = request.query;
+        const skip = (Number(page) - 1) * Number(limit);
+        const bookmarks = yield bookmark_model_1.Bookmark.find({ user: userId })
+            .populate("media")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit));
+        const bookmarkedMedia = bookmarks.map(bookmark => (Object.assign(Object.assign({}, bookmark.media.toObject()), { isInLibrary: true, bookmarkedBy: userId, bookmarkedAt: bookmark.createdAt, isDefaultContent: false, isOnboardingContent: false })));
+        const total = yield bookmark_model_1.Bookmark.countDocuments({ user: userId });
         response.status(200).json({
             success: true,
-            media: bookmarkedMedia,
+            data: {
+                media: bookmarkedMedia,
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    total,
+                    pages: Math.ceil(total / Number(limit)),
+                },
+            },
         });
     }
     catch (error) {
@@ -39,27 +62,55 @@ exports.getBookmarkedMedia = getBookmarkedMedia;
 const addBookmark = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = request.userId;
-        const mediaId = request.params.id;
-        const existing = yield bookmark_model_1.Bookmark.findOne({ user: userId, media: mediaId });
-        if (existing) {
-            response.status(400).json({
+        const mediaId = request.params.mediaId; // Fixed: route uses :mediaId
+        if (!userId) {
+            response.status(401).json({
                 success: false,
-                message: "Media already bookmarked",
+                message: "Unauthorized: User not authenticated",
             });
             return;
         }
-        const bookmark = new bookmark_model_1.Bookmark({ user: userId, media: mediaId });
+        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media ID",
+            });
+            return;
+        }
+        const existing = yield bookmark_model_1.Bookmark.findOne({
+            user: new mongoose_1.Types.ObjectId(userId),
+            media: new mongoose_1.Types.ObjectId(mediaId),
+        });
+        if (existing) {
+            response.status(400).json({
+                success: false,
+                message: "Media already saved",
+            });
+            return;
+        }
+        const bookmark = new bookmark_model_1.Bookmark({
+            user: new mongoose_1.Types.ObjectId(userId),
+            media: new mongoose_1.Types.ObjectId(mediaId),
+        });
         yield bookmark.save();
         response.status(201).json({
             success: true,
-            message: "Media bookmarked successfully",
+            message: "Media saved to library",
+            data: bookmark,
         });
     }
     catch (error) {
         console.error("Add bookmark error:", error);
+        if (error.code === 11000) {
+            response.status(400).json({
+                success: false,
+                message: "Media already saved",
+            });
+            return;
+        }
         response.status(500).json({
             success: false,
-            message: "Failed to bookmark media",
+            message: "Failed to save media",
         });
     }
 });
@@ -70,10 +121,24 @@ exports.addBookmark = addBookmark;
 const removeBookmark = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = request.userId;
-        const mediaId = request.params.id;
+        const mediaId = request.params.mediaId; // Fixed: route uses :mediaId
+        if (!userId) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media ID",
+            });
+            return;
+        }
         const result = yield bookmark_model_1.Bookmark.findOneAndDelete({
-            user: userId,
-            media: mediaId,
+            user: new mongoose_1.Types.ObjectId(userId),
+            media: new mongoose_1.Types.ObjectId(mediaId),
         });
         if (!result) {
             response.status(404).json({
@@ -84,7 +149,7 @@ const removeBookmark = (request, response) => __awaiter(void 0, void 0, void 0, 
         }
         response.status(200).json({
             success: true,
-            message: "Bookmark removed successfully",
+            message: "Media removed from library",
         });
     }
     catch (error) {

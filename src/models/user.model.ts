@@ -60,11 +60,15 @@ export interface IMerchItem {
 // Offline download interface
 export interface IOfflineDownload {
   mediaId: mongoose.Types.ObjectId;
-  mediaTitle: string;
-  mediaType: string;
   downloadDate: Date;
+  fileName: string;
   fileSize: number;
-  localPath?: string;
+  contentType: string;
+  downloadUrl: string;
+  localPath?: string; // Frontend will manage this
+  isDownloaded: boolean; // Whether file is actually downloaded locally
+  downloadProgress?: number; // Download progress percentage
+  downloadStatus?: "pending" | "downloading" | "completed" | "failed";
 }
 
 // Library item interface for saved content
@@ -275,11 +279,19 @@ const userSchema = new Schema<IUserDocument>(
           ref: "Media",
           required: true,
         },
-        mediaTitle: { type: String, required: true },
-        mediaType: { type: String, required: true },
         downloadDate: { type: Date, default: Date.now },
+        fileName: { type: String, required: true },
         fileSize: { type: Number, required: true },
+        contentType: { type: String, required: true },
+        downloadUrl: { type: String, required: true },
         localPath: { type: String },
+        isDownloaded: { type: Boolean, default: false },
+        downloadProgress: { type: Number, default: 0 },
+        downloadStatus: {
+          type: String,
+          enum: ["pending", "downloading", "completed", "failed"],
+          default: "pending",
+        },
       },
     ],
     merchItems: [

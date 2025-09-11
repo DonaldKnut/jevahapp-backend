@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Bookmark } from "../models/bookmark.model";
+import { Types } from "mongoose";
 
 /**
  * Get all bookmarked media for the current user
@@ -11,13 +12,45 @@ export const getBookmarkedMedia = async (
   try {
     const userId = request.userId;
 
-    const bookmarks = await Bookmark.find({ user: userId }).populate("media");
+    if (!userId) {
+      response.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
 
-    const bookmarkedMedia = bookmarks.map((bookmark) => bookmark.media);
+    const { page = 1, limit = 20 } = request.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const bookmarks = await Bookmark.find({ user: userId })
+      .populate("media")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const bookmarkedMedia = bookmarks.map(bookmark => ({
+      ...bookmark.media.toObject(),
+      isInLibrary: true,
+      bookmarkedBy: userId,
+      bookmarkedAt: bookmark.createdAt,
+      isDefaultContent: false,
+      isOnboardingContent: false,
+    }));
+
+    const total = await Bookmark.countDocuments({ user: userId });
 
     response.status(200).json({
       success: true,
-      media: bookmarkedMedia,
+      data: {
+        media: bookmarkedMedia,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      },
     });
   } catch (error) {
     console.error("Fetch bookmarks error:", error);
@@ -37,30 +70,62 @@ export const addBookmark = async (
 ): Promise<void> => {
   try {
     const userId = request.userId;
-    const mediaId = request.params.id;
+    const mediaId = request.params.mediaId; // Fixed: route uses :mediaId
 
-    const existing = await Bookmark.findOne({ user: userId, media: mediaId });
-
-    if (existing) {
-      response.status(400).json({
+    if (!userId) {
+      response.status(401).json({
         success: false,
-        message: "Media already bookmarked",
+        message: "Unauthorized: User not authenticated",
       });
       return;
     }
 
-    const bookmark = new Bookmark({ user: userId, media: mediaId });
+    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media ID",
+      });
+      return;
+    }
+
+    const existing = await Bookmark.findOne({
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(mediaId),
+    });
+
+    if (existing) {
+      response.status(400).json({
+        success: false,
+        message: "Media already saved",
+      });
+      return;
+    }
+
+    const bookmark = new Bookmark({
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(mediaId),
+    });
     await bookmark.save();
 
     response.status(201).json({
       success: true,
-      message: "Media bookmarked successfully",
+      message: "Media saved to library",
+      data: bookmark,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Add bookmark error:", error);
+
+    if (error.code === 11000) {
+      response.status(400).json({
+        success: false,
+        message: "Media already saved",
+      });
+      return;
+    }
+
     response.status(500).json({
       success: false,
-      message: "Failed to bookmark media",
+      message: "Failed to save media",
     });
   }
 };
@@ -74,11 +139,27 @@ export const removeBookmark = async (
 ): Promise<void> => {
   try {
     const userId = request.userId;
-    const mediaId = request.params.id;
+    const mediaId = request.params.mediaId; // Fixed: route uses :mediaId
+
+    if (!userId) {
+      response.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+
+    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media ID",
+      });
+      return;
+    }
 
     const result = await Bookmark.findOneAndDelete({
-      user: userId,
-      media: mediaId,
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(mediaId),
     });
 
     if (!result) {
@@ -91,7 +172,7 @@ export const removeBookmark = async (
 
     response.status(200).json({
       success: true,
-      message: "Bookmark removed successfully",
+      message: "Media removed from library",
     });
   } catch (error) {
     console.error("Remove bookmark error:", error);

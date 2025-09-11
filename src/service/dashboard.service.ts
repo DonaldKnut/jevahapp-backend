@@ -250,13 +250,13 @@ export class DashboardService {
         total: offlineDownloads.length,
         byContentType: {
           videos: offlineDownloads.filter(
-            (download: IOfflineDownload) => download.mediaType === "videos"
+            (download: IOfflineDownload) => download.contentType === "video"
           ).length,
           music: offlineDownloads.filter(
-            (download: IOfflineDownload) => download.mediaType === "audio"
+            (download: IOfflineDownload) => download.contentType === "audio"
           ).length,
           ebook: offlineDownloads.filter(
-            (download: IOfflineDownload) => download.mediaType === "ebooks"
+            (download: IOfflineDownload) => download.contentType === "ebook"
           ).length,
         },
         totalSize: offlineDownloads.reduce(

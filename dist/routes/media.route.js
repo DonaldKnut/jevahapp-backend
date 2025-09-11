@@ -197,6 +197,31 @@ router.post("/:id/interact", auth_middleware_1.verifyToken, rateLimiter_1.mediaI
  */
 router.post("/track-view", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.trackViewWithDuration);
 /**
+ * @route   POST /api/media/:id/download
+ * @desc    Initiate download for offline use
+ * @access  Protected (Authenticated users only)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @body    { fileSize: number }
+ * @returns { success: boolean, message: string, data: { downloadUrl: string, fileName: string, fileSize: number, contentType: string } }
+ */
+router.post("/:id/download", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.downloadMedia);
+/**
+ * @route   GET /api/media/offline-downloads
+ * @desc    Get user's offline downloads
+ * @access  Protected (Authenticated users only)
+ * @query   { page?: number, limit?: number }
+ * @returns { success: boolean, data: { downloads: array, pagination: object } }
+ */
+router.get("/offline-downloads", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getOfflineDownloads);
+/**
+ * @route   DELETE /api/media/offline-downloads/:mediaId
+ * @desc    Remove media from offline downloads
+ * @access  Protected (Authenticated users only)
+ * @param   { mediaId: string } - MongoDB ObjectId of the media item
+ * @returns { success: boolean, message: string }
+ */
+router.delete("/offline-downloads/:mediaId", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.removeFromOfflineDownloads);
+/**
  * @route   GET /api/media/:mediaId/engagement
  * @desc    Get media with engagement metrics and user-specific data
  * @access  Public (Optional authentication for user-specific data)

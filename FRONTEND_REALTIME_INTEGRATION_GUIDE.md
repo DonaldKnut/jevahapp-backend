@@ -17,8 +17,8 @@ npm install socket.io-client
 Create `app/services/SocketManager.ts`:
 
 ```typescript
-import io, { Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import io, { Socket } from "socket.io-client";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AuthenticatedUser {
   userId: string;
@@ -50,14 +50,14 @@ class SocketManager {
         auth: {
           token: this.authToken,
         },
-        transports: ['websocket', 'polling'],
+        transports: ["websocket", "polling"],
         timeout: 20000,
       });
 
       this.setupEventHandlers();
-      console.log('✅ Connected to real-time server');
+      console.log("✅ Connected to real-time server");
     } catch (error) {
-      console.error('❌ Failed to connect to real-time server:', error);
+      console.error("❌ Failed to connect to real-time server:", error);
       throw error;
     }
   }
@@ -66,56 +66,56 @@ class SocketManager {
     if (!this.socket) return;
 
     // Connection events
-    this.socket.on('connect', () => {
-      console.log('✅ Socket connected');
+    this.socket.on("connect", () => {
+      console.log("✅ Socket connected");
       this.reconnectAttempts = 0;
     });
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('❌ Socket disconnected:', reason);
+    this.socket.on("disconnect", reason => {
+      console.log("❌ Socket disconnected:", reason);
       this.handleReconnect();
     });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
+    this.socket.on("connect_error", error => {
+      console.error("❌ Socket connection error:", error);
       this.handleReconnect();
     });
 
     // Real-time content events
-    this.socket.on('content-reaction', (data) => {
-      console.log('Real-time like received:', data);
+    this.socket.on("content-reaction", data => {
+      console.log("Real-time like received:", data);
       this.handleContentReaction(data);
     });
 
-    this.socket.on('content-comment', (data) => {
-      console.log('Real-time comment received:', data);
+    this.socket.on("content-comment", data => {
+      console.log("Real-time comment received:", data);
       this.handleContentComment(data);
     });
 
-    this.socket.on('count-update', (data) => {
-      console.log('Real-time count update:', data);
+    this.socket.on("count-update", data => {
+      console.log("Real-time count update:", data);
       this.handleCountUpdate(data);
     });
 
-    this.socket.on('viewer-count-update', (data) => {
-      console.log('Real-time viewer count:', data);
+    this.socket.on("viewer-count-update", data => {
+      console.log("Real-time viewer count:", data);
       this.handleViewerCountUpdate(data);
     });
 
     // Notifications
-    this.socket.on('new-like-notification', (data) => {
-      console.log('New like notification:', data);
+    this.socket.on("new-like-notification", data => {
+      console.log("New like notification:", data);
       this.handleLikeNotification(data);
     });
 
-    this.socket.on('new-comment-notification', (data) => {
-      console.log('New comment notification:', data);
+    this.socket.on("new-comment-notification", data => {
+      console.log("New comment notification:", data);
       this.handleCommentNotification(data);
     });
 
     // Error handling
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
+    this.socket.on("error", error => {
+      console.error("Socket error:", error);
     });
   }
 
@@ -123,9 +123,11 @@ class SocketManager {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-      
+
       setTimeout(() => {
-        console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        console.log(
+          `🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        );
         this.connect();
       }, delay);
     }
@@ -134,14 +136,14 @@ class SocketManager {
   // Content room management
   joinContentRoom(contentId: string, contentType: string): void {
     if (this.socket) {
-      this.socket.emit('join-content', { contentId, contentType });
+      this.socket.emit("join-content", { contentId, contentType });
       console.log(`📺 Joined content room: ${contentType}:${contentId}`);
     }
   }
 
   leaveContentRoom(contentId: string, contentType: string): void {
     if (this.socket) {
-      this.socket.emit('leave-content', { contentId, contentType });
+      this.socket.emit("leave-content", { contentId, contentType });
       console.log(`📺 Left content room: ${contentType}:${contentId}`);
     }
   }
@@ -149,18 +151,23 @@ class SocketManager {
   // Real-time interactions
   sendLike(contentId: string, contentType: string): void {
     if (this.socket) {
-      this.socket.emit('content-reaction', {
+      this.socket.emit("content-reaction", {
         contentId,
         contentType,
-        actionType: 'like',
+        actionType: "like",
       });
       console.log(`❤️ Sent like: ${contentType}:${contentId}`);
     }
   }
 
-  sendComment(contentId: string, contentType: string, comment: string, parentCommentId?: string): void {
+  sendComment(
+    contentId: string,
+    contentType: string,
+    comment: string,
+    parentCommentId?: string
+  ): void {
     if (this.socket) {
-      this.socket.emit('content-comment', {
+      this.socket.emit("content-comment", {
         contentId,
         contentType,
         content: comment,
@@ -228,7 +235,7 @@ class SocketManager {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
-      console.log('🔌 Disconnected from real-time server');
+      console.log("🔌 Disconnected from real-time server");
     }
   }
 
@@ -619,7 +626,7 @@ const AllContent = () => {
   return (
     <>
       {renderConnectionStatus()}
-      
+
       <FlatList
         data={defaultContent}
         renderItem={renderContentItem}
@@ -730,7 +737,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
   useEffect(() => {
     if (socketManager) {
       socketManager.joinContentRoom(content._id, 'media');
-      
+
       // Set up real-time event handlers for this specific content
       const originalHandlers = {
         onContentReaction: socketManager.handleContentReaction,
@@ -808,7 +815,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
       // Optimistic update
       const newLikedState = !isLiked;
       const newLikeCount = newLikedState ? likeCount + 1 : likeCount - 1;
-      
+
       setIsLiked(newLikedState);
       setLikeCount(newLikeCount);
       animateLike();
@@ -856,7 +863,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Just now';
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInHours < 168) return `${Math.floor(diffInHours / 24)}d ago`;
@@ -867,8 +874,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
     <View style={styles.container}>
       {/* Header with Author Info */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.authorInfo} 
+        <TouchableOpacity
+          style={styles.authorInfo}
           onPress={handleAuthorPress}
           activeOpacity={0.7}
         >
@@ -885,7 +892,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
             <Text style={styles.timestamp}>{formatDate(content.createdAt)}</Text>
           </View>
         </TouchableOpacity>
-        
+
         <View style={styles.headerRight}>
           {viewerCount > 0 && (
             <View style={styles.viewerCount}>
@@ -914,7 +921,7 @@ const ContentCard: React.FC<ContentCardProps> = ({
                 setIsVideoLoading(false);
               }}
             />
-            
+
             <TouchableOpacity
               style={styles.videoOverlay}
               onPress={() => setIsPlaying(!isPlaying)}
@@ -970,8 +977,8 @@ const ContentCard: React.FC<ContentCardProps> = ({
       <View style={styles.actions}>
         <View style={styles.leftActions}>
           <Animated.View style={{ transform: [{ scale: likeAnimation }] }}>
-            <TouchableOpacity 
-              style={styles.actionButton} 
+            <TouchableOpacity
+              style={styles.actionButton}
               onPress={handleLike}
             >
               <Icon
@@ -985,16 +992,16 @@ const ContentCard: React.FC<ContentCardProps> = ({
             </TouchableOpacity>
           </Animated.View>
 
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleComment}
           >
             <Icon name="chat-bubble-outline" size={24} color="#666" />
             <Text style={styles.actionText}>{commentCount}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.actionButton} 
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={handleShare}
           >
             <Icon name="share" size={24} color="#666" />
@@ -1002,14 +1009,14 @@ const ContentCard: React.FC<ContentCardProps> = ({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.bookmarkButton}
           onPress={handleSaveToLibrary}
         >
-          <Icon 
-            name={isBookmarked ? "bookmark" : "bookmark-border"} 
-            size={24} 
-            color={isBookmarked ? "#e91e63" : "#666"} 
+          <Icon
+            name={isBookmarked ? "bookmark" : "bookmark-border"}
+            size={24}
+            color={isBookmarked ? "#e91e63" : "#666"}
           />
         </TouchableOpacity>
       </View>

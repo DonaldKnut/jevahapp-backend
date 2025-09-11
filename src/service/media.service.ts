@@ -1145,6 +1145,11 @@ export class MediaService {
         throw new Error("Media not found");
       }
 
+      // Check if media is available for download
+      if (!media.fileUrl) {
+        throw new Error("Media file not available for download");
+      }
+
       // Record download interaction
       await this.recordInteraction({
         userIdentifier: userId,
@@ -1153,15 +1158,169 @@ export class MediaService {
         duration: 0,
       });
 
-      // Generate download URL (this would typically be a signed URL from your storage service)
-      const downloadUrl = `${process.env.API_BASE_URL}/api/media/${mediaId}/download`;
+      // Generate signed download URL from Cloudflare R2
+      const { default: fileUploadService } = await import(
+        "./fileUpload.service"
+      );
+
+      // Extract object key from fileUrl
+      const objectKey = this.extractObjectKeyFromUrl(media.fileUrl);
+      if (!objectKey) {
+        throw new Error("Invalid media file URL");
+      }
+
+      // Generate signed URL valid for 24 hours
+      const downloadUrl = await fileUploadService.getPresignedGetUrl(
+        objectKey,
+        86400
+      );
+
+      // Add to user's offline downloads
+      await this.addToOfflineDownloads(userId, mediaId, {
+        fileName: media.title || "Untitled",
+        fileSize: media.fileSize || fileSize,
+        contentType: media.contentType,
+        downloadUrl,
+      });
 
       return {
         success: true,
         downloadUrl,
+        fileName: media.title || "Untitled",
+        fileSize: media.fileSize || fileSize,
+        contentType: media.contentType,
         message: "Download initiated successfully",
       };
     } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Extract object key from Cloudflare R2 URL
+   */
+  private extractObjectKeyFromUrl(url: string): string | null {
+    try {
+      // Handle different URL formats
+      if (url.includes("/")) {
+        const parts = url.split("/");
+        return parts[parts.length - 1];
+      }
+      return url;
+    } catch (error) {
+      console.error("Error extracting object key from URL:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Add media to user's offline downloads
+   */
+  private async addToOfflineDownloads(
+    userId: string,
+    mediaId: string,
+    downloadInfo: {
+      fileName: string;
+      fileSize: number;
+      contentType: string;
+      downloadUrl: string;
+    }
+  ) {
+    try {
+      const { User } = await import("../models/user.model");
+
+      const offlineDownload = {
+        mediaId: new Types.ObjectId(mediaId),
+        downloadDate: new Date(),
+        fileName: downloadInfo.fileName,
+        fileSize: downloadInfo.fileSize,
+        contentType: downloadInfo.contentType,
+        downloadUrl: downloadInfo.downloadUrl,
+        isDownloaded: false, // Will be updated by frontend
+      };
+
+      await User.findByIdAndUpdate(
+        userId,
+        {
+          $push: { offlineDownloads: offlineDownload },
+          $inc: { totalDownloads: 1 },
+        },
+        { upsert: true }
+      );
+
+      console.log("Added to offline downloads:", {
+        userId,
+        mediaId,
+        fileName: downloadInfo.fileName,
+      });
+    } catch (error) {
+      console.error("Error adding to offline downloads:", error);
+      // Don't throw error as this is not critical
+    }
+  }
+
+  /**
+   * Get user's offline downloads
+   */
+  async getUserOfflineDownloads(
+    userId: string,
+    page: number = 1,
+    limit: number = 20
+  ) {
+    try {
+      const { User } = await import("../models/user.model");
+
+      const user = await User.findById(userId)
+        .populate(
+          "offlineDownloads.mediaId",
+          "title description thumbnailUrl contentType duration"
+        )
+        .lean();
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const downloads = (user as any).offlineDownloads || [];
+      const skip = (page - 1) * limit;
+
+      const paginatedDownloads = downloads
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.downloadDate).getTime() -
+            new Date(a.downloadDate).getTime()
+        )
+        .slice(skip, skip + limit);
+
+      return {
+        downloads: paginatedDownloads,
+        pagination: {
+          page,
+          limit,
+          total: downloads.length,
+          pages: Math.ceil(downloads.length / limit),
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Remove media from user's offline downloads
+   */
+  async removeFromOfflineDownloads(userId: string, mediaId: string) {
+    try {
+      const { User } = await import("../models/user.model");
+
+      await User.findByIdAndUpdate(userId, {
+        $pull: { offlineDownloads: { mediaId: new Types.ObjectId(mediaId) } },
+        $inc: { totalDownloads: -1 },
+      });
+
+      console.log("Removed from offline downloads:", { userId, mediaId });
+    } catch (error) {
+      console.error("Error removing from offline downloads:", error);
       throw error;
     }
   }

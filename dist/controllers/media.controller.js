@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -1447,10 +1447,10 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
         // Build filter for default content
         const filter = {
             isDefaultContent: true,
-            isOnboardingContent: true
+            isOnboardingContent: true,
         };
         // Add contentType filter if provided
-        if (contentType && contentType !== 'all') {
+        if (contentType && contentType !== "all") {
             filter.contentType = contentType;
         }
         // Get total count for pagination
@@ -1460,7 +1460,7 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum)
-            .populate('uploadedBy', 'firstName lastName username email avatar')
+            .populate("uploadedBy", "firstName lastName username email avatar")
             .lean();
         // Convert stored R2 object URLs to short-lived presigned URLs for private access
         const toObjectKey = (urlString) => {
@@ -1471,10 +1471,10 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
                 // Expected: https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
                 // Extract pathname and drop leading '/<bucket>/' segment if present
                 let pathname = u.pathname; // starts with '/'
-                if (pathname.startsWith('/'))
+                if (pathname.startsWith("/"))
                     pathname = pathname.slice(1);
                 const bucket = process.env.R2_BUCKET;
-                if (bucket && pathname.startsWith(bucket + '/')) {
+                if (bucket && pathname.startsWith(bucket + "/")) {
                     return pathname.slice(bucket.length + 1);
                 }
                 // If bucket not included, return remaining path
@@ -1485,7 +1485,7 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
             }
         };
         // Lazy import to avoid circular deps
-        const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require('../service/fileUpload.service')));
+        const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require("../service/fileUpload.service")));
         const content = yield Promise.all(defaultContentRaw.map((item) => __awaiter(void 0, void 0, void 0, function* () {
             var _a, _b, _c, _d;
             const objectKey = toObjectKey(item.fileUrl);
@@ -1502,24 +1502,24 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
             // Transform to frontend-expected format
             return {
                 _id: item._id,
-                title: item.title || 'Untitled',
-                description: item.description || '',
+                title: item.title || "Untitled",
+                description: item.description || "",
                 mediaUrl: mediaUrl,
                 thumbnailUrl: item.thumbnailUrl || item.fileUrl,
                 contentType: mapContentType(item.contentType),
                 duration: item.duration || null,
                 author: {
                     _id: ((_a = item.uploadedBy) === null || _a === void 0 ? void 0 : _a._id) || item.uploadedBy,
-                    firstName: ((_b = item.uploadedBy) === null || _b === void 0 ? void 0 : _b.firstName) || 'Unknown',
-                    lastName: ((_c = item.uploadedBy) === null || _c === void 0 ? void 0 : _c.lastName) || 'User',
-                    avatar: ((_d = item.uploadedBy) === null || _d === void 0 ? void 0 : _d.avatar) || null
+                    firstName: ((_b = item.uploadedBy) === null || _b === void 0 ? void 0 : _b.firstName) || "Unknown",
+                    lastName: ((_c = item.uploadedBy) === null || _c === void 0 ? void 0 : _c.lastName) || "User",
+                    avatar: ((_d = item.uploadedBy) === null || _d === void 0 ? void 0 : _d.avatar) || null,
                 },
                 likeCount: item.likeCount || 0,
                 commentCount: item.commentCount || 0,
                 shareCount: item.shareCount || 0,
                 viewCount: item.viewCount || 0,
                 createdAt: item.createdAt,
-                updatedAt: item.updatedAt
+                updatedAt: item.updatedAt,
             };
         })));
         response.status(200).json({
@@ -1530,9 +1530,9 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
                     page: pageNum,
                     limit: limitNum,
                     total,
-                    pages: Math.ceil(total / limitNum)
-                }
-            }
+                    pages: Math.ceil(total / limitNum),
+                },
+            },
         });
     }
     catch (error) {
@@ -1547,18 +1547,18 @@ exports.getDefaultContent = getDefaultContent;
 // Helper function to map content types
 const mapContentType = (contentType) => {
     switch (contentType) {
-        case 'videos':
-        case 'sermon':
-            return 'video';
-        case 'audio':
-        case 'music':
-        case 'devotional':
-            return 'audio';
-        case 'ebook':
-        case 'books':
-            return 'image';
+        case "videos":
+        case "sermon":
+            return "video";
+        case "audio":
+        case "music":
+        case "devotional":
+            return "audio";
+        case "ebook":
+        case "books":
+            return "image";
         default:
-            return 'video';
+            return "video";
     }
 };
 const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
@@ -1574,39 +1574,47 @@ const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, vo
         // Get a curated selection of onboarding content
         const onboardingContent = yield media_model_1.Media.find({
             isOnboardingContent: true,
-            isDefaultContent: true
+            isDefaultContent: true,
         })
             .sort({ createdAt: -1 })
             .limit(15) // Show 15 items for onboarding
-            .populate('uploadedBy', 'firstName lastName username email avatar')
+            .populate("uploadedBy", "firstName lastName username email avatar")
             .lean();
         // Create onboarding experience with different sections
         const onboardingExperience = {
             welcome: {
                 title: "Welcome to Jevah",
                 subtitle: "Your spiritual journey starts here",
-                content: onboardingContent.slice(0, 3) // First 3 items
+                content: onboardingContent.slice(0, 3), // First 3 items
             },
             quickStart: {
                 title: "Quick Start",
                 subtitle: "Short content to get you started",
-                content: onboardingContent.filter(item => item.contentType === 'audio' && item.duration && item.duration <= 300).slice(0, 3)
+                content: onboardingContent
+                    .filter(item => item.contentType === "audio" &&
+                    item.duration &&
+                    item.duration <= 300)
+                    .slice(0, 3),
             },
             featured: {
                 title: "Featured Content",
                 subtitle: "Popular gospel content",
-                content: onboardingContent.filter(item => item.contentType === 'music' || item.contentType === 'sermon').slice(0, 3)
+                content: onboardingContent
+                    .filter(item => item.contentType === "music" || item.contentType === "sermon")
+                    .slice(0, 3),
             },
             devotionals: {
                 title: "Daily Devotionals",
                 subtitle: "Start your day with prayer",
-                content: onboardingContent.filter(item => item.contentType === 'devotional').slice(0, 2)
-            }
+                content: onboardingContent
+                    .filter(item => item.contentType === "devotional")
+                    .slice(0, 2),
+            },
         };
         response.status(200).json({
             success: true,
             message: "Onboarding content retrieved successfully",
-            data: onboardingExperience
+            data: onboardingExperience,
         });
     }
     catch (error) {
@@ -1618,3 +1626,79 @@ const getOnboardingContent = (request, response) => __awaiter(void 0, void 0, vo
     }
 });
 exports.getOnboardingContent = getOnboardingContent;
+// Get user's offline downloads
+const getOfflineDownloads = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = request.userId;
+        const page = parseInt(request.query.page) || 1;
+        const limit = parseInt(request.query.limit) || 20;
+        if (!userId) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        const result = yield media_service_1.mediaService.getUserOfflineDownloads(userId, page, limit);
+        response.status(200).json({
+            success: true,
+            data: result,
+        });
+    }
+    catch (error) {
+        console.error("Get offline downloads error:", error);
+        if (error.message.includes("not found")) {
+            response.status(404).json({
+                success: false,
+                message: error.message,
+            });
+            return;
+        }
+        response.status(500).json({
+            success: false,
+            message: "Failed to get offline downloads",
+        });
+    }
+});
+exports.getOfflineDownloads = getOfflineDownloads;
+// Remove media from offline downloads
+const removeFromOfflineDownloads = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { mediaId } = request.params;
+        const userId = request.userId;
+        if (!userId) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media ID",
+            });
+            return;
+        }
+        yield media_service_1.mediaService.removeFromOfflineDownloads(userId, mediaId);
+        response.status(200).json({
+            success: true,
+            message: "Media removed from offline downloads",
+        });
+    }
+    catch (error) {
+        console.error("Remove from offline downloads error:", error);
+        if (error.message.includes("not found")) {
+            response.status(404).json({
+                success: false,
+                message: error.message,
+            });
+            return;
+        }
+        response.status(500).json({
+            success: false,
+            message: "Failed to remove from offline downloads",
+        });
+    }
+});
+exports.removeFromOfflineDownloads = removeFromOfflineDownloads;
