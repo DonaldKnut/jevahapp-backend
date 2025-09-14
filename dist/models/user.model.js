@@ -204,6 +204,23 @@ const userSchema = new mongoose_1.Schema({
         subscriptionUpdates: { type: Boolean, default: true },
         securityAlerts: { type: Boolean, default: true },
     },
+    // Push notification settings
+    pushNotifications: {
+        enabled: { type: Boolean, default: true },
+        deviceTokens: { type: [String], default: [] },
+        preferences: {
+            newFollowers: { type: Boolean, default: true },
+            mediaLikes: { type: Boolean, default: true },
+            mediaComments: { type: Boolean, default: true },
+            mediaShares: { type: Boolean, default: true },
+            merchPurchases: { type: Boolean, default: true },
+            songDownloads: { type: Boolean, default: true },
+            subscriptionUpdates: { type: Boolean, default: true },
+            securityAlerts: { type: Boolean, default: true },
+            liveStreams: { type: Boolean, default: true },
+            newMessages: { type: Boolean, default: true },
+        },
+    },
     // Security and audit fields
     lastLoginAt: { type: Date },
     lastLoginIp: { type: String },
@@ -212,6 +229,12 @@ const userSchema = new mongoose_1.Schema({
     passwordChangedAt: { type: Date },
     twoFactorEnabled: { type: Boolean, default: false },
     twoFactorSecret: { type: String },
+    // Re-engagement tracking
+    lastSignOutAt: { type: Date },
+    lastReturnAt: { type: Date },
+    totalSessions: { type: Number, default: 0 },
+    returnCount: { type: Number, default: 0 },
+    timezone: { type: String, default: "UTC" },
 }, { timestamps: true });
 // Indexes for better performance
 userSchema.index({ "artistProfile.artistName": "text" });

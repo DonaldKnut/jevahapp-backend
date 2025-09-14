@@ -155,6 +155,24 @@ export interface IUser {
     securityAlerts?: boolean;
   };
 
+  // Push notification settings
+  pushNotifications?: {
+    enabled?: boolean;
+    deviceTokens?: string[]; // Expo push tokens
+    preferences?: {
+      newFollowers?: boolean;
+      mediaLikes?: boolean;
+      mediaComments?: boolean;
+      mediaShares?: boolean;
+      merchPurchases?: boolean;
+      songDownloads?: boolean;
+      subscriptionUpdates?: boolean;
+      securityAlerts?: boolean;
+      liveStreams?: boolean;
+      newMessages?: boolean;
+    };
+  };
+
   // Security and audit fields
   lastLoginAt?: Date;
   lastLoginIp?: string;
@@ -163,6 +181,13 @@ export interface IUser {
   passwordChangedAt?: Date;
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
+
+  // Re-engagement tracking
+  lastSignOutAt?: Date;
+  lastReturnAt?: Date;
+  totalSessions?: number;
+  returnCount?: number;
+  timezone?: string;
 
   createdAt?: Date;
   updatedAt?: Date;
@@ -348,6 +373,24 @@ const userSchema = new Schema<IUserDocument>(
       securityAlerts: { type: Boolean, default: true },
     },
 
+    // Push notification settings
+    pushNotifications: {
+      enabled: { type: Boolean, default: true },
+      deviceTokens: { type: [String], default: [] },
+      preferences: {
+        newFollowers: { type: Boolean, default: true },
+        mediaLikes: { type: Boolean, default: true },
+        mediaComments: { type: Boolean, default: true },
+        mediaShares: { type: Boolean, default: true },
+        merchPurchases: { type: Boolean, default: true },
+        songDownloads: { type: Boolean, default: true },
+        subscriptionUpdates: { type: Boolean, default: true },
+        securityAlerts: { type: Boolean, default: true },
+        liveStreams: { type: Boolean, default: true },
+        newMessages: { type: Boolean, default: true },
+      },
+    },
+
     // Security and audit fields
     lastLoginAt: { type: Date },
     lastLoginIp: { type: String },
@@ -356,6 +399,13 @@ const userSchema = new Schema<IUserDocument>(
     passwordChangedAt: { type: Date },
     twoFactorEnabled: { type: Boolean, default: false },
     twoFactorSecret: { type: String },
+
+    // Re-engagement tracking
+    lastSignOutAt: { type: Date },
+    lastReturnAt: { type: Date },
+    totalSessions: { type: Number, default: 0 },
+    returnCount: { type: Number, default: 0 },
+    timezone: { type: String, default: "UTC" },
   },
   { timestamps: true }
 );

@@ -15,6 +15,7 @@ import {
   ClerkTokenPayload,
 } from "../utils/clerk";
 import fileUploadService from "./fileUpload.service";
+import aiReengagementService from "./aiReengagement.service";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -493,6 +494,14 @@ class AuthService {
       expiresIn: "7d",
     });
 
+    // Update last login time
+    await User.findByIdAndUpdate(user._id, {
+      lastLoginAt: new Date(),
+    });
+
+    // Track user return for re-engagement
+    await aiReengagementService.trackUserReturn(user._id.toString());
+
     return {
       token,
       user: {
@@ -831,6 +840,9 @@ class AuthService {
       token,
       expiresAt,
     });
+
+    // Track user signout for re-engagement
+    await aiReengagementService.trackUserSignout(userId);
 
     return { message: "User logged out successfully" };
   }

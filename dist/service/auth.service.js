@@ -20,6 +20,7 @@ const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
 const mailer_1 = require("../utils/mailer");
 const clerk_1 = require("../utils/clerk");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
+const aiReengagement_service_1 = __importDefault(require("./aiReengagement.service"));
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     throw new Error("JWT_SECRET is not defined in environment variables");
@@ -383,6 +384,12 @@ class AuthService {
             const token = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
                 expiresIn: "7d",
             });
+            // Update last login time
+            yield user_model_1.User.findByIdAndUpdate(user._id, {
+                lastLoginAt: new Date(),
+            });
+            // Track user return for re-engagement
+            yield aiReengagement_service_1.default.trackUserReturn(user._id.toString());
             return {
                 token,
                 user: {
@@ -645,6 +652,8 @@ class AuthService {
                 token,
                 expiresAt,
             });
+            // Track user signout for re-engagement
+            yield aiReengagement_service_1.default.trackUserSignout(userId);
             return { message: "User logged out successfully" };
         });
     }
