@@ -22,7 +22,7 @@ import logsRoutes from "./routes/logs.routes";
 // import artistRoutes from "./routes/artist.route";
 import gamesRoutes from "./routes/games.route";
 import paymentRoutes from "./routes/payment.route";
-import bookmarksRoutes from "./routes/bookmarks.routes";
+import unifiedBookmarkRoutes from "./routes/unifiedBookmark.routes";
 import interactionRoutes from "./routes/interaction.routes";
 import contentInteractionRoutes from "./routes/contentInteraction.routes";
 import aiChatbotRoutes from "./routes/aiChatbot.routes";
@@ -121,6 +121,8 @@ app.get("/", (req, res) => {
       auth: "/api/auth",
       users: "/api/users",
       media: "/api/media",
+      bookmark: "/api/bookmark",
+      content: "/api/content",
       aiChatbot: "/api/ai-chatbot",
       trending: "/api/trending",
       userProfiles: "/api/user-profiles",
@@ -181,7 +183,7 @@ app.use("/api/logs", logsRoutes);
 // app.use("/api/artist", artistRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/payment", paymentRoutes);
-app.use("/api/bookmarks", bookmarksRoutes);
+app.use("/api/bookmark", unifiedBookmarkRoutes);
 app.use("/api/interactions", interactionRoutes);
 app.use("/api/content", contentInteractionRoutes);
 app.use("/api/ai-chatbot", aiChatbotRoutes);

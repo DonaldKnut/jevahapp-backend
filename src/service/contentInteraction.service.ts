@@ -4,6 +4,7 @@ import { Media } from "../models/media.model";
 import { User } from "../models/user.model";
 import { Devotional } from "../models/devotional.model";
 import { DevotionalLike } from "../models/devotionalLike.model";
+import { NotificationService } from "./notification.service";
 import logger from "../utils/logger";
 
 export interface ContentInteractionInput {
@@ -59,14 +60,66 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<{ liked: boolean; likeCount: number }> {
+    // Enhanced validation
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
       throw new Error("Invalid user or content ID");
     }
 
+    // Validate content type
+    const validContentTypes = [
+      "media",
+      "devotional",
+      "artist",
+      "merch",
+      "ebook",
+      "podcast",
+    ];
+    if (!validContentTypes.includes(contentType)) {
+      throw new Error(`Unsupported content type: ${contentType}`);
+    }
+
+    logger.info("Toggle like request", {
+      userId,
+      contentId,
+      contentType,
+      timestamp: new Date().toISOString(),
+    });
+
     const session: ClientSession = await Media.startSession();
     try {
       let liked = false;
+      let contentExists = false;
+
       await session.withTransaction(async () => {
+        // First, verify content exists
+        contentExists = await this.verifyContentExists(
+          contentId,
+          contentType,
+          session
+        );
+
+        if (!contentExists) {
+          throw new Error(
+            `Content not found: ${contentType} with ID ${contentId}`
+          );
+        }
+
+        // Check if user is trying to like their own content (optional business rule)
+        const isOwnContent = await this.isUserOwnContent(
+          userId,
+          contentId,
+          contentType,
+          session
+        );
+        if (isOwnContent) {
+          logger.info("User attempting to like own content", {
+            userId,
+            contentId,
+            contentType,
+          });
+          // Allow self-likes but log for analytics
+        }
+
         // Handle different content types
         switch (contentType) {
           case "media":
@@ -81,15 +134,65 @@ export class ContentInteractionService {
           case "merch":
             liked = await this.toggleMerchFavorite(userId, contentId, session);
             break;
+          case "ebook":
+          case "podcast":
+            // Handle ebook and podcast likes using media interaction
+            liked = await this.toggleMediaLike(userId, contentId, session);
+            break;
           default:
             throw new Error(`Unsupported content type: ${contentType}`);
         }
       });
 
+      const likeCount = await this.getLikeCount(contentId, contentType);
+
+      // Send notification if content was liked (not unliked)
+      if (liked) {
+        try {
+          await NotificationService.notifyContentLike(
+            userId,
+            contentId,
+            contentType
+          );
+
+          logger.info("Like notification sent", {
+            userId,
+            contentId,
+            contentType,
+          });
+        } catch (notificationError: any) {
+          // Don't fail the like operation if notification fails
+          logger.error("Failed to send like notification", {
+            error: notificationError.message,
+            userId,
+            contentId,
+            contentType,
+          });
+        }
+      }
+
+      logger.info("Toggle like completed", {
+        userId,
+        contentId,
+        contentType,
+        liked,
+        likeCount,
+        timestamp: new Date().toISOString(),
+      });
+
       return {
         liked,
-        likeCount: await this.getLikeCount(contentId, contentType),
+        likeCount,
       };
+    } catch (error: any) {
+      logger.error("Toggle like transaction failed", {
+        error: error.message,
+        userId,
+        contentId,
+        contentType,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
     } finally {
       session.endSession();
     }
@@ -520,20 +623,126 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<number> {
-    switch (contentType) {
-      case "media":
-        const media = await Media.findById(contentId);
-        return media?.likeCount || 0;
-      case "devotional":
-        const devotionalLikes = await DevotionalLike.countDocuments({
-          devotional: contentId,
-        });
-        return devotionalLikes;
-      case "artist":
-        const artist = await User.findById(contentId);
-        return artist?.artistProfile?.followerCount || 0;
-      default:
-        return 0;
+    try {
+      switch (contentType) {
+        case "media":
+        case "ebook":
+        case "podcast":
+          const media = await Media.findById(contentId).select("likeCount");
+          return media?.likeCount || 0;
+        case "devotional":
+          const devotionalLikes = await DevotionalLike.countDocuments({
+            devotional: contentId,
+          });
+          return devotionalLikes;
+        case "artist":
+          const artist = await User.findById(contentId);
+          return artist?.artistProfile?.followerCount || 0;
+        case "merch":
+          const merch = await Media.findById(contentId).select("favoriteCount");
+          return merch?.favoriteCount || 0;
+        default:
+          return 0;
+      }
+    } catch (error: any) {
+      logger.error("Failed to get like count", {
+        contentId,
+        contentType,
+        error: error.message,
+      });
+      return 0;
+    }
+  }
+
+  /**
+   * Verify content exists in database
+   */
+  private async verifyContentExists(
+    contentId: string,
+    contentType: string,
+    session: ClientSession
+  ): Promise<boolean> {
+    try {
+      switch (contentType) {
+        case "media":
+        case "ebook":
+        case "podcast":
+          const media = await Media.findById(contentId)
+            .session(session)
+            .select("_id");
+          return !!media;
+
+        case "devotional":
+          const devotional = await Devotional.findById(contentId)
+            .session(session)
+            .select("_id");
+          return !!devotional;
+
+        case "artist":
+          const artist = await User.findById(contentId)
+            .session(session)
+            .select("_id");
+          return !!artist;
+
+        case "merch":
+          const merch = await Media.findById(contentId)
+            .session(session)
+            .select("_id");
+          return !!merch;
+
+        default:
+          return false;
+      }
+    } catch (error: any) {
+      logger.error("Failed to verify content exists", {
+        contentId,
+        contentType,
+        error: error.message,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Check if user owns the content
+   */
+  private async isUserOwnContent(
+    userId: string,
+    contentId: string,
+    contentType: string,
+    session: ClientSession
+  ): Promise<boolean> {
+    try {
+      switch (contentType) {
+        case "media":
+        case "ebook":
+        case "podcast":
+        case "merch":
+          const media = await Media.findById(contentId)
+            .session(session)
+            .select("uploadedBy");
+          return media?.uploadedBy?.toString() === userId;
+
+        case "devotional":
+          const devotional = await Devotional.findById(contentId)
+            .session(session)
+            .select("uploadedBy");
+          return devotional?.uploadedBy?.toString() === userId;
+
+        case "artist":
+          return contentId === userId; // Artist ID is the same as user ID
+
+        default:
+          return false;
+      }
+    } catch (error: any) {
+      logger.error("Failed to check content ownership", {
+        userId,
+        contentId,
+        contentType,
+        error: error.message,
+      });
+      return false;
     }
   }
 

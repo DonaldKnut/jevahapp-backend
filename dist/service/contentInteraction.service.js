@@ -8,6 +8,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContentInteractionService = void 0;
 const mongoose_1 = require("mongoose");
@@ -16,19 +19,56 @@ const media_model_1 = require("../models/media.model");
 const user_model_1 = require("../models/user.model");
 const devotional_model_1 = require("../models/devotional.model");
 const devotionalLike_model_1 = require("../models/devotionalLike.model");
+const notification_service_1 = require("./notification.service");
+const logger_1 = __importDefault(require("../utils/logger"));
 class ContentInteractionService {
     /**
      * Toggle like on any content type
      */
     toggleLike(userId, contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
+            // Enhanced validation
             if (!mongoose_1.Types.ObjectId.isValid(userId) || !mongoose_1.Types.ObjectId.isValid(contentId)) {
                 throw new Error("Invalid user or content ID");
             }
+            // Validate content type
+            const validContentTypes = [
+                "media",
+                "devotional",
+                "artist",
+                "merch",
+                "ebook",
+                "podcast",
+            ];
+            if (!validContentTypes.includes(contentType)) {
+                throw new Error(`Unsupported content type: ${contentType}`);
+            }
+            logger_1.default.info("Toggle like request", {
+                userId,
+                contentId,
+                contentType,
+                timestamp: new Date().toISOString(),
+            });
             const session = yield media_model_1.Media.startSession();
             try {
                 let liked = false;
+                let contentExists = false;
                 yield session.withTransaction(() => __awaiter(this, void 0, void 0, function* () {
+                    // First, verify content exists
+                    contentExists = yield this.verifyContentExists(contentId, contentType, session);
+                    if (!contentExists) {
+                        throw new Error(`Content not found: ${contentType} with ID ${contentId}`);
+                    }
+                    // Check if user is trying to like their own content (optional business rule)
+                    const isOwnContent = yield this.isUserOwnContent(userId, contentId, contentType, session);
+                    if (isOwnContent) {
+                        logger_1.default.info("User attempting to like own content", {
+                            userId,
+                            contentId,
+                            contentType,
+                        });
+                        // Allow self-likes but log for analytics
+                    }
                     // Handle different content types
                     switch (contentType) {
                         case "media":
@@ -43,14 +83,58 @@ class ContentInteractionService {
                         case "merch":
                             liked = yield this.toggleMerchFavorite(userId, contentId, session);
                             break;
+                        case "ebook":
+                        case "podcast":
+                            // Handle ebook and podcast likes using media interaction
+                            liked = yield this.toggleMediaLike(userId, contentId, session);
+                            break;
                         default:
                             throw new Error(`Unsupported content type: ${contentType}`);
                     }
                 }));
+                const likeCount = yield this.getLikeCount(contentId, contentType);
+                // Send notification if content was liked (not unliked)
+                if (liked) {
+                    try {
+                        yield notification_service_1.NotificationService.notifyContentLike(userId, contentId, contentType);
+                        logger_1.default.info("Like notification sent", {
+                            userId,
+                            contentId,
+                            contentType,
+                        });
+                    }
+                    catch (notificationError) {
+                        // Don't fail the like operation if notification fails
+                        logger_1.default.error("Failed to send like notification", {
+                            error: notificationError.message,
+                            userId,
+                            contentId,
+                            contentType,
+                        });
+                    }
+                }
+                logger_1.default.info("Toggle like completed", {
+                    userId,
+                    contentId,
+                    contentType,
+                    liked,
+                    likeCount,
+                    timestamp: new Date().toISOString(),
+                });
                 return {
                     liked,
-                    likeCount: yield this.getLikeCount(contentId, contentType),
+                    likeCount,
                 };
+            }
+            catch (error) {
+                logger_1.default.error("Toggle like transaction failed", {
+                    error: error.message,
+                    userId,
+                    contentId,
+                    contentType,
+                    timestamp: new Date().toISOString(),
+                });
+                throw error;
             }
             finally {
                 session.endSession();
@@ -401,20 +485,116 @@ class ContentInteractionService {
     getLikeCount(contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
-            switch (contentType) {
-                case "media":
-                    const media = yield media_model_1.Media.findById(contentId);
-                    return (media === null || media === void 0 ? void 0 : media.likeCount) || 0;
-                case "devotional":
-                    const devotionalLikes = yield devotionalLike_model_1.DevotionalLike.countDocuments({
-                        devotional: contentId,
-                    });
-                    return devotionalLikes;
-                case "artist":
-                    const artist = yield user_model_1.User.findById(contentId);
-                    return ((_a = artist === null || artist === void 0 ? void 0 : artist.artistProfile) === null || _a === void 0 ? void 0 : _a.followerCount) || 0;
-                default:
-                    return 0;
+            try {
+                switch (contentType) {
+                    case "media":
+                    case "ebook":
+                    case "podcast":
+                        const media = yield media_model_1.Media.findById(contentId).select("likeCount");
+                        return (media === null || media === void 0 ? void 0 : media.likeCount) || 0;
+                    case "devotional":
+                        const devotionalLikes = yield devotionalLike_model_1.DevotionalLike.countDocuments({
+                            devotional: contentId,
+                        });
+                        return devotionalLikes;
+                    case "artist":
+                        const artist = yield user_model_1.User.findById(contentId);
+                        return ((_a = artist === null || artist === void 0 ? void 0 : artist.artistProfile) === null || _a === void 0 ? void 0 : _a.followerCount) || 0;
+                    case "merch":
+                        const merch = yield media_model_1.Media.findById(contentId).select("favoriteCount");
+                        return (merch === null || merch === void 0 ? void 0 : merch.favoriteCount) || 0;
+                    default:
+                        return 0;
+                }
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get like count", {
+                    contentId,
+                    contentType,
+                    error: error.message,
+                });
+                return 0;
+            }
+        });
+    }
+    /**
+     * Verify content exists in database
+     */
+    verifyContentExists(contentId, contentType, session) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                switch (contentType) {
+                    case "media":
+                    case "ebook":
+                    case "podcast":
+                        const media = yield media_model_1.Media.findById(contentId)
+                            .session(session)
+                            .select("_id");
+                        return !!media;
+                    case "devotional":
+                        const devotional = yield devotional_model_1.Devotional.findById(contentId)
+                            .session(session)
+                            .select("_id");
+                        return !!devotional;
+                    case "artist":
+                        const artist = yield user_model_1.User.findById(contentId)
+                            .session(session)
+                            .select("_id");
+                        return !!artist;
+                    case "merch":
+                        const merch = yield media_model_1.Media.findById(contentId)
+                            .session(session)
+                            .select("_id");
+                        return !!merch;
+                    default:
+                        return false;
+                }
+            }
+            catch (error) {
+                logger_1.default.error("Failed to verify content exists", {
+                    contentId,
+                    contentType,
+                    error: error.message,
+                });
+                return false;
+            }
+        });
+    }
+    /**
+     * Check if user owns the content
+     */
+    isUserOwnContent(userId, contentId, contentType, session) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            try {
+                switch (contentType) {
+                    case "media":
+                    case "ebook":
+                    case "podcast":
+                    case "merch":
+                        const media = yield media_model_1.Media.findById(contentId)
+                            .session(session)
+                            .select("uploadedBy");
+                        return ((_a = media === null || media === void 0 ? void 0 : media.uploadedBy) === null || _a === void 0 ? void 0 : _a.toString()) === userId;
+                    case "devotional":
+                        const devotional = yield devotional_model_1.Devotional.findById(contentId)
+                            .session(session)
+                            .select("uploadedBy");
+                        return ((_b = devotional === null || devotional === void 0 ? void 0 : devotional.uploadedBy) === null || _b === void 0 ? void 0 : _b.toString()) === userId;
+                    case "artist":
+                        return contentId === userId; // Artist ID is the same as user ID
+                    default:
+                        return false;
+                }
+            }
+            catch (error) {
+                logger_1.default.error("Failed to check content ownership", {
+                    userId,
+                    contentId,
+                    contentType,
+                    error: error.message,
+                });
+                return false;
             }
         });
     }

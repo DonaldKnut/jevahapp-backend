@@ -25,7 +25,7 @@ const logs_routes_1 = __importDefault(require("./routes/logs.routes"));
 // import artistRoutes from "./routes/artist.route";
 const games_route_1 = __importDefault(require("./routes/games.route"));
 const payment_route_1 = __importDefault(require("./routes/payment.route"));
-const bookmarks_routes_1 = __importDefault(require("./routes/bookmarks.routes"));
+const unifiedBookmark_routes_1 = __importDefault(require("./routes/unifiedBookmark.routes"));
 const interaction_routes_1 = __importDefault(require("./routes/interaction.routes"));
 const contentInteraction_routes_1 = __importDefault(require("./routes/contentInteraction.routes"));
 const aiChatbot_routes_1 = __importDefault(require("./routes/aiChatbot.routes"));
@@ -111,6 +111,8 @@ app.get("/", (req, res) => {
             auth: "/api/auth",
             users: "/api/users",
             media: "/api/media",
+            bookmark: "/api/bookmark",
+            content: "/api/content",
             aiChatbot: "/api/ai-chatbot",
             trending: "/api/trending",
             userProfiles: "/api/user-profiles",
@@ -163,7 +165,7 @@ app.use("/api/logs", logs_routes_1.default);
 // app.use("/api/artist", artistRoutes);
 app.use("/api/games", games_route_1.default);
 app.use("/api/payment", payment_route_1.default);
-app.use("/api/bookmarks", bookmarks_routes_1.default);
+app.use("/api/bookmark", unifiedBookmark_routes_1.default);
 app.use("/api/interactions", interaction_routes_1.default);
 app.use("/api/content", contentInteraction_routes_1.default);
 app.use("/api/ai-chatbot", aiChatbot_routes_1.default);

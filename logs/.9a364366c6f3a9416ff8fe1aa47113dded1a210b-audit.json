@@ -6,34 +6,9 @@
     "auditLog": "/Users/user/Desktop/jevah-app_backend/logs/.9a364366c6f3a9416ff8fe1aa47113dded1a210b-audit.json",
     "files": [
         {
-            "date": 1755155492843,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-14.log",
-            "hash": "2c75b9fe0a24dbfba4ec1b39394db40d90b323f2ab208e170ac8f0f25c279a09"
-        },
-        {
-            "date": 1755620179112,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-19.log",
-            "hash": "a6c4b9e206d0da1a9f885cfaddae83dd0573abab43ccfd6470011fa5c62564a9"
-        },
-        {
-            "date": 1755906442809,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-23.log",
-            "hash": "4cd864de2ea1da1acaa7726db3d3f92ee90073dc27bd05cd6c38f230e0e7dbb8"
-        },
-        {
-            "date": 1756047813489,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-24.log",
-            "hash": "7a8505f480e23346ff4eff86bd002b9cea150f68efcbee558af7046cac7e5b06"
-        },
-        {
-            "date": 1756116570502,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-25.log",
-            "hash": "174bde756832874ab69094167d10680eb93ac455173e6a260160c2621c23172f"
-        },
-        {
-            "date": 1756361213019,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-08-28.log",
-            "hash": "6486499dd82473897169a96843a34d4a9c3a0ec4b68678ae34438df0a9eace91"
+            "date": 1757906753703,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-09-15.log",
+            "hash": "6a74b6f6d3388c7fa15d987836199f0ab299085b83fa579c677d0fbf80b2eb4e"
         }
     ],
     "hashType": "sha256"

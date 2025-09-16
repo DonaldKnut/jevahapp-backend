@@ -1,46 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -163,22 +121,10 @@ router.get("/:id/stats", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLim
  * @returns { success: boolean, message: string }
  */
 router.delete("/:id", auth_middleware_1.verifyToken, role_middleware_1.requireAdminOrCreator, media_controller_1.deleteMedia);
-/**
- * @route   POST /api/media/:id/bookmark
- * @desc    Bookmark (save) a media item for the authenticated user
- * @access  Protected (Authenticated users only)
- * @param   { id: string } - MongoDB ObjectId of the media item
- * @returns { success: boolean, message: string, bookmark: object }
- */
-router.post("/:id/bookmark", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.bookmarkMedia);
-/**
- * @route   POST /api/media/:id/save
- * @desc    Save a media item (maps to bookmark functionality)
- * @access  Protected (Authenticated users only)
- * @param   { id: string } - MongoDB ObjectId of the media item
- * @returns { success: boolean, message: string, bookmark: object }
- */
-router.post("/:id/save", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.bookmarkMedia);
+// REMOVED: Duplicate bookmark endpoints - use unified bookmark system instead
+// POST /api/bookmark/:mediaId/toggle - Unified bookmark toggle
+// GET /api/bookmark/:mediaId/status - Check bookmark status
+// GET /api/bookmark/user - Get user bookmarks
 /**
  * @route   POST /api/media/:id/interact
  * @desc    Record an interaction with a media item (view, listen, read, download)
@@ -188,14 +134,8 @@ router.post("/:id/save", auth_middleware_1.verifyToken, rateLimiter_1.mediaInter
  * @returns { success: boolean, message: string, interaction: object }
  */
 router.post("/:id/interact", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.recordMediaInteraction);
-/**
- * @route   POST /api/media/track-view
- * @desc    Track view with duration for media content
- * @access  Protected (Authenticated users only)
- * @body    { mediaId: string, duration: number, isComplete: boolean }
- * @returns { success: boolean, data: { countedAsView: boolean, viewThreshold: number, duration: number } }
- */
-router.post("/track-view", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.trackViewWithDuration);
+// REMOVED: Duplicate track-view endpoint - use media-specific endpoint instead
+// POST /api/media/:id/track-view - Media-specific track view
 /**
  * @route   POST /api/media/:id/download
  * @desc    Initiate download for offline use
@@ -237,50 +177,11 @@ router.get("/:mediaId/engagement", media_controller_1.getMediaWithEngagement);
  * @returns { success: boolean, message: string, countedAsView: boolean, duration: number }
  */
 router.post("/:id/track-view", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.trackViewWithDuration);
-/**
- * @route   POST /api/media/:id/download
- * @desc    Record a download for downloadable media (artist content only)
- * @access  Protected (Authenticated users only)
- * @param   { id: string } - MongoDB ObjectId of the media item
- * @body    { fileSize: number }
- * @returns { success: boolean, message: string, downloadUrl: string }
- */
-router.post("/:id/download", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.downloadMedia);
-/**
- * @route   POST /api/media/:id/share
- * @desc    Record a share action for a media item (legacy - redirects to content interaction)
- * @access  Protected (Authenticated users only)
- * @param   { id: string } - MongoDB ObjectId of the media item
- * @body    { platform?: string }
- * @returns { success: boolean, message: string, shareUrl: string }
- */
-router.post("/:id/share", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    // Redirect to new content interaction system
-    const { id } = req.params;
-    const { platform, message } = req.body;
-    // Import the new content interaction controller
-    const { shareContent } = yield Promise.resolve().then(() => __importStar(require("../controllers/contentInteraction.controller")));
-    // Mock the request for the new system
-    const mockReq = Object.assign(Object.assign({}, req), { params: { contentId: id, contentType: "media" }, body: { platform, message } });
-    return shareContent(mockReq, res);
-}));
-/**
- * @route   POST /api/media/:id/favorite
- * @desc    Record a favorite action for a media item (legacy - redirects to content interaction)
- * @access  Protected (Authenticated users only)
- * @param   { id: string } - MongoDB ObjectId of the media item
- * @body    { actionType: "favorite" }
- * @returns { success: boolean, message: string, action: object }
- */
-router.post("/:id/favorite", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    // Redirect to new content interaction system
-    const { id } = req.params;
-    // Import the new content interaction controller
-    const { toggleContentLike } = yield Promise.resolve().then(() => __importStar(require("../controllers/contentInteraction.controller")));
-    // Mock the request for the new system
-    const mockReq = Object.assign(Object.assign({}, req), { params: { contentId: id, contentType: "media" } });
-    return toggleContentLike(mockReq, res);
-}));
+// REMOVED: Duplicate download endpoint - keeping the first one above
+// REMOVED: Legacy share redirect - use universal content interaction instead
+// POST /api/content/:contentType/:contentId/share - Universal share
+// REMOVED: Legacy favorite redirect - use universal content interaction instead
+// POST /api/content/:contentType/:contentId/like - Universal like/favorite
 /**
  * @route   GET /api/media/:id/action-status
  * @desc    Get the current user's action status for a media item (favorite, share)

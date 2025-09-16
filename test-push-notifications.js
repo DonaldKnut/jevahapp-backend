@@ -1,7 +1,7 @@
 const axios = require("axios");
 
 // Test configuration
-const BASE_URL = "http://localhost:3000"; // Change to your server URL
+const BASE_URL = "http://localhost:4000"; // Change to your server URL
 const TEST_USER_ID = "your-test-user-id"; // Replace with actual user ID
 const TEST_DEVICE_TOKEN = "ExponentPushToken[your-test-token]"; // Replace with actual Expo token
 
@@ -198,4 +198,3 @@ if (require.main === module) {
 }
 
 module.exports = { testPushNotificationAPI };
-

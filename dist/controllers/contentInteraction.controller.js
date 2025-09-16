@@ -54,7 +54,21 @@ const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, functi
     try {
         const { contentId, contentType } = req.params;
         const userId = req.userId;
+        // Enhanced logging for debugging
+        logger_1.default.info("Toggle content like request", {
+            userId,
+            contentId,
+            contentType,
+            userAgent: req.get("User-Agent"),
+            ip: req.ip,
+            timestamp: new Date().toISOString(),
+        });
         if (!userId) {
+            logger_1.default.warn("Unauthorized like request - no user ID", {
+                contentId,
+                contentType,
+                ip: req.ip,
+            });
             res.status(401).json({
                 success: false,
                 message: "Unauthorized: User not authenticated",
@@ -62,21 +76,48 @@ const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, functi
             return;
         }
         if (!contentId || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+            logger_1.default.warn("Invalid content ID in like request", {
+                userId,
+                contentId,
+                contentType,
+                ip: req.ip,
+            });
             res.status(400).json({
                 success: false,
-                message: "Invalid content ID",
+                message: "Invalid content ID format",
             });
             return;
         }
-        if (!contentType ||
-            !["media", "devotional", "artist", "merch", "ebook", "podcast"].includes(contentType)) {
+        const validContentTypes = [
+            "media",
+            "devotional",
+            "artist",
+            "merch",
+            "ebook",
+            "podcast",
+        ];
+        if (!contentType || !validContentTypes.includes(contentType)) {
+            logger_1.default.warn("Invalid content type in like request", {
+                userId,
+                contentId,
+                contentType,
+                validTypes: validContentTypes,
+                ip: req.ip,
+            });
             res.status(400).json({
                 success: false,
-                message: "Invalid content type",
+                message: `Invalid content type. Must be one of: ${validContentTypes.join(", ")}`,
             });
             return;
         }
         const result = yield contentInteraction_service_1.default.toggleLike(userId, contentId, contentType);
+        logger_1.default.info("Toggle content like successful", {
+            userId,
+            contentId,
+            contentType,
+            liked: result.liked,
+            likeCount: result.likeCount,
+        });
         res.status(200).json({
             success: true,
             message: result.liked
@@ -88,20 +129,34 @@ const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, functi
     catch (error) {
         logger_1.default.error("Toggle content like error", {
             error: error.message,
+            stack: error.stack,
             userId: req.userId,
             contentId: req.params.contentId,
             contentType: req.params.contentType,
+            ip: req.ip,
+            timestamp: new Date().toISOString(),
         });
-        if (error.message.includes("not found")) {
+        // Handle specific error types with appropriate status codes
+        if (error.message.includes("not found") ||
+            error.message.includes("Content not found")) {
             res.status(404).json({
+                success: false,
+                message: "Content not found",
+            });
+            return;
+        }
+        if (error.message.includes("Invalid") ||
+            error.message.includes("Unsupported")) {
+            res.status(400).json({
                 success: false,
                 message: error.message,
             });
             return;
         }
+        // Default to 500 for unexpected errors
         res.status(500).json({
             success: false,
-            message: "Failed to toggle like",
+            message: "An unexpected error occurred while processing your request",
         });
     }
 });

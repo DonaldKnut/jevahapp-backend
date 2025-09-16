@@ -1,0 +1,194 @@
+2025-09-15 11:16:57 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 11:16:57 GMT+0100 (West Africa Standard Time)","process":{"pid":2113,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":129843200,"heapTotal":82890752,"heapUsed":44987648,"external":21750108,"arrayBuffers":18373190}},"os":{"loadavg":[61.87255859375,84.25634765625,98.7041015625],"uptime":319527},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 11:18:26 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 11:18:26 GMT+0100 (West Africa Standard Time)","process":{"pid":3971,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":128700416,"heapTotal":80732160,"heapUsed":56225320,"external":21751946,"arrayBuffers":18373846}},"os":{"loadavg":[119.19384765625,93.3017578125,100.5205078125],"uptime":319616},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 11:23:17 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 11:23:17 GMT+0100 (West Africa Standard Time)","process":{"pid":9071,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":126914560,"heapTotal":81256448,"heapUsed":55790408,"external":21751946,"arrayBuffers":18373846}},"os":{"loadavg":[121.85791015625,81.18994140625,90.36328125],"uptime":319907},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 11:23:36 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 11:23:36 GMT+0100 (West Africa Standard Time)","process":{"pid":9470,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":131125248,"heapTotal":84201472,"heapUsed":51137248,"external":21751290,"arrayBuffers":18373190}},"os":{"loadavg":[150.9462890625,90.443359375,93.4677734375],"uptime":319926},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 11:28:29 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 11:28:29 GMT+0100 (West Africa Standard Time)","process":{"pid":14545,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":130248704,"heapTotal":83939328,"heapUsed":50952864,"external":21751290,"arrayBuffers":18373190}},"os":{"loadavg":[147.1982421875,106.02392578125,99.341796875],"uptime":320219},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 21:12:55 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 21:12:55 GMT+0100 (West Africa Standard Time)","process":{"pid":43367,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":132755456,"heapTotal":83152896,"heapUsed":45047896,"external":21750108,"arrayBuffers":18373190}},"os":{"loadavg":[326.4462890625,195.4189453125,123.869140625],"uptime":355286},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 21:13:27 [ERROR]: uncaughtException: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+Error: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1145:15)
+    at Function.Module._load (node:internal/modules/cjs/loader:986:27)
+    at Module.require (node:internal/modules/cjs/loader:1233:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/app.ts:25:1)
+    at Module._compile (node:internal/modules/cjs/loader:1358:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js:114:20) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["/Users/user/Desktop/jevah-app_backend/src/app.ts","/Users/user/Desktop/jevah-app_backend/src/index.ts"]},"exception":true,"date":"Mon Sep 15 2025 21:13:27 GMT+0100 (West Africa Standard Time)","process":{"pid":44112,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":105832448,"heapTotal":67858432,"heapUsed":46742632,"external":21563187,"arrayBuffers":18344588}},"os":{"loadavg":[330.296875,208.85693359375,131.2177734375],"uptime":355318},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Module._resolveFilename","line":1145,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":986,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false},{"column":18,"file":"node:internal/modules/helpers","function":"require","line":179,"method":null,"native":false},{"column":1,"file":"/Users/user/Desktop/jevah-app_backend/src/app.ts","function":null,"line":25,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1358,"method":"_compile","native":false},{"column":25,"file":"/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js","function":"Module._compile","line":568,"method":"_compile","native":false},{"column":33,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js","function":"Module.m._compile","line":69,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":20,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js","function":"require.extensions..jsx.require.extensions..js","line":114,"method":".js","native":false}]}
+Error: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1145:15)
+    at Function.Module._load (node:internal/modules/cjs/loader:986:27)
+    at Module.require (node:internal/modules/cjs/loader:1233:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/app.ts:25:1)
+    at Module._compile (node:internal/modules/cjs/loader:1358:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-3476318236465865.js:114:20)
+2025-09-15 21:13:27 [ERROR]: uncaughtException: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+Error: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1145:15)
+    at Function.Module._load (node:internal/modules/cjs/loader:986:27)
+    at Module.require (node:internal/modules/cjs/loader:1233:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/app.ts:25:1)
+    at Module._compile (node:internal/modules/cjs/loader:1358:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js:114:20) {"error":{"code":"MODULE_NOT_FOUND","requireStack":["/Users/user/Desktop/jevah-app_backend/src/app.ts","/Users/user/Desktop/jevah-app_backend/src/index.ts"]},"exception":true,"date":"Mon Sep 15 2025 21:13:27 GMT+0100 (West Africa Standard Time)","process":{"pid":44117,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":106201088,"heapTotal":68657152,"heapUsed":47680152,"external":21563270,"arrayBuffers":18344588}},"os":{"loadavg":[330.296875,208.85693359375,131.2177734375],"uptime":355318},"trace":[{"column":15,"file":"node:internal/modules/cjs/loader","function":"Module._resolveFilename","line":1145,"method":"_resolveFilename","native":false},{"column":27,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":986,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false},{"column":18,"file":"node:internal/modules/helpers","function":"require","line":179,"method":null,"native":false},{"column":1,"file":"/Users/user/Desktop/jevah-app_backend/src/app.ts","function":null,"line":25,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1358,"method":"_compile","native":false},{"column":25,"file":"/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js","function":"Module._compile","line":568,"method":"_compile","native":false},{"column":33,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js","function":"Module.m._compile","line":69,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":20,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js","function":"require.extensions..jsx.require.extensions..js","line":114,"method":".js","native":false}]}
+Error: Cannot find module './routes/bookmarks.routes'
+Require stack:
+- /Users/user/Desktop/jevah-app_backend/src/app.ts
+- /Users/user/Desktop/jevah-app_backend/src/index.ts
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1145:15)
+    at Function.Module._load (node:internal/modules/cjs/loader:986:27)
+    at Module.require (node:internal/modules/cjs/loader:1233:19)
+    at require (node:internal/modules/helpers:179:18)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/app.ts:25:1)
+    at Module._compile (node:internal/modules/cjs/loader:1358:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-7369974269630124.js:114:20)
+2025-09-15 21:14:20 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 21:14:20 GMT+0100 (West Africa Standard Time)","process":{"pid":45051,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":130117632,"heapTotal":80994304,"heapUsed":56157840,"external":21751946,"arrayBuffers":18373846}},"os":{"loadavg":[335.69189453125,230.94677734375,144.30712890625],"uptime":355371},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 21:53:25 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 21:53:25 GMT+0100 (West Africa Standard Time)","process":{"pid":86492,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":129921024,"heapTotal":83939328,"heapUsed":51066024,"external":21751290,"arrayBuffers":18373190}},"os":{"loadavg":[56.34716796875,42.216796875,49.85888671875],"uptime":357714},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 21:56:13 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 21:56:13 GMT+0100 (West Africa Standard Time)","process":{"pid":89263,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":112467968,"heapTotal":80994304,"heapUsed":56211304,"external":21751946,"arrayBuffers":18373846}},"os":{"loadavg":[43.7412109375,36.1982421875,45.60205078125],"uptime":357882},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-09-15 21:57:44 [ERROR]: uncaughtException: listen EADDRINUSE: address already in use :::4000
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {"error":{"code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"::","port":4000},"exception":true,"date":"Mon Sep 15 2025 21:57:44 GMT+0100 (West Africa Standard Time)","process":{"pid":91067,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/usr/local/bin/node","version":"v20.13.1","argv":["/usr/local/bin/node","src/index.ts"],"memoryUsage":{"rss":126595072,"heapTotal":81256448,"heapUsed":55709728,"external":21751946,"arrayBuffers":18373846}},"os":{"loadavg":[60.2109375,42.68505859375,47.046875],"uptime":357973},"trace":[{"column":16,"file":"node:net","function":"Server.setupListenHandle [as _listen2]","line":1898,"method":"setupListenHandle [as _listen2]","native":false},{"column":12,"file":"node:net","function":"listenInCluster","line":1946,"method":null,"native":false},{"column":7,"file":"node:net","function":"Server.listen","line":2044,"method":"listen","native":false},{"column":12,"file":"/Users/user/Desktop/jevah-app_backend/src/index.ts","function":null,"line":31,"method":null,"native":false},{"column":5,"file":"node:internal/process/task_queues","function":"processTicksAndRejections","line":95,"method":null,"native":false}]}
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at /Users/user/Desktop/jevah-app_backend/src/index.ts:31:12
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
