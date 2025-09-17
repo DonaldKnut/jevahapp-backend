@@ -1,4 +1,8 @@
 // src/app.ts
+// Load environment variables first
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -30,6 +34,7 @@ import userProfileRoutes from "./routes/userProfile.routes";
 import healthRoutes from "./routes/health.routes";
 import enhancedMediaRoutes from "./routes/enhancedMedia.route";
 import merchandiseRoutes from "./routes/merchandise.route";
+import analyticsRoutes from "./routes/analytics.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -189,6 +194,7 @@ app.use("/api/user-profiles", userProfileRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/enhanced-media", enhancedMediaRoutes);
 app.use("/api/merchandise", merchandiseRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

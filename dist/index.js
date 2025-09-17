@@ -7,11 +7,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
 const app_1 = require("./app");
 const logger_1 = __importDefault(require("./utils/logger"));
-// Load environment variables
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
+// Environment variables are loaded in app.ts
 // Validate required environment variables
-const requiredEnvVars = ["MONGODB_URI", "PORT", "JWT_SECRET", "RESEND_API_KEY"];
+const requiredEnvVars = ["MONGODB_URI", "PORT", "JWT_SECRET"];
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 if (missingVars.length > 0) {
     logger_1.default.error(`Missing required environment variables: ${missingVars.join(", ")}`);

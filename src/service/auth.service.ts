@@ -3,11 +3,7 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
-import {
-  sendVerificationEmail,
-  sendWelcomeEmail,
-  sendResetPasswordEmail,
-} from "../utils/mailer";
+import emailService from "./email.service";
 import {
   verifyClerkToken,
   extractUserInfoFromToken,
@@ -85,7 +81,10 @@ class AuthService {
         });
 
         if (tokenData.emailVerified) {
-          await sendWelcomeEmail(user.email, user.firstName || "User");
+          await emailService.sendWelcomeEmail(
+            user.email,
+            user.firstName || "User"
+          );
         }
       } else {
         // Update existing user's Clerk ID if not set
@@ -157,7 +156,10 @@ class AuthService {
         });
 
         if (tokenData.emailVerified) {
-          await sendWelcomeEmail(user.email, user.firstName || "User");
+          await emailService.sendWelcomeEmail(
+            user.email,
+            user.firstName || "User"
+          );
         }
       } else {
         // Update existing user's Clerk ID if not set
@@ -230,7 +232,11 @@ class AuthService {
     // Send verification email BEFORE creating user record
     // This ensures we don't create orphaned user records if email fails
     try {
-      await sendVerificationEmail(email, firstName, verificationCode);
+      await emailService.sendVerificationEmail(
+        email,
+        firstName,
+        verificationCode
+      );
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
       throw new Error(
@@ -349,7 +355,7 @@ class AuthService {
     // Send welcome email BEFORE creating user record
     // This ensures we don't create orphaned user records if email fails
     try {
-      await sendWelcomeEmail(email, firstName || "Artist");
+      await emailService.sendWelcomeEmail(email, firstName || "Artist");
     } catch (emailError) {
       console.error("Failed to send welcome email:", emailError);
       throw new Error("Unable to send welcome email. Please try again later.");
@@ -534,7 +540,7 @@ class AuthService {
     user.verificationCodeExpires = undefined;
     await user.save();
 
-    await sendWelcomeEmail(user.email, user.firstName || "User");
+    await emailService.sendWelcomeEmail(user.email, user.firstName || "User");
 
     return user;
   }
@@ -554,7 +560,7 @@ class AuthService {
     await user.save();
 
     // Send reset password email with OTP code
-    await sendResetPasswordEmail(
+    await emailService.sendPasswordResetEmail(
       user.email,
       user.firstName || "User",
       resetCode
@@ -649,7 +655,7 @@ class AuthService {
     user.verificationCodeExpires = verificationCodeExpires;
     await user.save();
 
-    await sendVerificationEmail(
+    await emailService.sendVerificationEmail(
       user.email,
       user.firstName || "User",
       verificationCode

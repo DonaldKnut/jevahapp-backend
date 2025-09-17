@@ -1,20 +1,27 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const auth_middleware_1 = require("../middleware/auth.middleware");
-const role_middleware_1 = require("../middleware/role.middleware");
-const rateLimiter_1 = require("../middleware/rateLimiter");
-const analytics_controller_1 = require("../controllers/analytics.controller");
-const router = express_1.default.Router();
+import express from "express";
+import { verifyToken } from "../middleware/auth.middleware";
+import { requireAdmin } from "../middleware/role.middleware";
+import { rateLimiter } from "../middleware/rateLimiter";
+import {
+  getAnalyticsDashboard,
+  getUserEngagementMetrics,
+  getContentPerformanceMetrics,
+  getUserActivityAnalytics,
+  getAdvancedAnalytics,
+  getRealTimeAnalytics,
+  exportAnalyticsData,
+} from "../controllers/analytics.controller";
+
+const router = express.Router();
+
 // Rate limiters
-const analyticsRateLimiter = (0, rateLimiter_1.rateLimiter)(20, 60000); // 20 requests per minute
-const exportRateLimiter = (0, rateLimiter_1.rateLimiter)(5, 300000); // 5 exports per 5 minutes
+const analyticsRateLimiter = rateLimiter(20, 60000); // 20 requests per minute
+const exportRateLimiter = rateLimiter(5, 300000); // 5 exports per 5 minutes
+
 // =============================================================================
 // Analytics Routes
 // =============================================================================
+
 /**
  * @route   GET /api/analytics/dashboard
  * @desc    Get comprehensive analytics dashboard
@@ -22,7 +29,13 @@ const exportRateLimiter = (0, rateLimiter_1.rateLimiter)(5, 300000); // 5 export
  * @query   { startDate?: string, endDate?: string, timeRange?: string }
  * @returns { success: boolean, data: AnalyticsDashboard }
  */
-router.get("/dashboard", auth_middleware_1.verifyToken, analyticsRateLimiter, analytics_controller_1.getAnalyticsDashboard);
+router.get(
+  "/dashboard",
+  verifyToken,
+  analyticsRateLimiter,
+  getAnalyticsDashboard
+);
+
 /**
  * @route   GET /api/analytics/user-engagement
  * @desc    Get user engagement metrics
@@ -30,7 +43,13 @@ router.get("/dashboard", auth_middleware_1.verifyToken, analyticsRateLimiter, an
  * @query   { startDate?: string, endDate?: string }
  * @returns { success: boolean, data: UserEngagementMetrics }
  */
-router.get("/user-engagement", auth_middleware_1.verifyToken, analyticsRateLimiter, analytics_controller_1.getUserEngagementMetrics);
+router.get(
+  "/user-engagement",
+  verifyToken,
+  analyticsRateLimiter,
+  getUserEngagementMetrics
+);
+
 /**
  * @route   GET /api/analytics/content-performance
  * @desc    Get content performance metrics
@@ -38,7 +57,13 @@ router.get("/user-engagement", auth_middleware_1.verifyToken, analyticsRateLimit
  * @query   { startDate?: string, endDate?: string, userId?: string }
  * @returns { success: boolean, data: ContentPerformanceMetrics }
  */
-router.get("/content-performance", auth_middleware_1.verifyToken, analyticsRateLimiter, analytics_controller_1.getContentPerformanceMetrics);
+router.get(
+  "/content-performance",
+  verifyToken,
+  analyticsRateLimiter,
+  getContentPerformanceMetrics
+);
+
 /**
  * @route   GET /api/analytics/user-activity
  * @desc    Get user activity analytics (Admin only)
@@ -46,7 +71,14 @@ router.get("/content-performance", auth_middleware_1.verifyToken, analyticsRateL
  * @query   { startDate?: string, endDate?: string }
  * @returns { success: boolean, data: UserActivityAnalytics }
  */
-router.get("/user-activity", auth_middleware_1.verifyToken, role_middleware_1.requireAdmin, analyticsRateLimiter, analytics_controller_1.getUserActivityAnalytics);
+router.get(
+  "/user-activity",
+  verifyToken,
+  requireAdmin,
+  analyticsRateLimiter,
+  getUserActivityAnalytics
+);
+
 /**
  * @route   GET /api/analytics/advanced
  * @desc    Get advanced analytics (Admin only)
@@ -54,14 +86,27 @@ router.get("/user-activity", auth_middleware_1.verifyToken, role_middleware_1.re
  * @query   { startDate?: string, endDate?: string }
  * @returns { success: boolean, data: AdvancedAnalytics }
  */
-router.get("/advanced", auth_middleware_1.verifyToken, role_middleware_1.requireAdmin, analyticsRateLimiter, analytics_controller_1.getAdvancedAnalytics);
+router.get(
+  "/advanced",
+  verifyToken,
+  requireAdmin,
+  analyticsRateLimiter,
+  getAdvancedAnalytics
+);
+
 /**
  * @route   GET /api/analytics/real-time
  * @desc    Get real-time analytics metrics
  * @access  Protected
  * @returns { success: boolean, data: RealTimeMetrics }
  */
-router.get("/real-time", auth_middleware_1.verifyToken, analyticsRateLimiter, analytics_controller_1.getRealTimeAnalytics);
+router.get(
+  "/real-time",
+  verifyToken,
+  analyticsRateLimiter,
+  getRealTimeAnalytics
+);
+
 /**
  * @route   GET /api/analytics/export
  * @desc    Export analytics data (Admin only)
@@ -69,5 +114,12 @@ router.get("/real-time", auth_middleware_1.verifyToken, analyticsRateLimiter, an
  * @query   { format?: string, startDate?: string, endDate?: string }
  * @returns { success: boolean, data: ExportData }
  */
-router.get("/export", auth_middleware_1.verifyToken, role_middleware_1.requireAdmin, exportRateLimiter, analytics_controller_1.exportAnalyticsData);
-exports.default = router;
+router.get(
+  "/export",
+  verifyToken,
+  requireAdmin,
+  exportRateLimiter,
+  exportAnalyticsData
+);
+
+export default router;

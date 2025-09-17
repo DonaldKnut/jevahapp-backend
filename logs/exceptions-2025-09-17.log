@@ -1,0 +1,23 @@
+2025-09-17 23:51:08 [ERROR]: uncaughtException: Missing API key. Pass it to the constructor `new Resend("re_123")`
+Error: Missing API key. Pass it to the constructor `new Resend("re_123")`
+    at new Resend (/Users/user/Desktop/jevah-app_backend/node_modules/resend/dist/index.js:543:15)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/service/resendEmail.service.ts:6:16)
+    at Module._compile (node:internal/modules/cjs/loader:1469:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:114:20)
+    at require.extensions.<computed> (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:71:20)
+    at Object.nodeDevHook [as .ts] (/Users/user/Desktop/jevah-app_backend/node_modules/ts-node-dev/lib/hook.js:63:13)
+    at Module.load (node:internal/modules/cjs/loader:1288:32) {"error":{},"exception":true,"date":"Wed Sep 17 2025 23:51:08 GMT+0100 (West Africa Standard Time)","process":{"pid":72674,"uid":501,"gid":20,"cwd":"/Users/user/Desktop/jevah-app_backend","execPath":"/Users/user/.nvm/versions/node/v20.18.1/bin/node","version":"v20.18.1","argv":["/Users/user/.nvm/versions/node/v20.18.1/bin/node","src/index.ts"],"memoryUsage":{"rss":77164544,"heapTotal":58290176,"heapUsed":26131656,"external":20614605,"arrayBuffers":18300122}},"os":{"loadavg":[18.5517578125,24.78076171875,31.04638671875],"uptime":537572},"trace":[{"column":15,"file":"/Users/user/Desktop/jevah-app_backend/node_modules/resend/dist/index.js","function":"new Resend","line":543,"method":null,"native":false},{"column":16,"file":"/Users/user/Desktop/jevah-app_backend/src/service/resendEmail.service.ts","function":null,"line":6,"method":null,"native":false},{"column":14,"file":"node:internal/modules/cjs/loader","function":"Module._compile","line":1469,"method":"_compile","native":false},{"column":25,"file":"/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js","function":"Module._compile","line":568,"method":"_compile","native":false},{"column":33,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js","function":"Module.m._compile","line":69,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1548,"method":".js","native":false},{"column":20,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js","function":"require.extensions..jsx.require.extensions..js","line":114,"method":".js","native":false},{"column":20,"file":"/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js","function":"require.extensions.<computed>","line":71,"method":"<computed>","native":false},{"column":13,"file":"/Users/user/Desktop/jevah-app_backend/node_modules/ts-node-dev/lib/hook.js","function":"Object.nodeDevHook [as .ts]","line":63,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1288,"method":"load","native":false}]}
+Error: Missing API key. Pass it to the constructor `new Resend("re_123")`
+    at new Resend (/Users/user/Desktop/jevah-app_backend/node_modules/resend/dist/index.js:543:15)
+    at Object.<anonymous> (/Users/user/Desktop/jevah-app_backend/src/service/resendEmail.service.ts:6:16)
+    at Module._compile (node:internal/modules/cjs/loader:1469:14)
+    at Module._compile (/Users/user/Desktop/jevah-app_backend/node_modules/source-map-support/source-map-support.js:568:25)
+    at Module.m._compile (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:69:33)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1548:10)
+    at require.extensions..jsx.require.extensions..js (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:114:20)
+    at require.extensions.<computed> (/private/var/folders/l9/1wp23qsj3616_b0__4ljrx6m0000gn/T/ts-node-dev-hook-4805013342475464.js:71:20)
+    at Object.nodeDevHook [as .ts] (/Users/user/Desktop/jevah-app_backend/node_modules/ts-node-dev/lib/hook.js:63:13)
+    at Module.load (node:internal/modules/cjs/loader:1288:32)

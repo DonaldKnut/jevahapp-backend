@@ -9,6 +9,16 @@
             "date": 1757906753703,
             "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-09-15.log",
             "hash": "6a74b6f6d3388c7fa15d987836199f0ab299085b83fa579c677d0fbf80b2eb4e"
+        },
+        {
+            "date": 1758149467352,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-09-17.log",
+            "hash": "d81611e6a6b663a52d440eececb78af752d57385d3517b2d3a944a30e542ef41"
+        },
+        {
+            "date": 1758150702930,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/rejections-2025-09-18.log",
+            "hash": "3d39c13a805bb40f2f650b532e1d850a011eb609b8b8de8fab5ccd65ec223b7a"
         }
     ],
     "hashType": "sha256"

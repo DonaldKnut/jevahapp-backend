@@ -5,6 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.socketService = exports.server = exports.app = void 0;
 // src/app.ts
+// Load environment variables first
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
@@ -34,6 +37,7 @@ const userProfile_routes_1 = __importDefault(require("./routes/userProfile.route
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const enhancedMedia_route_1 = __importDefault(require("./routes/enhancedMedia.route"));
 const merchandise_route_1 = __importDefault(require("./routes/merchandise.route"));
+const analytics_routes_1 = __importDefault(require("./routes/analytics.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -172,6 +176,7 @@ app.use("/api/user-profiles", userProfile_routes_1.default);
 app.use("/api/health", health_routes_1.default);
 app.use("/api/enhanced-media", enhancedMedia_route_1.default);
 app.use("/api/merchandise", merchandise_route_1.default);
+app.use("/api/analytics", analytics_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

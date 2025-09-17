@@ -17,7 +17,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = require("../models/user.model");
 const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
-const mailer_1 = require("../utils/mailer");
+const email_service_1 = __importDefault(require("./email.service"));
 const clerk_1 = require("../utils/clerk");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
 const aiReengagement_service_1 = __importDefault(require("./aiReengagement.service"));
@@ -79,7 +79,7 @@ class AuthService {
                         hasConsentedToPrivacyPolicy: false,
                     });
                     if (tokenData.emailVerified) {
-                        yield (0, mailer_1.sendWelcomeEmail)(user.email, user.firstName || "User");
+                        yield email_service_1.default.sendWelcomeEmail(user.email, user.firstName || "User");
                     }
                 }
                 else {
@@ -147,7 +147,7 @@ class AuthService {
                         hasConsentedToPrivacyPolicy: false,
                     });
                     if (tokenData.emailVerified) {
-                        yield (0, mailer_1.sendWelcomeEmail)(user.email, user.firstName || "User");
+                        yield email_service_1.default.sendWelcomeEmail(user.email, user.firstName || "User");
                     }
                 }
                 else {
@@ -206,7 +206,7 @@ class AuthService {
             // Send verification email BEFORE creating user record
             // This ensures we don't create orphaned user records if email fails
             try {
-                yield (0, mailer_1.sendVerificationEmail)(email, firstName, verificationCode);
+                yield email_service_1.default.sendVerificationEmail(email, firstName, verificationCode);
             }
             catch (emailError) {
                 console.error("Failed to send verification email:", emailError);
@@ -275,7 +275,7 @@ class AuthService {
             // Send welcome email BEFORE creating user record
             // This ensures we don't create orphaned user records if email fails
             try {
-                yield (0, mailer_1.sendWelcomeEmail)(email, firstName || "Artist");
+                yield email_service_1.default.sendWelcomeEmail(email, firstName || "Artist");
             }
             catch (emailError) {
                 console.error("Failed to send welcome email:", emailError);
@@ -418,7 +418,7 @@ class AuthService {
             user.verificationCode = undefined;
             user.verificationCodeExpires = undefined;
             yield user.save();
-            yield (0, mailer_1.sendWelcomeEmail)(user.email, user.firstName || "User");
+            yield email_service_1.default.sendWelcomeEmail(user.email, user.firstName || "User");
             return user;
         });
     }
@@ -435,7 +435,7 @@ class AuthService {
             user.resetPasswordExpires = resetCodeExpires;
             yield user.save();
             // Send reset password email with OTP code
-            yield (0, mailer_1.sendResetPasswordEmail)(user.email, user.firstName || "User", resetCode);
+            yield email_service_1.default.sendPasswordResetEmail(user.email, user.firstName || "User", resetCode);
             return { message: "Password reset code sent to your email" };
         });
     }
@@ -512,7 +512,7 @@ class AuthService {
             user.verificationCode = verificationCode;
             user.verificationCodeExpires = verificationCodeExpires;
             yield user.save();
-            yield (0, mailer_1.sendVerificationEmail)(user.email, user.firstName || "User", verificationCode);
+            yield email_service_1.default.sendVerificationEmail(user.email, user.firstName || "User", verificationCode);
             return user;
         });
     }

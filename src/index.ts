@@ -4,12 +4,10 @@ import mongoose from "mongoose";
 import { server } from "./app";
 import logger from "./utils/logger";
 
-// Load environment variables
-import dotenv from "dotenv";
-dotenv.config();
+// Environment variables are loaded in app.ts
 
 // Validate required environment variables
-const requiredEnvVars = ["MONGODB_URI", "PORT", "JWT_SECRET", "RESEND_API_KEY"];
+const requiredEnvVars = ["MONGODB_URI", "PORT", "JWT_SECRET"];
 
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 
