@@ -1,10 +1,10 @@
 "use strict";
-// src/app.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.socketService = exports.server = exports.app = void 0;
+// src/app.ts
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
@@ -111,8 +111,6 @@ app.get("/", (req, res) => {
             auth: "/api/auth",
             users: "/api/users",
             media: "/api/media",
-            bookmark: "/api/bookmark",
-            content: "/api/content",
             aiChatbot: "/api/ai-chatbot",
             trending: "/api/trending",
             userProfiles: "/api/user-profiles",
@@ -165,7 +163,7 @@ app.use("/api/logs", logs_routes_1.default);
 // app.use("/api/artist", artistRoutes);
 app.use("/api/games", games_route_1.default);
 app.use("/api/payment", payment_route_1.default);
-app.use("/api/bookmark", unifiedBookmark_routes_1.default);
+app.use("/api/bookmarks", unifiedBookmark_routes_1.default);
 app.use("/api/interactions", interaction_routes_1.default);
 app.use("/api/content", contentInteraction_routes_1.default);
 app.use("/api/ai-chatbot", aiChatbot_routes_1.default);

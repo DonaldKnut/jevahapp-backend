@@ -66,18 +66,14 @@ class FileUploadService {
                     ContentLength: fileBuffer.length,
                 });
                 yield s3Client.send(putCommand);
-                // Generate presigned URL for accessing the file (valid for 24 hours)
-                const signedUrl = yield (0, s3_request_presigner_1.getSignedUrl)(s3Client, new client_s3_1.GetObjectCommand({
-                    Bucket: process.env.R2_BUCKET,
-                    Key: objectKey,
-                }), { expiresIn: 86400 } // 24 hours
-                );
+                // Generate permanent public URL instead of signed URL
+                const publicUrl = this.generatePublicUrl(objectKey);
                 console.log("Cloudflare R2 upload success:", {
-                    secure_url: signedUrl,
+                    secure_url: publicUrl,
                     objectKey,
                 });
                 return {
-                    secure_url: signedUrl,
+                    secure_url: publicUrl,
                     objectKey: objectKey,
                     version: Math.floor(Date.now() / 1000),
                 };
@@ -119,6 +115,22 @@ class FileUploadService {
             }), { expiresIn: expiresInSeconds });
             return signedUrl;
         });
+    }
+    /**
+     * Generate permanent public URL for R2 object
+     */
+    generatePublicUrl(objectKey) {
+        const customDomain = process.env.R2_CUSTOM_DOMAIN;
+        if (customDomain) {
+            return `https://${customDomain}/${objectKey}`;
+        }
+        // Fallback to Cloudflare R2 public URL format
+        const accountId = process.env.R2_ACCOUNT_ID;
+        const bucketName = process.env.R2_BUCKET;
+        if (!accountId || !bucketName) {
+            throw new Error("R2_CUSTOM_DOMAIN or R2_ACCOUNT_ID and R2_BUCKET must be configured");
+        }
+        return `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${objectKey}`;
     }
 }
 exports.default = new FileUploadService();
