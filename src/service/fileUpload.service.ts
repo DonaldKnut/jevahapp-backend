@@ -153,17 +153,10 @@ class FileUploadService {
       return `https://${customDomain}/${objectKey}`;
     }
 
-    // Fallback to Cloudflare R2 public URL format
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const bucketName = process.env.R2_BUCKET;
-
-    if (!accountId || !bucketName) {
-      throw new Error(
-        "R2_CUSTOM_DOMAIN or R2_ACCOUNT_ID and R2_BUCKET must be configured"
-      );
-    }
-
-    return `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${objectKey}`;
+    // Use the public development URL for R2 bucket
+    const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+    
+    return `${publicDevUrl}/${objectKey}`;
   }
 }
 

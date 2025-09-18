@@ -71,12 +71,10 @@ function fixUrl(brokenUrl) {
     // Format: /media-videos/filename.mp4 or /media-thumbnails/filename.jpg
     const objectKey = pathname.startsWith("/") ? pathname.slice(1) : pathname;
 
-    // Generate correct R2 URL
-    const accountId =
-      process.env.R2_ACCOUNT_ID || "870e0e55f75d0d9434531d7518f57e92";
-    const bucketName = process.env.R2_BUCKET || "jevah";
-
-    return `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${objectKey}`;
+    // Generate correct R2 public URL
+    const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+    
+    return `${publicDevUrl}/${objectKey}`;
   } catch (error) {
     console.error("Error fixing URL:", brokenUrl, error.message);
     return brokenUrl;
