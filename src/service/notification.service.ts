@@ -3,6 +3,7 @@ import { User } from "../models/user.model";
 import { Media } from "../models/media.model";
 import { Devotional } from "../models/devotional.model";
 import PushNotificationService from "./pushNotification.service";
+import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 
 export interface CreateNotificationData {
@@ -113,13 +114,21 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       }
 
+      // Prevent self-notifications
       if (
         !liker ||
         !content ||
         !contentOwner ||
         likerId === contentOwner._id.toString()
-      )
+      ) {
+        logger.info("Skipping self-notification for content like", {
+          likerId,
+          contentOwnerId: contentOwner?._id.toString(),
+          contentId,
+          contentType,
+        });
         return;
+      }
 
       await this.createNotification({
         userId: contentOwner._id.toString(),
@@ -163,13 +172,21 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       }
 
+      // Prevent self-notifications
       if (
         !commenter ||
         !content ||
         !contentOwner ||
         commenterId === contentOwner._id.toString()
-      )
+      ) {
+        logger.info("Skipping self-notification for content comment", {
+          commenterId,
+          contentOwnerId: contentOwner?._id.toString(),
+          contentId,
+          contentType,
+        });
         return;
+      }
 
       await this.createNotification({
         userId: contentOwner._id.toString(),
@@ -190,6 +207,302 @@ export class NotificationService {
       });
     } catch (error) {
       logger.error("Failed to send comment notification:", error);
+    }
+  }
+
+  /**
+   * Send notification for content share
+   */
+  static async notifyContentShare(
+    sharerId: string,
+    contentId: string,
+    contentType: string,
+    sharePlatform?: string
+  ): Promise<void> {
+    try {
+      const sharer = await User.findById(sharerId);
+      let content, contentOwner;
+
+      if (contentType === "media") {
+        content = await Media.findById(contentId);
+        contentOwner = await User.findById(content.uploadedBy);
+      } else if (contentType === "devotional") {
+        content = await Devotional.findById(contentId);
+        contentOwner = await User.findById(content.uploadedBy);
+      }
+
+      // Prevent self-notifications
+      if (
+        !sharer ||
+        !content ||
+        !contentOwner ||
+        sharerId === contentOwner._id.toString()
+      ) {
+        logger.info("Skipping self-notification for content share", {
+          sharerId,
+          contentOwnerId: contentOwner?._id.toString(),
+          contentId,
+          contentType,
+        });
+        return;
+      }
+
+      const platformText = sharePlatform ? ` on ${sharePlatform}` : "";
+
+      await this.createNotification({
+        userId: contentOwner._id.toString(),
+        type: "share",
+        title: "Content Shared",
+        message: `${sharer.firstName || sharer.email} shared your ${contentType}${platformText}`,
+        metadata: {
+          actorName: sharer.firstName || sharer.email,
+          actorAvatar: sharer.avatar,
+          contentTitle: content.title,
+          contentType,
+          thumbnailUrl: content.thumbnailUrl,
+          sharePlatform,
+          shareCount: content.shareCount || 0,
+        },
+        priority: "medium",
+        relatedId: contentId,
+      });
+    } catch (error) {
+      logger.error("Failed to send share notification:", error);
+    }
+  }
+
+  /**
+   * Send notification for content mention in comment
+   */
+  static async notifyContentMention(
+    mentionerId: string,
+    mentionedUserId: string,
+    contentId: string,
+    contentType: string,
+    commentText: string
+  ): Promise<void> {
+    try {
+      const mentioner = await User.findById(mentionerId);
+      const mentionedUser = await User.findById(mentionedUserId);
+      let content;
+
+      if (contentType === "media") {
+        content = await Media.findById(contentId);
+      } else if (contentType === "devotional") {
+        content = await Devotional.findById(contentId);
+      }
+
+      // Prevent self-mentions
+      if (
+        !mentioner ||
+        !mentionedUser ||
+        !content ||
+        mentionerId === mentionedUserId
+      ) {
+        logger.info("Skipping self-mention notification", {
+          mentionerId,
+          mentionedUserId,
+          contentId,
+          contentType,
+        });
+        return;
+      }
+
+      await this.createNotification({
+        userId: mentionedUserId,
+        type: "mention",
+        title: "You were mentioned",
+        message: `${mentioner.firstName || mentioner.email} mentioned you in a comment`,
+        metadata: {
+          actorName: mentioner.firstName || mentioner.email,
+          actorAvatar: mentioner.avatar,
+          contentTitle: content.title,
+          contentType,
+          thumbnailUrl: content.thumbnailUrl,
+          commentText: commentText.substring(0, 100),
+        },
+        priority: "high",
+        relatedId: contentId,
+      });
+    } catch (error) {
+      logger.error("Failed to send mention notification:", error);
+    }
+  }
+
+  /**
+   * Send notification for viral/trending content
+   */
+  static async notifyViralContent(
+    contentId: string,
+    contentType: string,
+    milestone: string,
+    count: number
+  ): Promise<void> {
+    try {
+      let content, contentOwner;
+
+      if (contentType === "media") {
+        content = await Media.findById(contentId);
+        contentOwner = await User.findById(content.uploadedBy);
+      } else if (contentType === "devotional") {
+        content = await Devotional.findById(contentId);
+        contentOwner = await User.findById(content.uploadedBy);
+      }
+
+      if (!content || !contentOwner) return;
+
+      const milestoneMessages = {
+        views: `${count.toLocaleString()} views`,
+        likes: `${count.toLocaleString()} likes`,
+        shares: `${count.toLocaleString()} shares`,
+        comments: `${count.toLocaleString()} comments`,
+      };
+
+      await this.createNotification({
+        userId: contentOwner._id.toString(),
+        type: "milestone",
+        title: "🎉 Content Milestone!",
+        message: `Your ${contentType} "${content.title}" reached ${milestoneMessages[milestone as keyof typeof milestoneMessages]}`,
+        metadata: {
+          contentTitle: content.title,
+          contentType,
+          thumbnailUrl: content.thumbnailUrl,
+          milestone,
+          count,
+        },
+        priority: "high",
+        relatedId: contentId,
+      });
+    } catch (error) {
+      logger.error("Failed to send viral content notification:", error);
+    }
+  }
+
+  /**
+   * Send public activity notification to followers
+   */
+  static async notifyPublicActivity(
+    actorId: string,
+    action: string,
+    targetId: string,
+    targetType: string,
+    targetTitle?: string
+  ): Promise<void> {
+    try {
+      const actor = await User.findById(actorId);
+      if (!actor) return;
+
+      // Get actor's followers
+      const followers = await User.find({
+        _id: { $in: actor.followers || [] },
+        "notificationPreferences.publicActivity": true,
+      });
+
+      if (followers.length === 0) return;
+
+      const actionMessages = {
+        like: "liked",
+        comment: "commented on",
+        share: "shared",
+        follow: "started following",
+      };
+
+      const actionText =
+        actionMessages[action as keyof typeof actionMessages] || action;
+      const targetText = targetTitle ? `"${targetTitle}"` : `a ${targetType}`;
+
+      // Send to all followers
+      const notifications = followers.map(follower => ({
+        userId: follower._id.toString(),
+        type: "public_activity",
+        title: "Activity Update",
+        message: `${actor.firstName || actor.email} ${actionText} ${targetText}`,
+        metadata: {
+          actorName: actor.firstName || actor.email,
+          actorAvatar: actor.avatar,
+          action,
+          targetType,
+          targetTitle,
+        },
+        priority: "low" as const,
+        relatedId: targetId,
+      }));
+
+      // Create notifications in batch
+      for (const notificationData of notifications) {
+        await this.createNotification(notificationData);
+      }
+
+      logger.info("Public activity notifications sent", {
+        actorId,
+        action,
+        targetType,
+        followerCount: followers.length,
+      });
+    } catch (error) {
+      logger.error("Failed to send public activity notifications:", error);
+    }
+  }
+
+  /**
+   * Get notification preferences for user
+   */
+  static async getNotificationPreferences(userId: string): Promise<any> {
+    try {
+      const user = await User.findById(userId).select("pushNotifications");
+      return user?.pushNotifications || {};
+    } catch (error) {
+      logger.error("Failed to get notification preferences:", error);
+      return {};
+    }
+  }
+
+  /**
+   * Update notification preferences for user
+   */
+  static async updateNotificationPreferences(
+    userId: string,
+    preferences: any
+  ): Promise<any> {
+    try {
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { pushNotifications: preferences } },
+        { new: true }
+      ).select("pushNotifications");
+
+      return user?.pushNotifications || {};
+    } catch (error) {
+      logger.error("Failed to update notification preferences:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get notification statistics for user
+   */
+  static async getNotificationStats(userId: string): Promise<any> {
+    try {
+      const [total, unread, byType] = await Promise.all([
+        Notification.countDocuments({ user: userId }),
+        Notification.countDocuments({ user: userId, isRead: false }),
+        Notification.aggregate([
+          { $match: { user: new Types.ObjectId(userId) } },
+          { $group: { _id: "$type", count: { $sum: 1 } } },
+        ]),
+      ]);
+
+      return {
+        total,
+        unread,
+        byType: byType.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {}),
+      };
+    } catch (error) {
+      logger.error("Failed to get notification stats:", error);
+      return { total: 0, unread: 0, byType: {} };
     }
   }
 

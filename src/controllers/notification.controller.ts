@@ -1,96 +1,320 @@
 import { Request, Response } from "express";
-import { Notification } from "../models/notification.model";
+import { NotificationService } from "../service/notification.service";
+import viralContentService from "../service/viralContent.service";
+import mentionDetectionService from "../service/mentionDetection.service";
+import contentInteractionService from "../service/contentInteraction.service";
+import logger from "../utils/logger";
 
-/**
- * Get all notifications for the current user
- */
-export const getNotifications = async (
-  request: Request,
-  response: Response
-): Promise<void> => {
-  try {
-    const userId = request.userId;
+export class NotificationController {
+  /**
+   * Get user notifications with pagination
+   */
+  async getUserNotifications(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { page = 1, limit = 20, type, unreadOnly } = req.query;
 
-    const notifications = await Notification.find({ user: userId })
-      .sort({ createdAt: -1 })
-      .limit(100);
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
 
-    response.status(200).json({
-      success: true,
-      notifications,
-    });
-  } catch (error) {
-    console.error("Get notifications error:", error);
-    response.status(500).json({
-      success: false,
-      message: "Failed to fetch notifications",
-    });
-  }
-};
+      const notifications = await NotificationService.getUserNotifications(
+        userId,
+        Number(page),
+        Number(limit),
+        type as string
+      );
 
-/**
- * Mark a single notification as read
- */
-export const markNotificationAsRead = async (
-  request: Request,
-  response: Response
-): Promise<void> => {
-  try {
-    const notificationId = request.params.id;
-    const userId = request.userId;
-
-    const notification = await Notification.findOneAndUpdate(
-      { _id: notificationId, user: userId },
-      { isRead: true },
-      { new: true }
-    );
-
-    if (!notification) {
-      response.status(404).json({
-        success: false,
-        message: "Notification not found",
+      res.json({
+        success: true,
+        data: notifications,
       });
-      return;
+    } catch (error: any) {
+      logger.error("Failed to get user notifications:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get notifications",
+      });
     }
-
-    response.status(200).json({
-      success: true,
-      message: "Notification marked as read",
-      notification,
-    });
-  } catch (error) {
-    console.error("Mark notification error:", error);
-    response.status(500).json({
-      success: false,
-      message: "Failed to mark notification",
-    });
   }
-};
 
-/**
- * Mark all notifications for the current user as read
- */
-export const markAllNotificationsAsRead = async (
-  request: Request,
-  response: Response
-): Promise<void> => {
-  try {
-    const userId = request.userId;
+  /**
+   * Mark notification as read
+   */
+  async markAsRead(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { notificationId } = req.params;
 
-    await Notification.updateMany(
-      { user: userId, isRead: false },
-      { $set: { isRead: true } }
-    );
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
 
-    response.status(200).json({
-      success: true,
-      message: "All notifications marked as read",
-    });
-  } catch (error) {
-    console.error("Mark all notifications error:", error);
-    response.status(500).json({
-      success: false,
-      message: "Failed to mark all notifications",
-    });
+      const success = await NotificationService.markAsRead(
+        notificationId,
+        userId
+      );
+
+      if (success) {
+        res.json({ success: true, message: "Notification marked as read" });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: "Notification not found",
+        });
+      }
+    } catch (error: any) {
+      logger.error("Failed to mark notification as read:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to mark notification as read",
+      });
+    }
   }
-};
+
+  /**
+   * Mark all notifications as read
+   */
+  async markAllAsRead(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const count = await NotificationService.markAllAsRead(userId);
+
+      res.json({
+        success: true,
+        message: `Marked ${count} notifications as read`,
+        count,
+      });
+    } catch (error: any) {
+      logger.error("Failed to mark all notifications as read:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to mark all notifications as read",
+      });
+    }
+  }
+
+  /**
+   * Get notification preferences
+   */
+  async getNotificationPreferences(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const preferences =
+        await NotificationService.getNotificationPreferences(userId);
+
+      res.json({
+        success: true,
+        data: preferences,
+      });
+    } catch (error: any) {
+      logger.error("Failed to get notification preferences:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get notification preferences",
+      });
+    }
+  }
+
+  /**
+   * Update notification preferences
+   */
+  async updateNotificationPreferences(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const preferences = req.body;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const updatedPreferences =
+        await NotificationService.updateNotificationPreferences(
+          userId,
+          preferences
+        );
+
+      res.json({
+        success: true,
+        data: updatedPreferences,
+        message: "Notification preferences updated",
+      });
+    } catch (error: any) {
+      logger.error("Failed to update notification preferences:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to update notification preferences",
+      });
+    }
+  }
+
+  /**
+   * Share content
+   */
+  async shareContent(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { contentId, contentType, sharePlatform } = req.body;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      if (!contentId || !contentType) {
+        res.status(400).json({
+          error: "Content ID and type are required",
+        });
+        return;
+      }
+
+      const result = await contentInteractionService.shareContent(
+        userId,
+        contentId,
+        contentType,
+        sharePlatform
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: "Content shared successfully",
+      });
+    } catch (error: any) {
+      logger.error("Failed to share content:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to share content",
+      });
+    }
+  }
+
+  /**
+   * Get trending content
+   */
+  async getTrendingContent(req: Request, res: Response): Promise<void> {
+    try {
+      const {
+        contentType = "media",
+        limit = 10,
+        timeRange = "24h",
+      } = req.query;
+
+      const trending = await viralContentService.getTrendingContent(
+        contentType as "media" | "devotional",
+        Number(limit),
+        timeRange as "24h" | "7d" | "30d"
+      );
+
+      res.json({
+        success: true,
+        data: trending,
+      });
+    } catch (error: any) {
+      logger.error("Failed to get trending content:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get trending content",
+      });
+    }
+  }
+
+  /**
+   * Get mention suggestions
+   */
+  async getMentionSuggestions(req: Request, res: Response): Promise<void> {
+    try {
+      const { q: query, limit = 10 } = req.query;
+
+      if (!query || typeof query !== "string") {
+        res.status(400).json({
+          error: "Query parameter is required",
+        });
+        return;
+      }
+
+      const suggestions = await mentionDetectionService.getMentionSuggestions(
+        query,
+        Number(limit)
+      );
+
+      res.json({
+        success: true,
+        data: suggestions,
+      });
+    } catch (error: any) {
+      logger.error("Failed to get mention suggestions:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get mention suggestions",
+      });
+    }
+  }
+
+  /**
+   * Get viral content statistics
+   */
+  async getViralStats(req: Request, res: Response): Promise<void> {
+    try {
+      const stats = await viralContentService.getViralStats();
+
+      res.json({
+        success: true,
+        data: stats,
+      });
+    } catch (error: any) {
+      logger.error("Failed to get viral stats:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get viral statistics",
+      });
+    }
+  }
+
+  /**
+   * Get notification statistics
+   */
+  async getNotificationStats(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const stats = await NotificationService.getNotificationStats(userId);
+
+      res.json({
+        success: true,
+        data: stats,
+      });
+    } catch (error: any) {
+      logger.error("Failed to get notification stats:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get notification statistics",
+      });
+    }
+  }
+}
+
+export default new NotificationController();

@@ -18,6 +18,7 @@ const user_model_1 = require("../models/user.model");
 const media_model_1 = require("../models/media.model");
 const devotional_model_1 = require("../models/devotional.model");
 const pushNotification_service_1 = __importDefault(require("./pushNotification.service"));
+const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
 class NotificationService {
     /**
@@ -102,11 +103,19 @@ class NotificationService {
                     content = yield devotional_model_1.Devotional.findById(contentId);
                     contentOwner = yield user_model_1.User.findById(content.uploadedBy);
                 }
+                // Prevent self-notifications
                 if (!liker ||
                     !content ||
                     !contentOwner ||
-                    likerId === contentOwner._id.toString())
+                    likerId === contentOwner._id.toString()) {
+                    logger_1.default.info("Skipping self-notification for content like", {
+                        likerId,
+                        contentOwnerId: contentOwner === null || contentOwner === void 0 ? void 0 : contentOwner._id.toString(),
+                        contentId,
+                        contentType,
+                    });
                     return;
+                }
                 yield this.createNotification({
                     userId: contentOwner._id.toString(),
                     type: "like",
@@ -145,11 +154,19 @@ class NotificationService {
                     content = yield devotional_model_1.Devotional.findById(contentId);
                     contentOwner = yield user_model_1.User.findById(content.uploadedBy);
                 }
+                // Prevent self-notifications
                 if (!commenter ||
                     !content ||
                     !contentOwner ||
-                    commenterId === contentOwner._id.toString())
+                    commenterId === contentOwner._id.toString()) {
+                    logger_1.default.info("Skipping self-notification for content comment", {
+                        commenterId,
+                        contentOwnerId: contentOwner === null || contentOwner === void 0 ? void 0 : contentOwner._id.toString(),
+                        contentId,
+                        contentType,
+                    });
                     return;
+                }
                 yield this.createNotification({
                     userId: contentOwner._id.toString(),
                     type: "comment",
@@ -170,6 +187,268 @@ class NotificationService {
             }
             catch (error) {
                 logger_1.default.error("Failed to send comment notification:", error);
+            }
+        });
+    }
+    /**
+     * Send notification for content share
+     */
+    static notifyContentShare(sharerId, contentId, contentType, sharePlatform) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const sharer = yield user_model_1.User.findById(sharerId);
+                let content, contentOwner;
+                if (contentType === "media") {
+                    content = yield media_model_1.Media.findById(contentId);
+                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                }
+                else if (contentType === "devotional") {
+                    content = yield devotional_model_1.Devotional.findById(contentId);
+                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                }
+                // Prevent self-notifications
+                if (!sharer ||
+                    !content ||
+                    !contentOwner ||
+                    sharerId === contentOwner._id.toString()) {
+                    logger_1.default.info("Skipping self-notification for content share", {
+                        sharerId,
+                        contentOwnerId: contentOwner === null || contentOwner === void 0 ? void 0 : contentOwner._id.toString(),
+                        contentId,
+                        contentType,
+                    });
+                    return;
+                }
+                const platformText = sharePlatform ? ` on ${sharePlatform}` : "";
+                yield this.createNotification({
+                    userId: contentOwner._id.toString(),
+                    type: "share",
+                    title: "Content Shared",
+                    message: `${sharer.firstName || sharer.email} shared your ${contentType}${platformText}`,
+                    metadata: {
+                        actorName: sharer.firstName || sharer.email,
+                        actorAvatar: sharer.avatar,
+                        contentTitle: content.title,
+                        contentType,
+                        thumbnailUrl: content.thumbnailUrl,
+                        sharePlatform,
+                        shareCount: content.shareCount || 0,
+                    },
+                    priority: "medium",
+                    relatedId: contentId,
+                });
+            }
+            catch (error) {
+                logger_1.default.error("Failed to send share notification:", error);
+            }
+        });
+    }
+    /**
+     * Send notification for content mention in comment
+     */
+    static notifyContentMention(mentionerId, mentionedUserId, contentId, contentType, commentText) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const mentioner = yield user_model_1.User.findById(mentionerId);
+                const mentionedUser = yield user_model_1.User.findById(mentionedUserId);
+                let content;
+                if (contentType === "media") {
+                    content = yield media_model_1.Media.findById(contentId);
+                }
+                else if (contentType === "devotional") {
+                    content = yield devotional_model_1.Devotional.findById(contentId);
+                }
+                // Prevent self-mentions
+                if (!mentioner ||
+                    !mentionedUser ||
+                    !content ||
+                    mentionerId === mentionedUserId) {
+                    logger_1.default.info("Skipping self-mention notification", {
+                        mentionerId,
+                        mentionedUserId,
+                        contentId,
+                        contentType,
+                    });
+                    return;
+                }
+                yield this.createNotification({
+                    userId: mentionedUserId,
+                    type: "mention",
+                    title: "You were mentioned",
+                    message: `${mentioner.firstName || mentioner.email} mentioned you in a comment`,
+                    metadata: {
+                        actorName: mentioner.firstName || mentioner.email,
+                        actorAvatar: mentioner.avatar,
+                        contentTitle: content.title,
+                        contentType,
+                        thumbnailUrl: content.thumbnailUrl,
+                        commentText: commentText.substring(0, 100),
+                    },
+                    priority: "high",
+                    relatedId: contentId,
+                });
+            }
+            catch (error) {
+                logger_1.default.error("Failed to send mention notification:", error);
+            }
+        });
+    }
+    /**
+     * Send notification for viral/trending content
+     */
+    static notifyViralContent(contentId, contentType, milestone, count) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                let content, contentOwner;
+                if (contentType === "media") {
+                    content = yield media_model_1.Media.findById(contentId);
+                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                }
+                else if (contentType === "devotional") {
+                    content = yield devotional_model_1.Devotional.findById(contentId);
+                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                }
+                if (!content || !contentOwner)
+                    return;
+                const milestoneMessages = {
+                    views: `${count.toLocaleString()} views`,
+                    likes: `${count.toLocaleString()} likes`,
+                    shares: `${count.toLocaleString()} shares`,
+                    comments: `${count.toLocaleString()} comments`,
+                };
+                yield this.createNotification({
+                    userId: contentOwner._id.toString(),
+                    type: "milestone",
+                    title: "🎉 Content Milestone!",
+                    message: `Your ${contentType} "${content.title}" reached ${milestoneMessages[milestone]}`,
+                    metadata: {
+                        contentTitle: content.title,
+                        contentType,
+                        thumbnailUrl: content.thumbnailUrl,
+                        milestone,
+                        count,
+                    },
+                    priority: "high",
+                    relatedId: contentId,
+                });
+            }
+            catch (error) {
+                logger_1.default.error("Failed to send viral content notification:", error);
+            }
+        });
+    }
+    /**
+     * Send public activity notification to followers
+     */
+    static notifyPublicActivity(actorId, action, targetId, targetType, targetTitle) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const actor = yield user_model_1.User.findById(actorId);
+                if (!actor)
+                    return;
+                // Get actor's followers
+                const followers = yield user_model_1.User.find({
+                    _id: { $in: actor.followers || [] },
+                    "notificationPreferences.publicActivity": true,
+                });
+                if (followers.length === 0)
+                    return;
+                const actionMessages = {
+                    like: "liked",
+                    comment: "commented on",
+                    share: "shared",
+                    follow: "started following",
+                };
+                const actionText = actionMessages[action] || action;
+                const targetText = targetTitle ? `"${targetTitle}"` : `a ${targetType}`;
+                // Send to all followers
+                const notifications = followers.map(follower => ({
+                    userId: follower._id.toString(),
+                    type: "public_activity",
+                    title: "Activity Update",
+                    message: `${actor.firstName || actor.email} ${actionText} ${targetText}`,
+                    metadata: {
+                        actorName: actor.firstName || actor.email,
+                        actorAvatar: actor.avatar,
+                        action,
+                        targetType,
+                        targetTitle,
+                    },
+                    priority: "low",
+                    relatedId: targetId,
+                }));
+                // Create notifications in batch
+                for (const notificationData of notifications) {
+                    yield this.createNotification(notificationData);
+                }
+                logger_1.default.info("Public activity notifications sent", {
+                    actorId,
+                    action,
+                    targetType,
+                    followerCount: followers.length,
+                });
+            }
+            catch (error) {
+                logger_1.default.error("Failed to send public activity notifications:", error);
+            }
+        });
+    }
+    /**
+     * Get notification preferences for user
+     */
+    static getNotificationPreferences(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const user = yield user_model_1.User.findById(userId).select("pushNotifications");
+                return (user === null || user === void 0 ? void 0 : user.pushNotifications) || {};
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get notification preferences:", error);
+                return {};
+            }
+        });
+    }
+    /**
+     * Update notification preferences for user
+     */
+    static updateNotificationPreferences(userId, preferences) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const user = yield user_model_1.User.findByIdAndUpdate(userId, { $set: { pushNotifications: preferences } }, { new: true }).select("pushNotifications");
+                return (user === null || user === void 0 ? void 0 : user.pushNotifications) || {};
+            }
+            catch (error) {
+                logger_1.default.error("Failed to update notification preferences:", error);
+                throw error;
+            }
+        });
+    }
+    /**
+     * Get notification statistics for user
+     */
+    static getNotificationStats(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const [total, unread, byType] = yield Promise.all([
+                    notification_model_1.Notification.countDocuments({ user: userId }),
+                    notification_model_1.Notification.countDocuments({ user: userId, isRead: false }),
+                    notification_model_1.Notification.aggregate([
+                        { $match: { user: new mongoose_1.Types.ObjectId(userId) } },
+                        { $group: { _id: "$type", count: { $sum: 1 } } },
+                    ]),
+                ]);
+                return {
+                    total,
+                    unread,
+                    byType: byType.reduce((acc, item) => {
+                        acc[item._id] = item.count;
+                        return acc;
+                    }, {}),
+                };
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get notification stats:", error);
+                return { total: 0, unread: 0, byType: {} };
             }
         });
     }

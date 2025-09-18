@@ -170,6 +170,11 @@ export interface IUser {
       securityAlerts?: boolean;
       liveStreams?: boolean;
       newMessages?: boolean;
+      // New TikTok-like preferences
+      mentions?: boolean;
+      milestones?: boolean;
+      publicActivity?: boolean;
+      viralContent?: boolean;
     };
   };
 
@@ -388,6 +393,11 @@ const userSchema = new Schema<IUserDocument>(
         securityAlerts: { type: Boolean, default: true },
         liveStreams: { type: Boolean, default: true },
         newMessages: { type: Boolean, default: true },
+        // New TikTok-like preferences
+        mentions: { type: Boolean, default: true },
+        milestones: { type: Boolean, default: true },
+        publicActivity: { type: Boolean, default: false }, // Default off for privacy
+        viralContent: { type: Boolean, default: true },
       },
     },
 

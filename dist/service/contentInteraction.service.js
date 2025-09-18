@@ -20,6 +20,8 @@ const user_model_1 = require("../models/user.model");
 const devotional_model_1 = require("../models/devotional.model");
 const devotionalLike_model_1 = require("../models/devotionalLike.model");
 const notification_service_1 = require("./notification.service");
+const viralContent_service_1 = __importDefault(require("./viralContent.service"));
+const mentionDetection_service_1 = __importDefault(require("./mentionDetection.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
 class ContentInteractionService {
     /**
@@ -97,6 +99,11 @@ class ContentInteractionService {
                 if (liked) {
                     try {
                         yield notification_service_1.NotificationService.notifyContentLike(userId, contentId, contentType);
+                        // Send public activity notification to followers
+                        const contentData = yield this.getContentById(contentId, contentType);
+                        yield notification_service_1.NotificationService.notifyPublicActivity(userId, "like", contentId, contentType, contentData === null || contentData === void 0 ? void 0 : contentData.title);
+                        // Check for viral milestones
+                        yield viralContent_service_1.default.checkViralMilestones(contentId, contentType);
                         logger_1.default.info("Like notification sent", {
                             userId,
                             contentId,
@@ -142,6 +149,75 @@ class ContentInteractionService {
         });
     }
     /**
+     * Share content
+     */
+    shareContent(userId, contentId, contentType, sharePlatform) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const session = yield media_model_1.Media.startSession();
+                try {
+                    let shared = false;
+                    let shareCount = 0;
+                    yield session.withTransaction(() => __awaiter(this, void 0, void 0, function* () {
+                        // Verify content exists
+                        const contentExists = yield this.verifyContentExists(contentId, contentType, session);
+                        if (!contentExists) {
+                            throw new Error(`Content not found: ${contentType} with ID ${contentId}`);
+                        }
+                        // Increment share count
+                        if (contentType === "media") {
+                            yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { shareCount: 1 } }, { session });
+                        }
+                        else if (contentType === "devotional") {
+                            yield devotional_model_1.Devotional.findByIdAndUpdate(contentId, { $inc: { shareCount: 1 } }, { session });
+                        }
+                        shared = true;
+                    }));
+                    // Get updated share count
+                    shareCount = yield this.getShareCount(contentId, contentType);
+                    // Send notifications
+                    if (shared) {
+                        try {
+                            yield notification_service_1.NotificationService.notifyContentShare(userId, contentId, contentType, sharePlatform);
+                            // Send public activity notification to followers
+                            const content = yield this.getContentById(contentId, contentType);
+                            yield notification_service_1.NotificationService.notifyPublicActivity(userId, "share", contentId, contentType, content === null || content === void 0 ? void 0 : content.title);
+                            // Check for viral milestones
+                            yield viralContent_service_1.default.checkViralMilestones(contentId, contentType);
+                            logger_1.default.info("Share notification sent", {
+                                userId,
+                                contentId,
+                                contentType,
+                                sharePlatform,
+                            });
+                        }
+                        catch (notificationError) {
+                            logger_1.default.error("Failed to send share notification", {
+                                error: notificationError.message,
+                                userId,
+                                contentId,
+                                contentType,
+                            });
+                        }
+                    }
+                    return { shared, shareCount };
+                }
+                finally {
+                    session.endSession();
+                }
+            }
+            catch (error) {
+                logger_1.default.error("Share content failed", {
+                    error: error.message,
+                    userId,
+                    contentId,
+                    contentType,
+                });
+                throw error;
+            }
+        });
+    }
+    /**
      * Add comment to any content type
      */
     addComment(userId, contentId, contentType, content, parentCommentId) {
@@ -177,6 +253,31 @@ class ContentInteractionService {
                     }
                     return comment[0];
                 }));
+                // Send notification if comment was added
+                try {
+                    yield notification_service_1.NotificationService.notifyContentComment(userId, contentId, contentType, content);
+                    // Send public activity notification to followers
+                    const contentData = yield this.getContentById(contentId, contentType);
+                    yield notification_service_1.NotificationService.notifyPublicActivity(userId, "comment", contentId, contentType, contentData === null || contentData === void 0 ? void 0 : contentData.title);
+                    // Detect and notify mentions
+                    yield mentionDetection_service_1.default.detectAndNotifyMentions(userId, contentId, contentType, content);
+                    // Check for viral milestones
+                    yield viralContent_service_1.default.checkViralMilestones(contentId, contentType);
+                    logger_1.default.info("Comment notification sent", {
+                        userId,
+                        contentId,
+                        contentType,
+                    });
+                }
+                catch (notificationError) {
+                    // Don't fail the comment operation if notification fails
+                    logger_1.default.error("Failed to send comment notification", {
+                        error: notificationError.message,
+                        userId,
+                        contentId,
+                        contentType,
+                    });
+                }
                 // Populate user info for response
                 const populatedComment = yield mediaInteraction_model_1.MediaInteraction.findById(comment._id)
                     .populate("user", "firstName lastName avatar")
@@ -712,6 +813,36 @@ class ContentInteractionService {
                 }, { isRemoved: false }, { upsert: true, session });
                 return true;
             }
+        });
+    }
+    /**
+     * Get share count for content
+     */
+    getShareCount(contentId, contentType) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (contentType === "media") {
+                const media = yield media_model_1.Media.findById(contentId);
+                return (media === null || media === void 0 ? void 0 : media.shareCount) || 0;
+            }
+            else if (contentType === "devotional") {
+                const devotional = yield devotional_model_1.Devotional.findById(contentId);
+                return (devotional === null || devotional === void 0 ? void 0 : devotional.shareCount) || 0;
+            }
+            return 0;
+        });
+    }
+    /**
+     * Get content by ID
+     */
+    getContentById(contentId, contentType) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (contentType === "media") {
+                return yield media_model_1.Media.findById(contentId);
+            }
+            else if (contentType === "devotional") {
+                return yield devotional_model_1.Devotional.findById(contentId);
+            }
+            return null;
         });
     }
 }

@@ -57,13 +57,40 @@ const notificationSchema = new mongoose_1.Schema({
     },
     type: {
         type: String,
-        enum: ["media", "devotional", "system"],
+        enum: [
+            "follow",
+            "like",
+            "comment",
+            "share",
+            "mention",
+            "download",
+            "bookmark",
+            "milestone",
+            "public_activity",
+            "system",
+            "security",
+            "live_stream",
+            "merch_purchase",
+        ],
+        required: true,
+    },
+    metadata: {
+        type: mongoose_1.Schema.Types.Mixed,
+        default: {},
+    },
+    priority: {
+        type: String,
+        enum: ["low", "medium", "high"],
+        default: "medium",
     },
     relatedId: {
         type: mongoose_1.Schema.Types.ObjectId,
     },
+    expiresAt: {
+        type: Date,
+    },
 }, {
-    timestamps: { createdAt: true, updatedAt: false },
+    timestamps: true,
 });
 // Export model
 exports.Notification = mongoose_1.default.models.Notification ||

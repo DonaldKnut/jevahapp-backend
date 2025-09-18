@@ -18,7 +18,6 @@ const user_route_1 = __importDefault(require("./routes/user.route"));
 const auth_route_1 = __importDefault(require("./routes/auth.route"));
 const location_routes_1 = __importDefault(require("./routes/location.routes"));
 const media_route_1 = __importDefault(require("./routes/media.route"));
-const notifications_routes_1 = __importDefault(require("./routes/notifications.routes"));
 const pushNotification_routes_1 = __importDefault(require("./routes/pushNotification.routes"));
 const aiReengagement_routes_1 = __importDefault(require("./routes/aiReengagement.routes"));
 const bibleFacts_routes_1 = __importDefault(require("./routes/bibleFacts.routes"));
@@ -38,6 +37,7 @@ const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const enhancedMedia_route_1 = __importDefault(require("./routes/enhancedMedia.route"));
 const merchandise_route_1 = __importDefault(require("./routes/merchandise.route"));
 const analytics_routes_1 = __importDefault(require("./routes/analytics.routes"));
+const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -157,7 +157,7 @@ app.use("/api/users", user_route_1.default);
 app.use("/api/auth", auth_route_1.default);
 app.use("/api/location", location_routes_1.default);
 app.use("/api/media", media_route_1.default);
-app.use("/api/notifications", notifications_routes_1.default);
+app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/push-notifications", pushNotification_routes_1.default);
 app.use("/api/ai-reengagement", aiReengagement_routes_1.default);
 app.use("/api/bible-facts", bibleFacts_routes_1.default);
@@ -177,6 +177,7 @@ app.use("/api/health", health_routes_1.default);
 app.use("/api/enhanced-media", enhancedMedia_route_1.default);
 app.use("/api/merchandise", merchandise_route_1.default);
 app.use("/api/analytics", analytics_routes_1.default);
+app.use("/api/notifications", notification_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

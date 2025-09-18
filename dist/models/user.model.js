@@ -219,6 +219,11 @@ const userSchema = new mongoose_1.Schema({
             securityAlerts: { type: Boolean, default: true },
             liveStreams: { type: Boolean, default: true },
             newMessages: { type: Boolean, default: true },
+            // New TikTok-like preferences
+            mentions: { type: Boolean, default: true },
+            milestones: { type: Boolean, default: true },
+            publicActivity: { type: Boolean, default: false }, // Default off for privacy
+            viralContent: { type: Boolean, default: true },
         },
     },
     // Security and audit fields

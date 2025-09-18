@@ -15,7 +15,6 @@ import userRoutes from "./routes/user.route";
 import authRoutes from "./routes/auth.route";
 import locationRoutes from "./routes/location.routes";
 import mediaRoutes from "./routes/media.route";
-import notificationsRoutes from "./routes/notifications.routes";
 import pushNotificationRoutes from "./routes/pushNotification.routes";
 import aiReengagementRoutes from "./routes/aiReengagement.routes";
 import bibleFactsRoutes from "./routes/bibleFacts.routes";
@@ -35,6 +34,7 @@ import healthRoutes from "./routes/health.routes";
 import enhancedMediaRoutes from "./routes/enhancedMedia.route";
 import merchandiseRoutes from "./routes/merchandise.route";
 import analyticsRoutes from "./routes/analytics.routes";
+import notificationRoutes from "./routes/notification.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -175,7 +175,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/location", locationRoutes);
 app.use("/api/media", mediaRoutes);
-app.use("/api/notifications", notificationsRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/push-notifications", pushNotificationRoutes);
 app.use("/api/ai-reengagement", aiReengagementRoutes);
 app.use("/api/bible-facts", bibleFactsRoutes);
@@ -195,6 +195,7 @@ app.use("/api/health", healthRoutes);
 app.use("/api/enhanced-media", enhancedMediaRoutes);
 app.use("/api/merchandise", merchandiseRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

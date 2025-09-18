@@ -5,6 +5,8 @@ import { User } from "../models/user.model";
 import { Devotional } from "../models/devotional.model";
 import { DevotionalLike } from "../models/devotionalLike.model";
 import { NotificationService } from "./notification.service";
+import viralContentService from "./viralContent.service";
+import mentionDetectionService from "./mentionDetection.service";
 import logger from "../utils/logger";
 
 export interface ContentInteractionInput {
@@ -155,6 +157,22 @@ export class ContentInteractionService {
             contentType
           );
 
+          // Send public activity notification to followers
+          const contentData = await this.getContentById(contentId, contentType);
+          await NotificationService.notifyPublicActivity(
+            userId,
+            "like",
+            contentId,
+            contentType,
+            contentData?.title
+          );
+
+          // Check for viral milestones
+          await viralContentService.checkViralMilestones(
+            contentId,
+            contentType as "media" | "devotional"
+          );
+
           logger.info("Like notification sent", {
             userId,
             contentId,
@@ -195,6 +213,114 @@ export class ContentInteractionService {
       throw error;
     } finally {
       session.endSession();
+    }
+  }
+
+  /**
+   * Share content
+   */
+  async shareContent(
+    userId: string,
+    contentId: string,
+    contentType: string,
+    sharePlatform?: string
+  ): Promise<{ shared: boolean; shareCount: number }> {
+    try {
+      const session = await Media.startSession();
+
+      try {
+        let shared = false;
+        let shareCount = 0;
+
+        await session.withTransaction(async () => {
+          // Verify content exists
+          const contentExists = await this.verifyContentExists(
+            contentId,
+            contentType,
+            session
+          );
+
+          if (!contentExists) {
+            throw new Error(
+              `Content not found: ${contentType} with ID ${contentId}`
+            );
+          }
+
+          // Increment share count
+          if (contentType === "media") {
+            await Media.findByIdAndUpdate(
+              contentId,
+              { $inc: { shareCount: 1 } },
+              { session }
+            );
+          } else if (contentType === "devotional") {
+            await Devotional.findByIdAndUpdate(
+              contentId,
+              { $inc: { shareCount: 1 } },
+              { session }
+            );
+          }
+
+          shared = true;
+        });
+
+        // Get updated share count
+        shareCount = await this.getShareCount(contentId, contentType);
+
+        // Send notifications
+        if (shared) {
+          try {
+            await NotificationService.notifyContentShare(
+              userId,
+              contentId,
+              contentType,
+              sharePlatform
+            );
+
+            // Send public activity notification to followers
+            const content = await this.getContentById(contentId, contentType);
+            await NotificationService.notifyPublicActivity(
+              userId,
+              "share",
+              contentId,
+              contentType,
+              content?.title
+            );
+
+            // Check for viral milestones
+            await viralContentService.checkViralMilestones(
+              contentId,
+              contentType as "media" | "devotional"
+            );
+
+            logger.info("Share notification sent", {
+              userId,
+              contentId,
+              contentType,
+              sharePlatform,
+            });
+          } catch (notificationError: any) {
+            logger.error("Failed to send share notification", {
+              error: notificationError.message,
+              userId,
+              contentId,
+              contentType,
+            });
+          }
+        }
+
+        return { shared, shareCount };
+      } finally {
+        session.endSession();
+      }
+    } catch (error: any) {
+      logger.error("Share content failed", {
+        error: error.message,
+        userId,
+        contentId,
+        contentType,
+      });
+      throw error;
     }
   }
 
@@ -252,6 +378,54 @@ export class ContentInteractionService {
 
         return comment[0];
       });
+
+      // Send notification if comment was added
+      try {
+        await NotificationService.notifyContentComment(
+          userId,
+          contentId,
+          contentType,
+          content
+        );
+
+        // Send public activity notification to followers
+        const contentData = await this.getContentById(contentId, contentType);
+        await NotificationService.notifyPublicActivity(
+          userId,
+          "comment",
+          contentId,
+          contentType,
+          contentData?.title
+        );
+
+        // Detect and notify mentions
+        await mentionDetectionService.detectAndNotifyMentions(
+          userId,
+          contentId,
+          contentType,
+          content
+        );
+
+        // Check for viral milestones
+        await viralContentService.checkViralMilestones(
+          contentId,
+          contentType as "media" | "devotional"
+        );
+
+        logger.info("Comment notification sent", {
+          userId,
+          contentId,
+          contentType,
+        });
+      } catch (notificationError: any) {
+        // Don't fail the comment operation if notification fails
+        logger.error("Failed to send comment notification", {
+          error: notificationError.message,
+          userId,
+          contentId,
+          contentType,
+        });
+      }
 
       // Populate user info for response
       const populatedComment = await MediaInteraction.findById(comment._id)
@@ -927,6 +1101,38 @@ export class ContentInteractionService {
       );
       return true;
     }
+  }
+
+  /**
+   * Get share count for content
+   */
+  private async getShareCount(
+    contentId: string,
+    contentType: string
+  ): Promise<number> {
+    if (contentType === "media") {
+      const media = await Media.findById(contentId);
+      return media?.shareCount || 0;
+    } else if (contentType === "devotional") {
+      const devotional = await Devotional.findById(contentId);
+      return devotional?.shareCount || 0;
+    }
+    return 0;
+  }
+
+  /**
+   * Get content by ID
+   */
+  private async getContentById(
+    contentId: string,
+    contentType: string
+  ): Promise<any> {
+    if (contentType === "media") {
+      return await Media.findById(contentId);
+    } else if (contentType === "devotional") {
+      return await Devotional.findById(contentId);
+    }
+    return null;
   }
 }
 
