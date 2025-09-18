@@ -153,10 +153,10 @@ class FileUploadService {
       return `https://${customDomain}/${objectKey}`;
     }
 
-    // Use the public development URL for R2 bucket
+    // Use the same format as seeded content: pub-xxx.r2.dev/jevah/...
     const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
     
-    return `${publicDevUrl}/${objectKey}`;
+    return `${publicDevUrl}/jevah/${objectKey}`;
   }
 }
 

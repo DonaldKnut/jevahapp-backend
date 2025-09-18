@@ -15,13 +15,13 @@ const testCases = [
     name: "Broken URL (your uploaded content)",
     url: "https://bDp9npjM_CVBCOUtyrsgKjLle3shpuJ64W_y7DYY/media-videos/1758170178011-alfm5b395.mp4",
     expected:
-      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/media-videos/1758170178011-alfm5b395.mp4",
+      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-videos/1758170178011-alfm5b395.mp4",
   },
   {
     name: "Broken thumbnail URL",
     url: "https://bDp9npjM_CVBCOUtyrsgKjLle3shpuJ64W_y7DYY/media-thumbnails/1758170179113-ytrt4c0n2.jpg",
     expected:
-      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/media-thumbnails/1758170179113-ytrt4c0n2.jpg",
+      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/1758170179113-ytrt4c0n2.jpg",
   },
   {
     name: "Good URL (seeded content)",
