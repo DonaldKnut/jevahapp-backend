@@ -1169,11 +1169,8 @@ export class MediaService {
         throw new Error("Invalid media file URL");
       }
 
-      // Generate signed URL valid for 24 hours
-      const downloadUrl = await fileUploadService.getPresignedGetUrl(
-        objectKey,
-        86400
-      );
+      // Use direct public URL instead of signed URL
+      const downloadUrl = media.fileUrl;
 
       // Add to user's offline downloads
       await this.addToOfflineDownloads(userId, mediaId, {

@@ -1734,72 +1734,31 @@ export const getDefaultContent = async (
       .populate("uploadedBy", "firstName lastName username email avatar")
       .lean();
 
-    // Convert stored R2 object URLs to short-lived presigned URLs for private access
-    const toObjectKey = (urlString?: string): string | null => {
-      if (!urlString) return null;
-      try {
-        const u = new URL(urlString);
-        // Expected: https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
-        // Extract pathname and drop leading '/<bucket>/' segment if present
-        let pathname = u.pathname; // starts with '/'
-        if (pathname.startsWith("/")) pathname = pathname.slice(1);
-        const bucket = process.env.R2_BUCKET;
-        if (bucket && pathname.startsWith(bucket + "/")) {
-          return pathname.slice(bucket.length + 1);
-        }
-        // If bucket not included, return remaining path
-        return pathname;
-      } catch (_e) {
-        return null;
-      }
-    };
-
-    // Lazy import to avoid circular deps
-    const { default: fileUploadService } = await import(
-      "../service/fileUpload.service"
-    );
-
-    const content = await Promise.all(
-      defaultContentRaw.map(async (item: any) => {
-        const objectKey = toObjectKey(item.fileUrl);
-        let mediaUrl = item.fileUrl;
-
-        if (objectKey) {
-          try {
-            const signed = await fileUploadService.getPresignedGetUrl(
-              objectKey,
-              3600
-            );
-            mediaUrl = signed;
-          } catch (_e) {
-            // fallback to stored URL if signing fails
-          }
-        }
-
-        // Transform to frontend-expected format
-        return {
-          _id: item._id,
-          title: item.title || "Untitled",
-          description: item.description || "",
-          mediaUrl: mediaUrl,
-          thumbnailUrl: item.thumbnailUrl || item.fileUrl,
-          contentType: mapContentType(item.contentType),
-          duration: item.duration || null,
-          author: {
-            _id: item.uploadedBy?._id || item.uploadedBy,
-            firstName: item.uploadedBy?.firstName || "Unknown",
-            lastName: item.uploadedBy?.lastName || "User",
-            avatar: item.uploadedBy?.avatar || null,
-          },
-          likeCount: item.likeCount || 0,
-          commentCount: item.commentCount || 0,
-          shareCount: item.shareCount || 0,
-          viewCount: item.viewCount || 0,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      })
-    );
+    // Use direct public URLs - no need for signed URL generation
+    const content = defaultContentRaw.map((item: any) => {
+      // Transform to frontend-expected format
+      return {
+        _id: item._id,
+        title: item.title || "Untitled",
+        description: item.description || "",
+        mediaUrl: item.fileUrl, // Use direct public URL
+        thumbnailUrl: item.thumbnailUrl || item.fileUrl, // Use direct public URL
+        contentType: mapContentType(item.contentType),
+        duration: item.duration || null,
+        author: {
+          _id: item.uploadedBy?._id || item.uploadedBy,
+          firstName: item.uploadedBy?.firstName || "Unknown",
+          lastName: item.uploadedBy?.lastName || "User",
+          avatar: item.uploadedBy?.avatar || null,
+        },
+        likeCount: item.likeCount || 0,
+        commentCount: item.commentCount || 0,
+        shareCount: item.shareCount || 0,
+        viewCount: item.viewCount || 0,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      };
+    });
 
     response.status(200).json({
       success: true,
