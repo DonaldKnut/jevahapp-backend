@@ -151,11 +151,15 @@ export class ContentInteractionService {
       // Send notification if content was liked (not unliked)
       if (liked) {
         try {
-          await NotificationService.notifyContentLike(
-            userId,
-            contentId,
-            contentType
-          );
+          if (contentType === "artist") {
+            await NotificationService.notifyUserFollow(userId, contentId);
+          } else {
+            await NotificationService.notifyContentLike(
+              userId,
+              contentId,
+              contentType
+            );
+          }
 
           // Send public activity notification to followers
           const contentData = await this.getContentById(contentId, contentType);
@@ -408,6 +412,44 @@ export class ContentInteractionService {
           contentType,
           content
         );
+
+        // If this is a reply to an existing comment, notify the original commenter
+        if (parentCommentId && Types.ObjectId.isValid(parentCommentId)) {
+          try {
+            const parentComment =
+              await MediaInteraction.findById(parentCommentId).select("user");
+            if (parentComment && parentComment.user.toString() !== userId) {
+              const replier = await User.findById(userId).select(
+                "firstName lastName email"
+              );
+              const replierName =
+                (replier?.firstName || "").toString() ||
+                replier?.email ||
+                "Someone";
+
+              await NotificationService.createNotification({
+                userId: parentComment.user.toString(),
+                type: "reply" as any,
+                title: "New Reply",
+                message: `${replierName} replied to your comment`,
+                metadata: {
+                  contentId,
+                  contentType,
+                  parentCommentId,
+                  replyPreview: content.substring(0, 100),
+                },
+                priority: "medium",
+              } as any);
+            }
+          } catch (replyNotifyError: any) {
+            logger.warn("Failed to send reply notification", {
+              error: replyNotifyError?.message,
+              userId,
+              contentId,
+              parentCommentId,
+            });
+          }
+        }
 
         // Send public activity notification to followers
         const contentData = await this.getContentById(contentId, contentType);

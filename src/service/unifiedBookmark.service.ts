@@ -2,6 +2,7 @@ import mongoose, { Types, ClientSession } from "mongoose";
 import { Bookmark } from "../models/bookmark.model";
 import { Media } from "../models/media.model";
 import logger from "../utils/logger";
+import { NotificationService } from "./notification.service";
 
 export interface BookmarkResult {
   bookmarked: boolean;
@@ -76,6 +77,24 @@ export class UnifiedBookmarkService {
       });
 
       const bookmarkCount = await this.getBookmarkCount(mediaId);
+
+      // Send notification only when a bookmark is added (not removed)
+      if (bookmarked) {
+        try {
+          await NotificationService.notifyContentBookmark(
+            userId,
+            mediaId,
+            "media"
+          );
+        } catch (notificationError: any) {
+          // Do not fail the operation if notification sending fails
+          logger.warn("Failed to send bookmark notification", {
+            error: notificationError?.message,
+            userId,
+            mediaId,
+          });
+        }
+      }
 
       logger.info("Toggle bookmark completed", {
         userId,
@@ -304,10 +323,24 @@ export class UnifiedBookmarkService {
             });
 
             if (!existing) {
-              await Bookmark.create({
+              const created = await Bookmark.create({
                 user: new Types.ObjectId(userId),
                 media: new Types.ObjectId(mediaId),
               });
+              // Fire-and-forget notification for each added bookmark
+              try {
+                await NotificationService.notifyContentBookmark(
+                  userId,
+                  mediaId,
+                  "media"
+                );
+              } catch (e: any) {
+                logger.warn("Bulk bookmark notify failed", {
+                  userId,
+                  mediaId,
+                  error: e?.message,
+                });
+              }
             }
           } else {
             await Bookmark.findOneAndDelete({

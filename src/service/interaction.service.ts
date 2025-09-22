@@ -5,6 +5,7 @@ import { User } from "../models/user.model";
 import { Message } from "../models/message.model";
 import { Conversation } from "../models/conversation.model";
 import logger from "../utils/logger";
+import { NotificationService } from "./notification.service";
 
 export interface ReactionInput {
   userId: string;
@@ -147,6 +148,35 @@ export class InteractionService {
         .populate("sender", "firstName lastName avatar")
         .populate("recipient", "firstName lastName avatar")
         .populate("replyTo", "content sender");
+
+      // Notify recipient of new message
+      try {
+        const sender = await User.findById(data.senderId).select(
+          "firstName lastName email"
+        );
+        const preview = data.content.substring(0, 100);
+        await NotificationService.createNotification({
+          userId: data.recipientId,
+          type: "message" as any,
+          title: "New Message",
+          message: `${sender?.firstName || sender?.email || "Someone"}: ${preview}`,
+          metadata: {
+            conversationId: (
+              await Conversation.findOne({
+                participants: { $all: [data.senderId, data.recipientId] },
+                isGroupChat: false,
+              })
+            )?._id,
+          },
+          priority: "low",
+        } as any);
+      } catch (msgNotifyError: any) {
+        logger.warn("Failed to send message notification", {
+          error: msgNotifyError?.message,
+          senderId: data.senderId,
+          recipientId: data.recipientId,
+        });
+      }
 
       return populatedMessage;
     } finally {

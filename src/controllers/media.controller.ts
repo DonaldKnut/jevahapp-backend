@@ -5,6 +5,7 @@ import { Types } from "mongoose";
 import { Media } from "../models/media.model";
 import contaboStreamingService from "../service/contaboStreaming.service";
 import liveRecordingService from "../service/liveRecording.service";
+import { NotificationService } from "../service/notification.service";
 
 interface UploadMediaRequestBody {
   title: string;
@@ -768,6 +769,17 @@ export const downloadMedia = async (
       mediaId: id,
       fileSize,
     });
+
+    // Notify content owner about the download (if not self)
+    try {
+      await NotificationService.notifyContentDownload(
+        userIdentifier,
+        id,
+        "media"
+      );
+    } catch (notifyError) {
+      // Non-blocking
+    }
 
     response.status(200).json({
       success: true,

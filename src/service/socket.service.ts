@@ -6,6 +6,7 @@ import { Media } from "../models/media.model";
 import { MediaInteraction } from "../models/mediaInteraction.model";
 import { MediaUserAction } from "../models/mediaUserAction.model";
 import logger from "../utils/logger";
+import { NotificationService } from "./notification.service";
 
 /**
  * Interface for authenticated socket user
@@ -64,6 +65,10 @@ class SocketService {
 
     this.setupMiddleware();
     this.setupEventHandlers();
+    // Wire socket service into notification service for real-time delivery
+    try {
+      (NotificationService as any).setSocketService?.(this);
+    } catch {}
     logger.info("Socket.IO service initialized");
   }
 
@@ -283,18 +288,25 @@ class SocketService {
   /**
    * Helper method to get content by ID and type
    */
-  private async getContentById(contentId: string, contentType: string): Promise<any> {
+  private async getContentById(
+    contentId: string,
+    contentType: string
+  ): Promise<any> {
     try {
       // For now, only handle media content type
       // Other content types can be added as needed
-      if (contentType === 'media') {
+      if (contentType === "media") {
         return await Media.findById(contentId).lean();
       }
-      
+
       // Default to media for other content types
       return await Media.findById(contentId).lean();
     } catch (error) {
-      logger.error('Error getting content by ID', { contentId, contentType, error });
+      logger.error("Error getting content by ID", {
+        contentId,
+        contentType,
+        error,
+      });
       return null;
     }
   }
@@ -920,7 +932,7 @@ class SocketService {
 
         // Get updated counts
         const content = await this.getContentById(contentId, contentType);
-        
+
         // Broadcast to all users viewing this content
         this.io
           .to(`content:${contentType}:${contentId}`)
@@ -938,19 +950,20 @@ class SocketService {
           });
 
         // Broadcast real-time count updates
-        this.io
-          .to(`content:${contentType}:${contentId}`)
-          .emit("count-update", {
-            contentId,
-            contentType,
-            likeCount: content.likeCount || 0,
-            commentCount: content.commentCount || 0,
-            shareCount: content.shareCount || 0,
-            viewCount: content.viewCount || 0,
-          });
+        this.io.to(`content:${contentType}:${contentId}`).emit("count-update", {
+          contentId,
+          contentType,
+          likeCount: content.likeCount || 0,
+          commentCount: content.commentCount || 0,
+          shareCount: content.shareCount || 0,
+          viewCount: content.viewCount || 0,
+        });
 
         // Send notification to content owner if different from user
-        if (content.uploadedBy && content.uploadedBy.toString() !== user.userId) {
+        if (
+          content.uploadedBy &&
+          content.uploadedBy.toString() !== user.userId
+        ) {
           this.io
             .to(`user:${content.uploadedBy}`)
             .emit("new-like-notification", {
@@ -995,7 +1008,12 @@ class SocketService {
     }
   ): Promise<void> {
     try {
-      const { contentId, contentType, content: commentContent, parentCommentId } = data;
+      const {
+        contentId,
+        contentType,
+        content: commentContent,
+        parentCommentId,
+      } = data;
 
       // Use content interaction service
       const contentInteractionService = await import(
@@ -1032,16 +1050,14 @@ class SocketService {
         .emit("content-comment", commentData);
 
       // Broadcast real-time count updates
-      this.io
-        .to(`content:${contentType}:${contentId}`)
-        .emit("count-update", {
-          contentId,
-          contentType,
-          likeCount: content.likeCount || 0,
-          commentCount: content.commentCount || 0,
-          shareCount: content.shareCount || 0,
-          viewCount: content.viewCount || 0,
-        });
+      this.io.to(`content:${contentType}:${contentId}`).emit("count-update", {
+        contentId,
+        contentType,
+        likeCount: content.likeCount || 0,
+        commentCount: content.commentCount || 0,
+        shareCount: content.shareCount || 0,
+        viewCount: content.viewCount || 0,
+      });
 
       // Send notification to content owner if different from user
       if (content.uploadedBy && content.uploadedBy.toString() !== user.userId) {
