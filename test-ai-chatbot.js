@@ -11,7 +11,11 @@ async function testAIChatbot() {
     try {
       const infoResponse = await axios.get(`${BASE_URL}/ai-chatbot/info`);
       console.log("✅ Chatbot info endpoint working:", infoResponse.status);
-      console.log("📋 Chatbot capabilities:", infoResponse.data.data.capabilities.length, "features");
+      console.log(
+        "📋 Chatbot capabilities:",
+        infoResponse.data.data.capabilities.length,
+        "features"
+      );
     } catch (error) {
       throw error;
     }
@@ -20,11 +24,13 @@ async function testAIChatbot() {
     console.log("2. Testing message endpoint (should fail without auth)...");
     try {
       await axios.post(`${BASE_URL}/ai-chatbot/message`, {
-        message: "Hello, I need biblical guidance"
+        message: "Hello, I need biblical guidance",
       });
     } catch (error) {
       if (error.response?.status === 401) {
-        console.log("✅ Message endpoint working (correctly requires authentication)");
+        console.log(
+          "✅ Message endpoint working (correctly requires authentication)"
+        );
       } else {
         throw error;
       }
@@ -32,11 +38,21 @@ async function testAIChatbot() {
 
     console.log("\n🎉 AI Chatbot endpoints are working!");
     console.log("\n📋 Available AI Chatbot Endpoints:");
-    console.log("• GET /api/ai-chatbot/info - Get chatbot information and capabilities");
-    console.log("• POST /api/ai-chatbot/message - Send message to AI (requires auth)");
-    console.log("• GET /api/ai-chatbot/history - Get chat history (requires auth)");
-    console.log("• DELETE /api/ai-chatbot/history - Clear chat history (requires auth)");
-    console.log("• GET /api/ai-chatbot/stats - Get session statistics (requires auth)");
+    console.log(
+      "• GET /api/ai-chatbot/info - Get chatbot information and capabilities"
+    );
+    console.log(
+      "• POST /api/ai-chatbot/message - Send message to AI (requires auth)"
+    );
+    console.log(
+      "• GET /api/ai-chatbot/history - Get chat history (requires auth)"
+    );
+    console.log(
+      "• DELETE /api/ai-chatbot/history - Clear chat history (requires auth)"
+    );
+    console.log(
+      "• GET /api/ai-chatbot/stats - Get session statistics (requires auth)"
+    );
 
     console.log("\n🤖 AI Chatbot Features:");
     console.log("• Biblical guidance and interpretation");
@@ -60,7 +76,7 @@ async function testAIChatbot() {
 
     console.log("\n🔧 Setup Instructions:");
     console.log("1. Get Google Gemini API key from Google Cloud Console");
-    console.log("2. Add GOOGLE_GEMINI_API_KEY to your .env file");
+    console.log("2. Add GOOGLE_AI_API_KEY to your .env file");
     console.log("3. Restart the server");
     console.log("4. Test with authenticated user");
 
@@ -68,9 +84,11 @@ async function testAIChatbot() {
     console.log("• Add your Google Gemini API key to .env");
     console.log("• Test with authenticated user");
     console.log("• Integrate with frontend chat interface");
-
   } catch (error) {
-    console.log("❌ Test failed:", error.response?.data?.message || error.message);
+    console.log(
+      "❌ Test failed:",
+      error.response?.data?.message || error.message
+    );
   }
 }
 

@@ -50,6 +50,25 @@ export const toggleBookmark = async (
 
     const result = await UnifiedBookmarkService.toggleBookmark(userId, mediaId);
 
+    // Send real-time notification via Socket.IO
+    try {
+      const io = require("../socket/socketManager").getIO();
+      if (io) {
+        io.emit("content-bookmark-update", {
+          mediaId,
+          bookmarkCount: result.bookmarkCount,
+          userBookmarked: result.bookmarked,
+          userId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (socketError) {
+      logger.warn("Failed to send real-time bookmark update", {
+        error: socketError,
+        mediaId,
+      });
+    }
+
     logger.info("Toggle bookmark successful", {
       userId,
       mediaId,

@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -1462,50 +1429,16 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
             .limit(limitNum)
             .populate("uploadedBy", "firstName lastName username email avatar")
             .lean();
-        // Convert stored R2 object URLs to short-lived presigned URLs for private access
-        const toObjectKey = (urlString) => {
-            if (!urlString)
-                return null;
-            try {
-                const u = new URL(urlString);
-                // Expected: https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
-                // Extract pathname and drop leading '/<bucket>/' segment if present
-                let pathname = u.pathname; // starts with '/'
-                if (pathname.startsWith("/"))
-                    pathname = pathname.slice(1);
-                const bucket = process.env.R2_BUCKET;
-                if (bucket && pathname.startsWith(bucket + "/")) {
-                    return pathname.slice(bucket.length + 1);
-                }
-                // If bucket not included, return remaining path
-                return pathname;
-            }
-            catch (_e) {
-                return null;
-            }
-        };
-        // Lazy import to avoid circular deps
-        const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require("../service/fileUpload.service")));
-        const content = yield Promise.all(defaultContentRaw.map((item) => __awaiter(void 0, void 0, void 0, function* () {
+        // Use direct public URLs - no need for signed URL generation
+        const content = defaultContentRaw.map((item) => {
             var _a, _b, _c, _d;
-            const objectKey = toObjectKey(item.fileUrl);
-            let mediaUrl = item.fileUrl;
-            if (objectKey) {
-                try {
-                    const signed = yield fileUploadService.getPresignedGetUrl(objectKey, 3600);
-                    mediaUrl = signed;
-                }
-                catch (_e) {
-                    // fallback to stored URL if signing fails
-                }
-            }
             // Transform to frontend-expected format
             return {
                 _id: item._id,
                 title: item.title || "Untitled",
                 description: item.description || "",
-                mediaUrl: mediaUrl,
-                thumbnailUrl: item.thumbnailUrl || item.fileUrl,
+                mediaUrl: item.fileUrl, // Use direct public URL
+                thumbnailUrl: item.thumbnailUrl || item.fileUrl, // Use direct public URL
                 contentType: mapContentType(item.contentType),
                 duration: item.duration || null,
                 author: {
@@ -1521,7 +1454,7 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
                 createdAt: item.createdAt,
                 updatedAt: item.updatedAt,
             };
-        })));
+        });
         response.status(200).json({
             success: true,
             data: {

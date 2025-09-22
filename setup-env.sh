@@ -78,7 +78,7 @@ ALLOWED_AUDIO_TYPES=audio/mpeg,audio/mp3,audio/wav,audio/ogg
 # =============================================================================
 # Google AI Configuration
 # =============================================================================
-GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_AI_API_KEY=your_gemini_api_key_here
 
 # =============================================================================
 # Security

@@ -42,10 +42,10 @@ export class AIChatbotService {
   private chatSessions: Map<string, ChatSession> = new Map();
 
   constructor() {
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    const apiKey = process.env.GOOGLE_AI_API_KEY;
     if (!apiKey) {
       logger.warn(
-        "GOOGLE_GEMINI_API_KEY not found. AI chatbot will use fallback responses."
+        "GOOGLE_AI_API_KEY not found. AI chatbot will use fallback responses."
       );
       this.genAI = null;
       this.model = null;

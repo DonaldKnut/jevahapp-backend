@@ -114,7 +114,7 @@ Add to your `.env` file:
 
 ```bash
 # Google AI Configuration
-GOOGLE_GEMINI_API_KEY=your_gemini_api_key_here
+GOOGLE_AI_API_KEY=your_gemini_api_key_here
 ```
 
 #### **3. Start Development Server**

@@ -55,6 +55,7 @@ const mediaUserAction_model_1 = require("../models/mediaUserAction.model");
 const mongoose_1 = require("mongoose");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
 const email_config_1 = require("../config/email.config");
+const aiContentDescription_service_1 = require("./aiContentDescription.service");
 class MediaService {
     uploadMedia(data) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -366,9 +367,11 @@ class MediaService {
                         $sort: { createdAt: -1 },
                     },
                 ]);
+                // Generate AI descriptions for ALL content (including existing descriptions)
+                const enhancedMediaList = yield aiContentDescription_service_1.aiContentDescriptionService.generateMultipleDescriptions(mediaList);
                 return {
-                    media: mediaList,
-                    total: mediaList.length,
+                    media: enhancedMediaList,
+                    total: enhancedMediaList.length,
                 };
             }
             catch (error) {
@@ -941,8 +944,8 @@ class MediaService {
                 if (!objectKey) {
                     throw new Error("Invalid media file URL");
                 }
-                // Generate signed URL valid for 24 hours
-                const downloadUrl = yield fileUploadService.getPresignedGetUrl(objectKey, 86400);
+                // Use direct public URL instead of signed URL
+                const downloadUrl = media.fileUrl;
                 // Add to user's offline downloads
                 yield this.addToOfflineDownloads(userId, mediaId, {
                     fileName: media.title || "Untitled",

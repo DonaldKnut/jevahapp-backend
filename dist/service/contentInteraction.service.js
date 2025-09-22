@@ -120,6 +120,27 @@ class ContentInteractionService {
                         });
                     }
                 }
+                // Send real-time notification via Socket.IO
+                try {
+                    const io = require("../socket/socketManager").getIO();
+                    if (io) {
+                        io.emit("content-like-update", {
+                            contentId,
+                            contentType,
+                            likeCount,
+                            userLiked: liked,
+                            userId,
+                            timestamp: new Date().toISOString(),
+                        });
+                    }
+                }
+                catch (socketError) {
+                    logger_1.default.warn("Failed to send real-time like update", {
+                        error: socketError,
+                        contentId,
+                        contentType,
+                    });
+                }
                 logger_1.default.info("Toggle like completed", {
                     userId,
                     contentId,

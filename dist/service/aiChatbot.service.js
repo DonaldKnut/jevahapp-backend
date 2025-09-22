@@ -18,9 +18,9 @@ const logger_1 = __importDefault(require("../utils/logger"));
 class AIChatbotService {
     constructor() {
         this.chatSessions = new Map();
-        const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+        const apiKey = process.env.GOOGLE_AI_API_KEY;
         if (!apiKey) {
-            logger_1.default.warn("GOOGLE_GEMINI_API_KEY not found. AI chatbot will use fallback responses.");
+            logger_1.default.warn("GOOGLE_AI_API_KEY not found. AI chatbot will use fallback responses.");
             this.genAI = null;
             this.model = null;
         }
