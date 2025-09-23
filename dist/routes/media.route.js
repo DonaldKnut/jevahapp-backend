@@ -146,6 +146,14 @@ router.post("/:id/interact", auth_middleware_1.verifyToken, rateLimiter_1.mediaI
  */
 router.post("/:id/download", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.downloadMedia);
 /**
+ * @route   GET /api/media/:id/download-file
+ * @desc    Download media file directly (for UI components)
+ * @access  Protected (Authenticated users only)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @returns { Buffer } - File buffer with appropriate headers
+ */
+router.get("/:id/download-file", auth_middleware_1.verifyToken, rateLimiter_1.mediaInteractionRateLimiter, media_controller_1.downloadMediaFile);
+/**
  * @route   GET /api/media/offline-downloads
  * @desc    Get user's offline downloads
  * @access  Protected (Authenticated users only)

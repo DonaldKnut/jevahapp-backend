@@ -470,4 +470,3 @@ Pass IDs via navigation params if provided (e.g., `relatedId`, `target`, `conver
 - [ ] Handle `new-notification` and `notification-count-update`
 
 This delivers a fast, elegant notification experience with avatars, names, and clear action text.
-

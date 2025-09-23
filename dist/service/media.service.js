@@ -1066,6 +1066,56 @@ class MediaService {
             }
         });
     }
+    /**
+     * Download media file directly (for UI components)
+     */
+    downloadMediaFile(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { mediaId, userId } = data;
+                const media = yield media_model_1.Media.findById(mediaId);
+                if (!media) {
+                    throw new Error("Media not found");
+                }
+                // Check if media is available for download
+                if (!media.fileUrl) {
+                    throw new Error("Media file not available for download");
+                }
+                // Record download interaction
+                yield this.recordInteraction({
+                    userIdentifier: userId,
+                    mediaIdentifier: mediaId,
+                    interactionType: "download",
+                    duration: 0,
+                });
+                // Fetch the file from the URL
+                const fileResponse = yield fetch(media.fileUrl);
+                if (!fileResponse.ok) {
+                    throw new Error("Failed to fetch media file");
+                }
+                const fileBuffer = yield fileResponse.arrayBuffer();
+                const buffer = Buffer.from(fileBuffer);
+                // Add to user's offline downloads
+                yield this.addToOfflineDownloads(userId, mediaId, {
+                    fileName: media.title || "Untitled",
+                    fileSize: media.fileSize || buffer.length,
+                    contentType: media.contentType,
+                    downloadUrl: media.fileUrl,
+                });
+                return {
+                    success: true,
+                    fileBuffer: buffer,
+                    fileName: media.title || "Untitled",
+                    fileSize: media.fileSize || buffer.length,
+                    contentType: media.contentType,
+                    message: "File downloaded successfully",
+                };
+            }
+            catch (error) {
+                throw error;
+            }
+        });
+    }
     shareMedia(data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMediaFile = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -666,6 +666,76 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
     }
 });
 exports.downloadMedia = downloadMedia;
+// New method for direct file download (for UI components)
+const downloadMediaFile = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = request.params;
+        const userIdentifier = request.userId;
+        if (!userIdentifier) {
+            response.status(401).json({
+                success: false,
+                message: "Unauthorized: User not authenticated",
+            });
+            return;
+        }
+        if (!id || !mongoose_1.Types.ObjectId.isValid(id)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media ID",
+            });
+            return;
+        }
+        const result = yield media_service_1.mediaService.downloadMediaFile({
+            userId: userIdentifier,
+            mediaId: id,
+        });
+        // Notify content owner about the download (if not self)
+        try {
+            yield notification_service_1.NotificationService.notifyContentDownload(userIdentifier, id, "media");
+        }
+        catch (notifyError) {
+            // Non-blocking
+        }
+        // Set appropriate headers for file download
+        response.setHeader("Content-Type", result.contentType || "application/octet-stream");
+        response.setHeader("Content-Disposition", `attachment; filename="${result.fileName}"`);
+        response.setHeader("Content-Length", result.fileSize);
+        // Stream the file
+        response.send(result.fileBuffer);
+    }
+    catch (error) {
+        console.error("Download media file error:", error);
+        if (error instanceof Error) {
+            if (error.message.includes("not found")) {
+                response.status(404).json({
+                    success: false,
+                    message: error.message,
+                });
+                return;
+            }
+            if (error.message.includes("not available for download")) {
+                response.status(403).json({
+                    success: false,
+                    message: error.message,
+                });
+                return;
+            }
+            if (error.message.includes("Invalid") ||
+                error.message.includes("required")) {
+                response.status(400).json({
+                    success: false,
+                    message: error.message,
+                });
+                return;
+            }
+        }
+        response.status(500).json({
+            success: false,
+            message: "Failed to download media file",
+        });
+    }
+});
+exports.downloadMediaFile = downloadMediaFile;
 // New method for sharing media
 const shareMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
