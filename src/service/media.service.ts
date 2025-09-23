@@ -1322,6 +1322,61 @@ export class MediaService {
     }
   }
 
+  /**
+   * Download media file directly (for UI components)
+   */
+  async downloadMediaFile(data: { mediaId: string; userId: string }) {
+    try {
+      const { mediaId, userId } = data;
+
+      const media = await Media.findById(mediaId);
+      if (!media) {
+        throw new Error("Media not found");
+      }
+
+      // Check if media is available for download
+      if (!media.fileUrl) {
+        throw new Error("Media file not available for download");
+      }
+
+      // Record download interaction
+      await this.recordInteraction({
+        userIdentifier: userId,
+        mediaIdentifier: mediaId,
+        interactionType: "download",
+        duration: 0,
+      });
+
+      // Fetch the file from the URL
+      const fileResponse = await fetch(media.fileUrl);
+      if (!fileResponse.ok) {
+        throw new Error("Failed to fetch media file");
+      }
+
+      const fileBuffer = await fileResponse.arrayBuffer();
+      const buffer = Buffer.from(fileBuffer);
+
+      // Add to user's offline downloads
+      await this.addToOfflineDownloads(userId, mediaId, {
+        fileName: media.title || "Untitled",
+        fileSize: media.fileSize || buffer.length,
+        contentType: media.contentType,
+        downloadUrl: media.fileUrl,
+      });
+
+      return {
+        success: true,
+        fileBuffer: buffer,
+        fileName: media.title || "Untitled",
+        fileSize: media.fileSize || buffer.length,
+        contentType: media.contentType,
+        message: "File downloaded successfully",
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async shareMedia(data: {
     mediaId: string;
     userId: string;

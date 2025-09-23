@@ -825,6 +825,99 @@ export const downloadMedia = async (
   }
 };
 
+// New method for direct file download (for UI components)
+export const downloadMediaFile = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { id } = request.params;
+    const userIdentifier = request.userId;
+
+    if (!userIdentifier) {
+      response.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+
+    if (!id || !Types.ObjectId.isValid(id)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media ID",
+      });
+      return;
+    }
+
+    const result = await mediaService.downloadMediaFile({
+      userId: userIdentifier,
+      mediaId: id,
+    });
+
+    // Notify content owner about the download (if not self)
+    try {
+      await NotificationService.notifyContentDownload(
+        userIdentifier,
+        id,
+        "media"
+      );
+    } catch (notifyError) {
+      // Non-blocking
+    }
+
+    // Set appropriate headers for file download
+    response.setHeader(
+      "Content-Type",
+      result.contentType || "application/octet-stream"
+    );
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.fileName}"`
+    );
+    response.setHeader("Content-Length", result.fileSize);
+
+    // Stream the file
+    response.send(result.fileBuffer);
+  } catch (error: unknown) {
+    console.error("Download media file error:", error);
+
+    if (error instanceof Error) {
+      if (error.message.includes("not found")) {
+        response.status(404).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
+      if (error.message.includes("not available for download")) {
+        response.status(403).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
+      if (
+        error.message.includes("Invalid") ||
+        error.message.includes("required")
+      ) {
+        response.status(400).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    response.status(500).json({
+      success: false,
+      message: "Failed to download media file",
+    });
+  }
+};
+
 // New method for sharing media
 export const shareMedia = async (
   request: Request,

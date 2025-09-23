@@ -19,6 +19,7 @@ const mongoose_1 = require("mongoose");
 const media_model_1 = require("../models/media.model");
 const contaboStreaming_service_1 = __importDefault(require("../service/contaboStreaming.service"));
 const liveRecording_service_1 = __importDefault(require("../service/liveRecording.service"));
+const notification_service_1 = require("../service/notification.service");
 const getAnalyticsDashboard = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userIdentifier = request.userId;
@@ -619,6 +620,13 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
             mediaId: id,
             fileSize,
         });
+        // Notify content owner about the download (if not self)
+        try {
+            yield notification_service_1.NotificationService.notifyContentDownload(userIdentifier, id, "media");
+        }
+        catch (notifyError) {
+            // Non-blocking
+        }
         response.status(200).json({
             success: true,
             message: "Download recorded successfully",

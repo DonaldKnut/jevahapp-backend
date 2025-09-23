@@ -98,7 +98,12 @@ class ContentInteractionService {
                 // Send notification if content was liked (not unliked)
                 if (liked) {
                     try {
-                        yield notification_service_1.NotificationService.notifyContentLike(userId, contentId, contentType);
+                        if (contentType === "artist") {
+                            yield notification_service_1.NotificationService.notifyUserFollow(userId, contentId);
+                        }
+                        else {
+                            yield notification_service_1.NotificationService.notifyContentLike(userId, contentId, contentType);
+                        }
                         // Send public activity notification to followers
                         const contentData = yield this.getContentById(contentId, contentType);
                         yield notification_service_1.NotificationService.notifyPublicActivity(userId, "like", contentId, contentType, contentData === null || contentData === void 0 ? void 0 : contentData.title);
@@ -277,6 +282,39 @@ class ContentInteractionService {
                 // Send notification if comment was added
                 try {
                     yield notification_service_1.NotificationService.notifyContentComment(userId, contentId, contentType, content);
+                    // If this is a reply to an existing comment, notify the original commenter
+                    if (parentCommentId && mongoose_1.Types.ObjectId.isValid(parentCommentId)) {
+                        try {
+                            const parentComment = yield mediaInteraction_model_1.MediaInteraction.findById(parentCommentId).select("user");
+                            if (parentComment && parentComment.user.toString() !== userId) {
+                                const replier = yield user_model_1.User.findById(userId).select("firstName lastName email");
+                                const replierName = ((replier === null || replier === void 0 ? void 0 : replier.firstName) || "").toString() ||
+                                    (replier === null || replier === void 0 ? void 0 : replier.email) ||
+                                    "Someone";
+                                yield notification_service_1.NotificationService.createNotification({
+                                    userId: parentComment.user.toString(),
+                                    type: "reply",
+                                    title: "New Reply",
+                                    message: `${replierName} replied to your comment`,
+                                    metadata: {
+                                        contentId,
+                                        contentType,
+                                        parentCommentId,
+                                        replyPreview: content.substring(0, 100),
+                                    },
+                                    priority: "medium",
+                                });
+                            }
+                        }
+                        catch (replyNotifyError) {
+                            logger_1.default.warn("Failed to send reply notification", {
+                                error: replyNotifyError === null || replyNotifyError === void 0 ? void 0 : replyNotifyError.message,
+                                userId,
+                                contentId,
+                                parentCommentId,
+                            });
+                        }
+                    }
                     // Send public activity notification to followers
                     const contentData = yield this.getContentById(contentId, contentType);
                     yield notification_service_1.NotificationService.notifyPublicActivity(userId, "comment", contentId, contentType, contentData === null || contentData === void 0 ? void 0 : contentData.title);

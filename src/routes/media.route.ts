@@ -21,6 +21,7 @@ import {
   // New enhanced methods
   trackViewWithDuration,
   downloadMedia,
+  downloadMediaFile,
   shareMedia,
   getOfflineDownloads,
   removeFromOfflineDownloads,
@@ -229,6 +230,20 @@ router.post(
   verifyToken,
   mediaInteractionRateLimiter,
   downloadMedia
+);
+
+/**
+ * @route   GET /api/media/:id/download-file
+ * @desc    Download media file directly (for UI components)
+ * @access  Protected (Authenticated users only)
+ * @param   { id: string } - MongoDB ObjectId of the media item
+ * @returns { Buffer } - File buffer with appropriate headers
+ */
+router.get(
+  "/:id/download-file",
+  verifyToken,
+  mediaInteractionRateLimiter,
+  downloadMediaFile
 );
 
 /**

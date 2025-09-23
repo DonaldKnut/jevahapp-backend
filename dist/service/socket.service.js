@@ -52,12 +52,14 @@ const media_model_1 = require("../models/media.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const mediaUserAction_model_1 = require("../models/mediaUserAction.model");
 const logger_1 = __importDefault(require("../utils/logger"));
+const notification_service_1 = require("./notification.service");
 /**
  * Socket.IO service for real-time interactions
  * Handles comments, reactions, live streaming, and user presence
  */
 class SocketService {
     constructor(server) {
+        var _a, _b;
         this.connectedUsers = new Map();
         this.streamViewers = new Map();
         this.io = new socket_io_1.Server(server, {
@@ -70,6 +72,11 @@ class SocketService {
         });
         this.setupMiddleware();
         this.setupEventHandlers();
+        // Wire socket service into notification service for real-time delivery
+        try {
+            (_b = (_a = notification_service_1.NotificationService).setSocketService) === null || _b === void 0 ? void 0 : _b.call(_a, this);
+        }
+        catch (_c) { }
         logger_1.default.info("Socket.IO service initialized");
     }
     /**
@@ -220,14 +227,18 @@ class SocketService {
             try {
                 // For now, only handle media content type
                 // Other content types can be added as needed
-                if (contentType === 'media') {
+                if (contentType === "media") {
                     return yield media_model_1.Media.findById(contentId).lean();
                 }
                 // Default to media for other content types
                 return yield media_model_1.Media.findById(contentId).lean();
             }
             catch (error) {
-                logger_1.default.error('Error getting content by ID', { contentId, contentType, error });
+                logger_1.default.error("Error getting content by ID", {
+                    contentId,
+                    contentType,
+                    error,
+                });
                 return null;
             }
         });
@@ -718,9 +729,7 @@ class SocketService {
                         },
                     });
                     // Broadcast real-time count updates
-                    this.io
-                        .to(`content:${contentType}:${contentId}`)
-                        .emit("count-update", {
+                    this.io.to(`content:${contentType}:${contentId}`).emit("count-update", {
                         contentId,
                         contentType,
                         likeCount: content.likeCount || 0,
@@ -729,7 +738,8 @@ class SocketService {
                         viewCount: content.viewCount || 0,
                     });
                     // Send notification to content owner if different from user
-                    if (content.uploadedBy && content.uploadedBy.toString() !== user.userId) {
+                    if (content.uploadedBy &&
+                        content.uploadedBy.toString() !== user.userId) {
                         this.io
                             .to(`user:${content.uploadedBy}`)
                             .emit("new-like-notification", {
@@ -766,7 +776,7 @@ class SocketService {
     handleContentComment(socket, user, data) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const { contentId, contentType, content: commentContent, parentCommentId } = data;
+                const { contentId, contentType, content: commentContent, parentCommentId, } = data;
                 // Use content interaction service
                 const contentInteractionService = yield Promise.resolve().then(() => __importStar(require("./contentInteraction.service")));
                 const comment = yield contentInteractionService.default.addComment(user.userId, contentId, contentType, commentContent, parentCommentId);
@@ -789,9 +799,7 @@ class SocketService {
                     .to(`content:${contentType}:${contentId}`)
                     .emit("content-comment", commentData);
                 // Broadcast real-time count updates
-                this.io
-                    .to(`content:${contentType}:${contentId}`)
-                    .emit("count-update", {
+                this.io.to(`content:${contentType}:${contentId}`).emit("count-update", {
                     contentId,
                     contentType,
                     likeCount: content.likeCount || 0,

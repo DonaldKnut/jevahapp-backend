@@ -8,13 +8,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InteractionService = void 0;
 const mongoose_1 = require("mongoose");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const media_model_1 = require("../models/media.model");
+const user_model_1 = require("../models/user.model");
 const message_model_1 = require("../models/message.model");
 const conversation_model_1 = require("../models/conversation.model");
+const logger_1 = __importDefault(require("../utils/logger"));
+const notification_service_1 = require("./notification.service");
 class InteractionService {
     /**
      * Add reaction to comment
@@ -62,6 +68,7 @@ class InteractionService {
      */
     sendMessage(data) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a;
             if (!mongoose_1.Types.ObjectId.isValid(data.senderId) ||
                 !mongoose_1.Types.ObjectId.isValid(data.recipientId)) {
                 throw new Error("Invalid sender or recipient ID");
@@ -112,6 +119,31 @@ class InteractionService {
                     .populate("sender", "firstName lastName avatar")
                     .populate("recipient", "firstName lastName avatar")
                     .populate("replyTo", "content sender");
+                // Notify recipient of new message
+                try {
+                    const sender = yield user_model_1.User.findById(data.senderId).select("firstName lastName email");
+                    const preview = data.content.substring(0, 100);
+                    yield notification_service_1.NotificationService.createNotification({
+                        userId: data.recipientId,
+                        type: "message",
+                        title: "New Message",
+                        message: `${(sender === null || sender === void 0 ? void 0 : sender.firstName) || (sender === null || sender === void 0 ? void 0 : sender.email) || "Someone"}: ${preview}`,
+                        metadata: {
+                            conversationId: (_a = (yield conversation_model_1.Conversation.findOne({
+                                participants: { $all: [data.senderId, data.recipientId] },
+                                isGroupChat: false,
+                            }))) === null || _a === void 0 ? void 0 : _a._id,
+                        },
+                        priority: "low",
+                    });
+                }
+                catch (msgNotifyError) {
+                    logger_1.default.warn("Failed to send message notification", {
+                        error: msgNotifyError === null || msgNotifyError === void 0 ? void 0 : msgNotifyError.message,
+                        senderId: data.senderId,
+                        recipientId: data.recipientId,
+                    });
+                }
                 return populatedMessage;
             }
             finally {

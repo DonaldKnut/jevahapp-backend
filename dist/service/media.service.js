@@ -55,7 +55,6 @@ const mediaUserAction_model_1 = require("../models/mediaUserAction.model");
 const mongoose_1 = require("mongoose");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
 const email_config_1 = require("../config/email.config");
-const aiContentDescription_service_1 = require("./aiContentDescription.service");
 class MediaService {
     uploadMedia(data) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -367,11 +366,9 @@ class MediaService {
                         $sort: { createdAt: -1 },
                     },
                 ]);
-                // Generate AI descriptions for ALL content (including existing descriptions)
-                const enhancedMediaList = yield aiContentDescription_service_1.aiContentDescriptionService.generateMultipleDescriptions(mediaList);
                 return {
-                    media: enhancedMediaList,
-                    total: enhancedMediaList.length,
+                    media: mediaList,
+                    total: mediaList.length,
                 };
             }
             catch (error) {

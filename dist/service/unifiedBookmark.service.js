@@ -17,6 +17,7 @@ const mongoose_1 = require("mongoose");
 const bookmark_model_1 = require("../models/bookmark.model");
 const media_model_1 = require("../models/media.model");
 const logger_1 = __importDefault(require("../utils/logger"));
+const notification_service_1 = require("./notification.service");
 class UnifiedBookmarkService {
     /**
      * Toggle bookmark status (save/unsave)
@@ -73,6 +74,20 @@ class UnifiedBookmarkService {
                     }
                 }));
                 const bookmarkCount = yield this.getBookmarkCount(mediaId);
+                // Send notification only when a bookmark is added (not removed)
+                if (bookmarked) {
+                    try {
+                        yield notification_service_1.NotificationService.notifyContentBookmark(userId, mediaId, "media");
+                    }
+                    catch (notificationError) {
+                        // Do not fail the operation if notification sending fails
+                        logger_1.default.warn("Failed to send bookmark notification", {
+                            error: notificationError === null || notificationError === void 0 ? void 0 : notificationError.message,
+                            userId,
+                            mediaId,
+                        });
+                    }
+                }
                 logger_1.default.info("Toggle bookmark completed", {
                     userId,
                     mediaId,
@@ -267,10 +282,21 @@ class UnifiedBookmarkService {
                                 media: new mongoose_1.Types.ObjectId(mediaId),
                             });
                             if (!existing) {
-                                yield bookmark_model_1.Bookmark.create({
+                                const created = yield bookmark_model_1.Bookmark.create({
                                     user: new mongoose_1.Types.ObjectId(userId),
                                     media: new mongoose_1.Types.ObjectId(mediaId),
                                 });
+                                // Fire-and-forget notification for each added bookmark
+                                try {
+                                    yield notification_service_1.NotificationService.notifyContentBookmark(userId, mediaId, "media");
+                                }
+                                catch (e) {
+                                    logger_1.default.warn("Bulk bookmark notify failed", {
+                                        userId,
+                                        mediaId,
+                                        error: e === null || e === void 0 ? void 0 : e.message,
+                                    });
+                                }
                             }
                         }
                         else {
