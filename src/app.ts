@@ -185,7 +185,12 @@ app.use("/api/logs", logsRoutes);
 // app.use("/api/artist", artistRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/payment", paymentRoutes);
+// Mount unified bookmark routes at both singular and plural paths for compatibility
+app.use("/api/bookmark", bookmarksRoutes);
 app.use("/api/bookmarks", bookmarksRoutes);
+logger.info("Bookmark routes mounted", {
+  paths: ["/api/bookmark", "/api/bookmarks"],
+});
 app.use("/api/interactions", interactionRoutes);
 app.use("/api/content", contentInteractionRoutes);
 app.use("/api/ai-chatbot", aiChatbotRoutes);
