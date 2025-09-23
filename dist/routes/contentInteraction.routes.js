@@ -43,6 +43,22 @@ router.post("/:contentType/:contentId/comment", auth_middleware_1.verifyToken, c
  */
 router.get("/:contentType/:contentId/metadata", contentInteraction_controller_1.getContentMetadata);
 /**
+ * @route   POST /api/content/batch-metadata
+ * @desc    Get metadata for multiple content IDs
+ * @access  Public (with optional user context)
+ * @body    { contentIds: string[], contentType?: string }
+ * @returns { success: boolean, data: Array<{ id, likeCount, commentCount, shareCount, bookmarkCount, viewCount, hasLiked, hasBookmarked, hasShared, hasViewed }> }
+ */
+router.post("/batch-metadata", contentInteraction_controller_1.getBatchContentMetadata);
+/**
+ * @route   POST /api/content/:contentType/:contentId/view
+ * @desc    Record a view/listen/read event with dedupe and thresholding
+ * @access  Public (auth optional)
+ * @body    { durationMs?: number, progressPct?: number, isComplete?: boolean }
+ * @returns { success: boolean, data: { viewCount: number, hasViewed: boolean } }
+ */
+router.post("/:contentType/:contentId/view", contentInteraction_controller_1.recordContentView);
+/**
  * @route   DELETE /api/content/comments/:commentId
  * @desc    Remove comment
  * @access  Protected (Comment owner only)

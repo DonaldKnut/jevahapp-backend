@@ -167,7 +167,12 @@ app.use("/api/logs", logs_routes_1.default);
 // app.use("/api/artist", artistRoutes);
 app.use("/api/games", games_route_1.default);
 app.use("/api/payment", payment_route_1.default);
+// Mount unified bookmark routes at both singular and plural paths for compatibility
+app.use("/api/bookmark", unifiedBookmark_routes_1.default);
 app.use("/api/bookmarks", unifiedBookmark_routes_1.default);
+logger_1.default.info("Bookmark routes mounted", {
+    paths: ["/api/bookmark", "/api/bookmarks"],
+});
 app.use("/api/interactions", interaction_routes_1.default);
 app.use("/api/content", contentInteraction_routes_1.default);
 app.use("/api/ai-chatbot", aiChatbot_routes_1.default);

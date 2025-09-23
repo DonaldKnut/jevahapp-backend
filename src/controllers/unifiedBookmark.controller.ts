@@ -239,8 +239,31 @@ export const getUserBookmarks = async (
   } catch (error: any) {
     logger.error("Get user bookmarks error", {
       error: error.message,
+      stack: error.stack,
       userId: req.userId,
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 20,
     });
+
+    // Provide more specific error messages
+    if (error.message.includes("Invalid user ID")) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid user ID format",
+      });
+      return;
+    }
+
+    if (
+      error.message.includes("database") ||
+      error.message.includes("connection")
+    ) {
+      res.status(503).json({
+        success: false,
+        message: "Database temporarily unavailable. Please try again later.",
+      });
+      return;
+    }
 
     res.status(500).json({
       success: false,

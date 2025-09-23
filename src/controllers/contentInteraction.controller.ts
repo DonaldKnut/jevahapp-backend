@@ -289,6 +289,105 @@ export const getContentMetadata = async (
   }
 };
 
+// Record a view/listen/read event with dedupe and thresholding
+export const recordContentView = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { contentId, contentType } = req.params;
+    const { durationMs, progressPct, isComplete } = req.body || {};
+    const userId = req.userId; // optional
+
+    if (!contentId || !Types.ObjectId.isValid(contentId)) {
+      res.status(400).json({ success: false, message: "Invalid content ID" });
+      return;
+    }
+    const validTypes = [
+      "media",
+      "devotional",
+      "artist",
+      "merch",
+      "ebook",
+      "podcast",
+    ];
+    if (!contentType || !validTypes.includes(contentType)) {
+      res.status(400).json({ success: false, message: "Invalid content type" });
+      return;
+    }
+
+    // Delegate to service method (reuse contentInteractionService responsibilities)
+    const { default: contentService } = await import(
+      "../service/contentView.service"
+    );
+    const result = await contentService.recordView({
+      userId: userId || undefined,
+      contentId,
+      contentType: contentType as any,
+      durationMs: typeof durationMs === "number" ? durationMs : undefined,
+      progressPct: typeof progressPct === "number" ? progressPct : undefined,
+      isComplete: !!isComplete,
+      ip: req.ip,
+      userAgent: req.get("User-Agent") || "",
+    });
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error("Record content view error", {
+      error: error.message,
+      userId: req.userId,
+      contentId: req.params.contentId,
+      contentType: req.params.contentType,
+    });
+    res.status(500).json({ success: false, message: "Failed to record view" });
+  }
+};
+
+// Batch metadata for multiple content IDs
+export const getBatchContentMetadata = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.userId;
+    const { contentIds, contentType } = req.body || {};
+
+    if (!Array.isArray(contentIds) || contentIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "contentIds must be a non-empty array",
+      });
+      return;
+    }
+
+    if (
+      contentType &&
+      !["media", "devotional", "artist", "merch", "ebook", "podcast"].includes(
+        contentType
+      )
+    ) {
+      res.status(400).json({ success: false, message: "Invalid content type" });
+      return;
+    }
+
+    const data = await contentInteractionService.getBatchContentMetadata(
+      userId,
+      contentIds,
+      contentType || "media"
+    );
+
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    logger.error("Batch content metadata error", {
+      error: error.message,
+      userId: req.userId,
+    });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to get batch metadata" });
+  }
+};
+
 // Remove comment
 export const removeContentComment = async (
   req: Request,

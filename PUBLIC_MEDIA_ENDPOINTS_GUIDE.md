@@ -88,6 +88,135 @@ const media = await fetchPublicMedia({
 }
 ```
 
+#### Response shape details (authoritative for frontend)
+
+Source used: `GET https://jevahapp-backend.onrender.com/api/media/public/all-content`
+
+Each object in `media` follows this shape (fields may be optional depending on source):
+
+```json
+{
+  "_id": "68cba3ac922966191332906f",
+  "title": "Test Upload",
+  "description": "This is a test upload from Postman",
+  "contentType": "videos",
+  "category": "worship",
+  "fileUrl": "https://.../media-videos/....mp4",
+  "thumbnailUrl": "https://.../media-thumbnails/....jpg",
+  "thumbnail": "https://.../media-thumbnails/....jpg",
+  "topics": ["faith", "grace"],
+  "viewCount": 0,
+  "shareCount": 0,
+  "likeCount": 0,
+  "commentCount": 0,
+  "totalLikes": 0,
+  "totalShares": 0,
+  "totalViews": 0,
+  "createdAt": "2025-09-18T06:16:12.807Z",
+  "updatedAt": "2025-09-18T06:16:12.807Z",
+  "formattedCreatedAt": "2025-09-18T06:16:12.807Z",
+  "authorInfo": {
+    "_id": "68cb3e960e978924f9b804fd",
+    "firstName": "Dele",
+    "lastName": "Giwa",
+    "fullName": "Dele Giwa",
+    "avatar": "https://.../user-avatars/...jpeg",
+    "section": "adults"
+  }
+}
+```
+
+TypeScript types for reliable consumption:
+
+```ts
+export type PublicContentType = "videos" | "audio" | "ebook" | "music" | "live";
+
+export interface PublicAuthorInfo {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  avatar?: string;
+  section?: string;
+}
+
+export interface PublicMediaItem {
+  _id: string;
+  title: string;
+  description?: string;
+  contentType: PublicContentType;
+  category?: string;
+  fileUrl: string;
+  thumbnailUrl?: string;
+  thumbnail?: string; // alias of thumbnailUrl in some responses
+  topics?: string[];
+  viewCount?: number;
+  shareCount?: number;
+  likeCount?: number;
+  commentCount?: number;
+  totalLikes?: number;
+  totalShares?: number;
+  totalViews?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  formattedCreatedAt?: string;
+  authorInfo?: PublicAuthorInfo;
+}
+
+export interface AllPublicContentResponse {
+  success: boolean;
+  media: PublicMediaItem[];
+  total: number;
+}
+```
+
+Notes:
+
+- Prefer `thumbnailUrl`; fall back to `thumbnail` when missing.
+- `contentType` values are pluralized (e.g., "videos"). Map consistently in UI.
+- Counters may be missing; default to 0 in UI.
+- `authorInfo.avatar` may be absent; use a default avatar.
+- Use `createdAt` for your own localized formatting; `formattedCreatedAt` is optional.
+
+Minimal fetch with runtime guard:
+
+```ts
+async function fetchAllPublicContent(
+  baseUrl: string
+): Promise<AllPublicContentResponse> {
+  const res = await fetch(`${baseUrl}/api/media/public/all-content`);
+  if (!res.ok) throw new Error(`Failed: ${res.status}`);
+  const json = (await res.json()) as AllPublicContentResponse;
+  if (!json.success || !Array.isArray(json.media))
+    throw new Error("Unexpected response shape");
+  return json;
+}
+```
+
+UI mapping helper:
+
+```ts
+function toCardModel(item: PublicMediaItem) {
+  return {
+    id: item._id,
+    title: item.title,
+    subtitle:
+      item.authorInfo?.fullName ??
+      `${item.authorInfo?.firstName ?? ""} ${item.authorInfo?.lastName ?? ""}`.trim(),
+    image: item.thumbnailUrl ?? item.thumbnail ?? "",
+    contentType: item.contentType,
+    stats: {
+      likes: item.likeCount ?? item.totalLikes ?? 0,
+      comments: item.commentCount ?? 0,
+      shares: item.shareCount ?? item.totalShares ?? 0,
+      views: item.viewCount ?? item.totalViews ?? 0,
+    },
+  };
+}
+```
+
+Live endpoint used for the schema: `https://jevahapp-backend.onrender.com/api/media/public/all-content`.
+
 ### 2. **Get All Public Content (No Pagination)**
 
 **Endpoint:** `GET /api/media/public/all-content`

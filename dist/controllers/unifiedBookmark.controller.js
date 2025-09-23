@@ -216,8 +216,27 @@ const getUserBookmarks = (req, res) => __awaiter(void 0, void 0, void 0, functio
     catch (error) {
         logger_1.default.error("Get user bookmarks error", {
             error: error.message,
+            stack: error.stack,
             userId: req.userId,
+            page: parseInt(req.query.page) || 1,
+            limit: parseInt(req.query.limit) || 20,
         });
+        // Provide more specific error messages
+        if (error.message.includes("Invalid user ID")) {
+            res.status(400).json({
+                success: false,
+                message: "Invalid user ID format",
+            });
+            return;
+        }
+        if (error.message.includes("database") ||
+            error.message.includes("connection")) {
+            res.status(503).json({
+                success: false,
+                message: "Database temporarily unavailable. Please try again later.",
+            });
+            return;
+        }
         res.status(500).json({
             success: false,
             message: "Failed to get user bookmarks",

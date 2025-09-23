@@ -6,8 +6,10 @@ import {
   addContentComment,
   removeContentComment,
   getContentMetadata,
+  getBatchContentMetadata,
   getContentComments,
   shareContent,
+  recordContentView,
 } from "../controllers/contentInteraction.controller";
 
 const router = express.Router();
@@ -60,6 +62,24 @@ router.post(
  * @returns { success: boolean, data: ContentMetadata }
  */
 router.get("/:contentType/:contentId/metadata", getContentMetadata);
+
+/**
+ * @route   POST /api/content/batch-metadata
+ * @desc    Get metadata for multiple content IDs
+ * @access  Public (with optional user context)
+ * @body    { contentIds: string[], contentType?: string }
+ * @returns { success: boolean, data: Array<{ id, likeCount, commentCount, shareCount, bookmarkCount, viewCount, hasLiked, hasBookmarked, hasShared, hasViewed }> }
+ */
+router.post("/batch-metadata", getBatchContentMetadata);
+
+/**
+ * @route   POST /api/content/:contentType/:contentId/view
+ * @desc    Record a view/listen/read event with dedupe and thresholding
+ * @access  Public (auth optional)
+ * @body    { durationMs?: number, progressPct?: number, isComplete?: boolean }
+ * @returns { success: boolean, data: { viewCount: number, hasViewed: boolean } }
+ */
+router.post("/:contentType/:contentId/view", recordContentView);
 
 /**
  * @route   DELETE /api/content/comments/:commentId

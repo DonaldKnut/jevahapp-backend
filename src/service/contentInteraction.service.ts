@@ -8,6 +8,7 @@ import { NotificationService } from "./notification.service";
 import viralContentService from "./viralContent.service";
 import mentionDetectionService from "./mentionDetection.service";
 import logger from "../utils/logger";
+import { Bookmark } from "../models/bookmark.model";
 
 export interface ContentInteractionInput {
   userId: string;
@@ -197,14 +198,18 @@ export class ContentInteractionService {
       try {
         const io = require("../socket/socketManager").getIO();
         if (io) {
-          io.emit("content-like-update", {
+          const payload = {
             contentId,
             contentType,
             likeCount,
             userLiked: liked,
             userId,
             timestamp: new Date().toISOString(),
-          });
+          };
+          // Global event (backward compatible)
+          io.emit("content-like-update", payload);
+          // Room-scoped event for fine-grained subscriptions
+          io.to(`content:${contentId}`).emit("like-updated", payload);
         }
       } catch (socketError) {
         logger.warn("Failed to send real-time like update", {
@@ -849,8 +854,34 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<boolean> {
-    // TODO: Implement bookmark system
-    return false;
+    try {
+      if (
+        !userId ||
+        !Types.ObjectId.isValid(userId) ||
+        !Types.ObjectId.isValid(contentId)
+      ) {
+        return false;
+      }
+      // Only media-like entities currently support bookmarks
+      if (!["media", "ebook", "podcast", "merch"].includes(contentType)) {
+        return false;
+      }
+      const exists = await Bookmark.findOne({
+        user: new Types.ObjectId(userId),
+        media: new Types.ObjectId(contentId),
+      })
+        .select("_id")
+        .lean();
+      return !!exists;
+    } catch (error: any) {
+      logger.error("Failed to check user bookmark", {
+        userId,
+        contentId,
+        contentType,
+        error: error.message,
+      });
+      return false;
+    }
   }
 
   /**
@@ -889,6 +920,119 @@ export class ContentInteractionService {
       });
       return 0;
     }
+  }
+
+  /**
+   * Get bookmark count for media-like content
+   */
+  private async getBookmarkCount(contentId: string): Promise<number> {
+    try {
+      const total = await Bookmark.countDocuments({
+        media: new Types.ObjectId(contentId),
+      });
+      return total || 0;
+    } catch (error: any) {
+      logger.error("Failed to get bookmark count", {
+        contentId,
+        error: error.message,
+      });
+      return 0;
+    }
+  }
+
+  /**
+   * Batch content metadata for multiple content IDs
+   * Returns per-id counts and user interaction flags
+   */
+  async getBatchContentMetadata(
+    userId: string | undefined,
+    contentIds: string[],
+    contentType: string = "media"
+  ): Promise<
+    Array<{
+      id: string;
+      likeCount: number;
+      commentCount: number;
+      shareCount: number;
+      bookmarkCount: number;
+      viewCount: number;
+      hasLiked: boolean;
+      hasBookmarked: boolean;
+      hasShared: boolean;
+      hasViewed: boolean;
+    }>
+  > {
+    const validIds = contentIds.filter(id => Types.ObjectId.isValid(id));
+    if (validIds.length === 0) return [];
+
+    const tasks = validIds.map(async id => {
+      try {
+        const stats = await this.getContentStats(id, contentType);
+
+        // Map stats from existing structure to requested names
+        const likeCount = stats?.likes ?? 0;
+        const commentCount = stats?.comments ?? 0;
+        const shareCount = stats?.shares ?? 0;
+        const viewCount = stats?.views ?? 0;
+
+        // Bookmark count (for media-like)
+        const bookmarkCount = await this.getBookmarkCount(id);
+
+        // User interaction flags
+        const userFlags = await this.getUserInteraction(
+          userId || "",
+          id,
+          contentType
+        );
+
+        // hasViewed: infer from MediaInteraction 'view' events if present
+        let hasViewed = false;
+        try {
+          const view = await MediaInteraction.findOne({
+            user: userId ? new Types.ObjectId(userId) : undefined,
+            media: new Types.ObjectId(id),
+            interactionType: "view",
+            isRemoved: { $ne: true },
+          })
+            .select("_id")
+            .lean();
+          hasViewed = !!view;
+        } catch {}
+
+        return {
+          id,
+          likeCount,
+          commentCount,
+          shareCount,
+          bookmarkCount,
+          viewCount,
+          hasLiked: !!userFlags?.hasLiked,
+          hasBookmarked: !!userFlags?.hasBookmarked,
+          hasShared: !!userFlags?.hasShared,
+          hasViewed,
+        };
+      } catch (error: any) {
+        logger.warn("Batch metadata item failed", {
+          id,
+          contentType,
+          error: error.message,
+        });
+        return {
+          id,
+          likeCount: 0,
+          commentCount: 0,
+          shareCount: 0,
+          bookmarkCount: 0,
+          viewCount: 0,
+          hasLiked: false,
+          hasBookmarked: false,
+          hasShared: false,
+          hasViewed: false,
+        };
+      }
+    });
+
+    return await Promise.all(tasks);
   }
 
   /**

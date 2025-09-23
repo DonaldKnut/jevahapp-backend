@@ -24,6 +24,16 @@
             "date": 1758505328143,
             "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-22.log",
             "hash": "2d8033887e302e90e6210fc12b2c9ed805a9b73bcf6ea11d5a52ad8da21baaf9"
+        },
+        {
+            "date": 1758631564995,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-23.log",
+            "hash": "358d3f586688143850ee159a205356aadee09bf2fdeb5223cf06f3ee11e5942f"
+        },
+        {
+            "date": 1758668725722,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-24.log",
+            "hash": "7a3838d7aaf3241fc06ab448e51ebc68692c013c0f02615f822757dd1aaae2bb"
         }
     ],
     "hashType": "sha256"

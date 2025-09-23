@@ -3,7 +3,14 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IMediaInteraction extends Document {
   user: mongoose.Types.ObjectId;
   media: mongoose.Types.ObjectId;
-  interactionType: "view" | "listen" | "read" | "download" | "like" | "comment" | "share";
+  interactionType:
+    | "view"
+    | "listen"
+    | "read"
+    | "download"
+    | "like"
+    | "comment"
+    | "share";
   lastInteraction: Date;
   count: number;
   content?: string; // For comments
@@ -49,7 +56,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
     },
     content: {
       type: String,
-      required: function() {
+      required: function () {
         return this.interactionType === "comment";
       },
       maxlength: 1000,
@@ -57,7 +64,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
     parentCommentId: {
       type: Schema.Types.ObjectId,
       ref: "MediaInteraction",
-      required: function() {
+      required: function () {
         return this.interactionType === "comment" && this.parentCommentId;
       },
     },
@@ -75,6 +82,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
         timestamp: { type: Date, default: Date.now },
         duration: { type: Number },
         isComplete: { type: Boolean },
+        progressPct: { type: Number },
         fileSize: { type: Number },
       },
     ],

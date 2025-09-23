@@ -189,17 +189,49 @@ class UnifiedBookmarkService {
                     throw new Error("Invalid user ID");
                 }
                 const skip = (page - 1) * limit;
+                // First, get bookmarks with populated media, filtering out any with null media
                 const bookmarks = yield bookmark_model_1.Bookmark.find({
                     user: new mongoose_1.Types.ObjectId(userId),
                 })
-                    .populate("media")
+                    .populate({
+                    path: "media",
+                    match: { _id: { $exists: true } }, // Only populate if media exists
+                })
                     .sort({ createdAt: -1 })
                     .skip(skip)
                     .limit(limit);
+                // Filter out bookmarks where media is null (orphaned bookmarks)
+                const validBookmarks = bookmarks.filter(bookmark => bookmark.media !== null);
+                // Clean up orphaned bookmarks in the background (don't await)
+                const orphanedBookmarks = bookmarks.filter(bookmark => bookmark.media === null);
+                if (orphanedBookmarks.length > 0) {
+                    logger_1.default.warn("Found orphaned bookmarks, cleaning up", {
+                        userId,
+                        orphanedCount: orphanedBookmarks.length,
+                        orphanedIds: orphanedBookmarks.map(b => b._id),
+                    });
+                    // Clean up orphaned bookmarks asynchronously
+                    bookmark_model_1.Bookmark.deleteMany({
+                        _id: { $in: orphanedBookmarks.map(b => b._id) },
+                    }).catch(cleanupError => {
+                        logger_1.default.error("Failed to clean up orphaned bookmarks", {
+                            error: cleanupError.message,
+                            userId,
+                        });
+                    });
+                }
                 const total = yield bookmark_model_1.Bookmark.countDocuments({
                     user: new mongoose_1.Types.ObjectId(userId),
                 });
-                const bookmarkedMedia = bookmarks.map(bookmark => (Object.assign(Object.assign({}, bookmark.media.toObject()), { isBookmarked: true, bookmarkedAt: bookmark.createdAt, bookmarkId: bookmark._id })));
+                const bookmarkedMedia = validBookmarks.map(bookmark => (Object.assign(Object.assign({}, bookmark.media.toObject()), { isBookmarked: true, bookmarkedAt: bookmark.createdAt, bookmarkId: bookmark._id })));
+                logger_1.default.info("Get user bookmarks successful", {
+                    userId,
+                    page,
+                    limit,
+                    totalBookmarks: total,
+                    validBookmarks: validBookmarks.length,
+                    orphanedBookmarks: orphanedBookmarks.length,
+                });
                 return {
                     bookmarks: bookmarkedMedia,
                     total,
@@ -213,6 +245,7 @@ class UnifiedBookmarkService {
                     page,
                     limit,
                     error: error.message,
+                    stack: error.stack,
                 });
                 throw error;
             }

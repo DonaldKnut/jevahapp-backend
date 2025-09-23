@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.shareContent = exports.getContentComments = exports.removeContentComment = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
+exports.shareContent = exports.getContentComments = exports.removeContentComment = exports.getBatchContentMetadata = exports.recordContentView = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
 const mongoose_1 = require("mongoose");
 const contentInteraction_service_1 = __importDefault(require("../service/contentInteraction.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
@@ -278,6 +278,84 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getContentMetadata = getContentMetadata;
+// Record a view/listen/read event with dedupe and thresholding
+const recordContentView = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { contentId, contentType } = req.params;
+        const { durationMs, progressPct, isComplete } = req.body || {};
+        const userId = req.userId; // optional
+        if (!contentId || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+            res.status(400).json({ success: false, message: "Invalid content ID" });
+            return;
+        }
+        const validTypes = [
+            "media",
+            "devotional",
+            "artist",
+            "merch",
+            "ebook",
+            "podcast",
+        ];
+        if (!contentType || !validTypes.includes(contentType)) {
+            res.status(400).json({ success: false, message: "Invalid content type" });
+            return;
+        }
+        // Delegate to service method (reuse contentInteractionService responsibilities)
+        const { default: contentService } = yield Promise.resolve().then(() => __importStar(require("../service/contentView.service")));
+        const result = yield contentService.recordView({
+            userId: userId || undefined,
+            contentId,
+            contentType: contentType,
+            durationMs: typeof durationMs === "number" ? durationMs : undefined,
+            progressPct: typeof progressPct === "number" ? progressPct : undefined,
+            isComplete: !!isComplete,
+            ip: req.ip,
+            userAgent: req.get("User-Agent") || "",
+        });
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (error) {
+        logger_1.default.error("Record content view error", {
+            error: error.message,
+            userId: req.userId,
+            contentId: req.params.contentId,
+            contentType: req.params.contentType,
+        });
+        res.status(500).json({ success: false, message: "Failed to record view" });
+    }
+});
+exports.recordContentView = recordContentView;
+// Batch metadata for multiple content IDs
+const getBatchContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.userId;
+        const { contentIds, contentType } = req.body || {};
+        if (!Array.isArray(contentIds) || contentIds.length === 0) {
+            res.status(400).json({
+                success: false,
+                message: "contentIds must be a non-empty array",
+            });
+            return;
+        }
+        if (contentType &&
+            !["media", "devotional", "artist", "merch", "ebook", "podcast"].includes(contentType)) {
+            res.status(400).json({ success: false, message: "Invalid content type" });
+            return;
+        }
+        const data = yield contentInteraction_service_1.default.getBatchContentMetadata(userId, contentIds, contentType || "media");
+        res.status(200).json({ success: true, data });
+    }
+    catch (error) {
+        logger_1.default.error("Batch content metadata error", {
+            error: error.message,
+            userId: req.userId,
+        });
+        res
+            .status(500)
+            .json({ success: false, message: "Failed to get batch metadata" });
+    }
+});
+exports.getBatchContentMetadata = getBatchContentMetadata;
 // Remove comment
 const removeContentComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

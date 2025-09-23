@@ -23,6 +23,7 @@ const notification_service_1 = require("./notification.service");
 const viralContent_service_1 = __importDefault(require("./viralContent.service"));
 const mentionDetection_service_1 = __importDefault(require("./mentionDetection.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
+const bookmark_model_1 = require("../models/bookmark.model");
 class ContentInteractionService {
     /**
      * Toggle like on any content type
@@ -129,14 +130,18 @@ class ContentInteractionService {
                 try {
                     const io = require("../socket/socketManager").getIO();
                     if (io) {
-                        io.emit("content-like-update", {
+                        const payload = {
                             contentId,
                             contentType,
                             likeCount,
                             userLiked: liked,
                             userId,
                             timestamp: new Date().toISOString(),
-                        });
+                        };
+                        // Global event (backward compatible)
+                        io.emit("content-like-update", payload);
+                        // Room-scoped event for fine-grained subscriptions
+                        io.to(`content:${contentId}`).emit("like-updated", payload);
                     }
                 }
                 catch (socketError) {
@@ -635,8 +640,33 @@ class ContentInteractionService {
      */
     checkUserBookmark(userId, contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
-            // TODO: Implement bookmark system
-            return false;
+            try {
+                if (!userId ||
+                    !mongoose_1.Types.ObjectId.isValid(userId) ||
+                    !mongoose_1.Types.ObjectId.isValid(contentId)) {
+                    return false;
+                }
+                // Only media-like entities currently support bookmarks
+                if (!["media", "ebook", "podcast", "merch"].includes(contentType)) {
+                    return false;
+                }
+                const exists = yield bookmark_model_1.Bookmark.findOne({
+                    user: new mongoose_1.Types.ObjectId(userId),
+                    media: new mongoose_1.Types.ObjectId(contentId),
+                })
+                    .select("_id")
+                    .lean();
+                return !!exists;
+            }
+            catch (error) {
+                logger_1.default.error("Failed to check user bookmark", {
+                    userId,
+                    contentId,
+                    contentType,
+                    error: error.message,
+                });
+                return false;
+            }
         });
     }
     /**
@@ -675,6 +705,98 @@ class ContentInteractionService {
                 });
                 return 0;
             }
+        });
+    }
+    /**
+     * Get bookmark count for media-like content
+     */
+    getBookmarkCount(contentId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const total = yield bookmark_model_1.Bookmark.countDocuments({
+                    media: new mongoose_1.Types.ObjectId(contentId),
+                });
+                return total || 0;
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get bookmark count", {
+                    contentId,
+                    error: error.message,
+                });
+                return 0;
+            }
+        });
+    }
+    /**
+     * Batch content metadata for multiple content IDs
+     * Returns per-id counts and user interaction flags
+     */
+    getBatchContentMetadata(userId_1, contentIds_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, contentIds, contentType = "media") {
+            const validIds = contentIds.filter(id => mongoose_1.Types.ObjectId.isValid(id));
+            if (validIds.length === 0)
+                return [];
+            const tasks = validIds.map((id) => __awaiter(this, void 0, void 0, function* () {
+                var _a, _b, _c, _d;
+                try {
+                    const stats = yield this.getContentStats(id, contentType);
+                    // Map stats from existing structure to requested names
+                    const likeCount = (_a = stats === null || stats === void 0 ? void 0 : stats.likes) !== null && _a !== void 0 ? _a : 0;
+                    const commentCount = (_b = stats === null || stats === void 0 ? void 0 : stats.comments) !== null && _b !== void 0 ? _b : 0;
+                    const shareCount = (_c = stats === null || stats === void 0 ? void 0 : stats.shares) !== null && _c !== void 0 ? _c : 0;
+                    const viewCount = (_d = stats === null || stats === void 0 ? void 0 : stats.views) !== null && _d !== void 0 ? _d : 0;
+                    // Bookmark count (for media-like)
+                    const bookmarkCount = yield this.getBookmarkCount(id);
+                    // User interaction flags
+                    const userFlags = yield this.getUserInteraction(userId || "", id, contentType);
+                    // hasViewed: infer from MediaInteraction 'view' events if present
+                    let hasViewed = false;
+                    try {
+                        const view = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                            user: userId ? new mongoose_1.Types.ObjectId(userId) : undefined,
+                            media: new mongoose_1.Types.ObjectId(id),
+                            interactionType: "view",
+                            isRemoved: { $ne: true },
+                        })
+                            .select("_id")
+                            .lean();
+                        hasViewed = !!view;
+                    }
+                    catch (_e) { }
+                    return {
+                        id,
+                        likeCount,
+                        commentCount,
+                        shareCount,
+                        bookmarkCount,
+                        viewCount,
+                        hasLiked: !!(userFlags === null || userFlags === void 0 ? void 0 : userFlags.hasLiked),
+                        hasBookmarked: !!(userFlags === null || userFlags === void 0 ? void 0 : userFlags.hasBookmarked),
+                        hasShared: !!(userFlags === null || userFlags === void 0 ? void 0 : userFlags.hasShared),
+                        hasViewed,
+                    };
+                }
+                catch (error) {
+                    logger_1.default.warn("Batch metadata item failed", {
+                        id,
+                        contentType,
+                        error: error.message,
+                    });
+                    return {
+                        id,
+                        likeCount: 0,
+                        commentCount: 0,
+                        shareCount: 0,
+                        bookmarkCount: 0,
+                        viewCount: 0,
+                        hasLiked: false,
+                        hasBookmarked: false,
+                        hasShared: false,
+                        hasViewed: false,
+                    };
+                }
+            }));
+            return yield Promise.all(tasks);
         });
     }
     /**

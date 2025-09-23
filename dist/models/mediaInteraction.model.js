@@ -87,6 +87,7 @@ const mediaInteractionSchema = new mongoose_1.Schema({
             timestamp: { type: Date, default: Date.now },
             duration: { type: Number },
             isComplete: { type: Boolean },
+            progressPct: { type: Number },
             fileSize: { type: Number },
         },
     ],
