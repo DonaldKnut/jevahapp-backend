@@ -29,6 +29,7 @@ export interface IMediaInteraction extends Document {
     timestamp: Date;
     duration?: number;
     isComplete?: boolean;
+    progressPct?: number;
     fileSize?: number;
   }[];
   createdAt: Date;
@@ -110,7 +111,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
         timestamp: { type: Date, default: Date.now },
         duration: { type: Number },
         isComplete: { type: Boolean },
-        progressPct: { type: Number },
+        progressPct: { type: Number, min: 0, max: 100 },
         fileSize: { type: Number },
       },
     ],

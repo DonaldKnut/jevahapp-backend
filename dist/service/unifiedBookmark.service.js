@@ -17,6 +17,7 @@ const mongoose_1 = require("mongoose");
 const bookmark_model_1 = require("../models/bookmark.model");
 const media_model_1 = require("../models/media.model");
 const logger_1 = __importDefault(require("../utils/logger"));
+const audit_service_1 = require("./audit.service");
 const notification_service_1 = require("./notification.service");
 class UnifiedBookmarkService {
     /**
@@ -95,6 +96,18 @@ class UnifiedBookmarkService {
                     bookmarkCount,
                     timestamp: new Date().toISOString(),
                 });
+                // Audit log (media_save when bookmarked; media_remove when unbookmarked)
+                try {
+                    yield audit_service_1.AuditService.logMediaInteraction(userId, bookmarked ? "media_save" : "media_remove", mediaId);
+                }
+                catch (auditError) {
+                    logger_1.default.warn("Failed to write audit log for bookmark toggle", {
+                        error: auditError === null || auditError === void 0 ? void 0 : auditError.message,
+                        userId,
+                        mediaId,
+                        bookmarked,
+                    });
+                }
                 return {
                     bookmarked,
                     bookmarkCount,

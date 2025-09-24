@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import enhancedMediaService from "../service/enhancedMedia.service";
 import logger from "../utils/logger";
+import { UnifiedBookmarkService } from "../service/unifiedBookmark.service";
 
 /**
  * Get trending media
@@ -200,7 +201,7 @@ export const addToLibrary = async (
   response: Response
 ): Promise<void> => {
   try {
-    const { mediaId, mediaType = "media", notes, rating } = request.body;
+    const { mediaId } = request.body;
     const userIdentifier = request.userId;
 
     if (!userIdentifier) {
@@ -219,17 +220,29 @@ export const addToLibrary = async (
       return;
     }
 
-    await enhancedMediaService.addToLibrary(
+    // Delegate to unified bookmark system (idempotent "add" semantics)
+    const alreadyBookmarked = await UnifiedBookmarkService.isBookmarked(
       userIdentifier,
-      mediaId,
-      mediaType as "media" | "merchandise",
-      notes,
-      rating ? parseInt(rating) : undefined
+      mediaId
     );
+
+    let bookmarked = alreadyBookmarked;
+    let bookmarkCount: number;
+    if (!alreadyBookmarked) {
+      const result = await UnifiedBookmarkService.toggleBookmark(
+        userIdentifier,
+        mediaId
+      );
+      bookmarked = result.bookmarked;
+      bookmarkCount = result.bookmarkCount;
+    } else {
+      bookmarkCount = await UnifiedBookmarkService.getBookmarkCount(mediaId);
+    }
 
     response.status(200).json({
       success: true,
       message: "Media added to library successfully",
+      data: { bookmarked, bookmarkCount },
     });
   } catch (error: any) {
     logger.error("Error adding to library", {
@@ -252,7 +265,7 @@ export const removeFromLibrary = async (
   response: Response
 ): Promise<void> => {
   try {
-    const { mediaId, mediaType = "media" } = request.params;
+    const { mediaId } = request.params;
     const userIdentifier = request.userId;
 
     if (!userIdentifier) {
@@ -263,15 +276,29 @@ export const removeFromLibrary = async (
       return;
     }
 
-    await enhancedMediaService.removeFromLibrary(
+    // Delegate to unified bookmark system (idempotent "remove" semantics)
+    const isBookmarked = await UnifiedBookmarkService.isBookmarked(
       userIdentifier,
-      mediaId,
-      mediaType as "media" | "merchandise"
+      mediaId
     );
+
+    let bookmarked = isBookmarked;
+    let bookmarkCount: number;
+    if (isBookmarked) {
+      const result = await UnifiedBookmarkService.toggleBookmark(
+        userIdentifier,
+        mediaId
+      );
+      bookmarked = result.bookmarked;
+      bookmarkCount = result.bookmarkCount;
+    } else {
+      bookmarkCount = await UnifiedBookmarkService.getBookmarkCount(mediaId);
+    }
 
     response.status(200).json({
       success: true,
       message: "Media removed from library successfully",
+      data: { bookmarked, bookmarkCount },
     });
   } catch (error: any) {
     logger.error("Error removing from library", {

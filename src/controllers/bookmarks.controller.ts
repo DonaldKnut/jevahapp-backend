@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Bookmark } from "../models/bookmark.model";
 import { Types } from "mongoose";
+import { UnifiedBookmarkService } from "../service/unifiedBookmark.service";
 
 /**
  * Get all bookmarked media for the current user
@@ -88,41 +89,22 @@ export const addBookmark = async (
       return;
     }
 
-    const existing = await Bookmark.findOne({
-      user: new Types.ObjectId(userId),
-      media: new Types.ObjectId(mediaId),
-    });
+    // Delegate to unified bookmark toggle for idempotent behavior
+    const already = await UnifiedBookmarkService.isBookmarked(userId, mediaId);
+    const result = already
+      ? {
+          bookmarked: true,
+          bookmarkCount: await UnifiedBookmarkService.getBookmarkCount(mediaId),
+        }
+      : await UnifiedBookmarkService.toggleBookmark(userId, mediaId);
 
-    if (existing) {
-      response.status(400).json({
-        success: false,
-        message: "Media already saved",
-      });
-      return;
-    }
-
-    const bookmark = new Bookmark({
-      user: new Types.ObjectId(userId),
-      media: new Types.ObjectId(mediaId),
-    });
-    await bookmark.save();
-
-    response.status(201).json({
+    response.status(200).json({
       success: true,
       message: "Media saved to library",
-      data: bookmark,
+      data: result,
     });
   } catch (error: any) {
     console.error("Add bookmark error:", error);
-
-    if (error.code === 11000) {
-      response.status(400).json({
-        success: false,
-        message: "Media already saved",
-      });
-      return;
-    }
-
     response.status(500).json({
       success: false,
       message: "Failed to save media",
@@ -157,22 +139,23 @@ export const removeBookmark = async (
       return;
     }
 
-    const result = await Bookmark.findOneAndDelete({
-      user: new Types.ObjectId(userId),
-      media: new Types.ObjectId(mediaId),
-    });
+    // Delegate to unified bookmark toggle for idempotent behavior
+    const isBookmarked = await UnifiedBookmarkService.isBookmarked(
+      userId,
+      mediaId
+    );
 
-    if (!result) {
-      response.status(404).json({
-        success: false,
-        message: "Bookmark not found",
-      });
-      return;
-    }
+    const result = isBookmarked
+      ? await UnifiedBookmarkService.toggleBookmark(userId, mediaId)
+      : {
+          bookmarked: false,
+          bookmarkCount: await UnifiedBookmarkService.getBookmarkCount(mediaId),
+        };
 
     response.status(200).json({
       success: true,
       message: "Media removed from library",
+      data: result,
     });
   } catch (error) {
     console.error("Remove bookmark error:", error);

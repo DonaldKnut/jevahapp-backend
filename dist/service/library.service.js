@@ -12,47 +12,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LibraryService = void 0;
 const mongoose_1 = require("mongoose");
 const user_model_1 = require("../models/user.model");
-const media_model_1 = require("../models/media.model");
 const audit_service_1 = require("./audit.service");
 class LibraryService {
     // Save media to user's library
     static saveToLibrary(data) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const { userId, mediaId, mediaTitle, mediaType, contentType, thumbnailUrl, artistName, } = data;
-            const media = yield media_model_1.Media.findById(mediaId);
-            if (!media) {
-                throw new Error("Media not found");
-            }
-            const user = yield user_model_1.User.findById(userId);
-            if (!user) {
-                throw new Error("User not found");
-            }
-            const existingItem = (_a = user.library) === null || _a === void 0 ? void 0 : _a.find((item) => item.mediaId.toString() === mediaId);
-            if (existingItem) {
-                throw new Error("Media is already in your library");
-            }
-            yield user_model_1.User.findByIdAndUpdate(userId, {
-                $push: {
-                    library: {
-                        mediaId: new mongoose_1.Types.ObjectId(mediaId),
-                        mediaTitle,
-                        mediaType,
-                        contentType,
-                        thumbnailUrl,
-                        artistName,
-                        savedAt: new Date(),
-                        playCount: 0,
-                        isFavorite: false,
-                    },
-                },
-            });
+            // Deprecated: use UnifiedBookmarkService via controller shims.
+            const { userId, mediaId } = data;
             yield audit_service_1.AuditService.logActivity({
                 userId,
                 action: "media_save",
                 resourceType: "media",
                 resourceId: mediaId,
-                metadata: { mediaTitle, mediaType, contentType },
+                metadata: { deprecated: true, note: "Use unified bookmark system" },
                 timestamp: new Date(),
             });
         });
@@ -60,28 +32,13 @@ class LibraryService {
     // Remove media from user's library
     static removeFromLibrary(userId, mediaId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            const user = yield user_model_1.User.findById(userId);
-            if (!user) {
-                throw new Error("User not found");
-            }
-            const existingItem = (_a = user.library) === null || _a === void 0 ? void 0 : _a.find((item) => item.mediaId.toString() === mediaId);
-            if (!existingItem) {
-                throw new Error("Media is not in your library");
-            }
-            yield user_model_1.User.findByIdAndUpdate(userId, {
-                $pull: {
-                    library: {
-                        mediaId: new mongoose_1.Types.ObjectId(mediaId),
-                    },
-                },
-            });
+            // Deprecated: use UnifiedBookmarkService via controller shims.
             yield audit_service_1.AuditService.logActivity({
                 userId,
                 action: "media_remove",
                 resourceType: "media",
                 resourceId: mediaId,
-                metadata: { mediaTitle: existingItem.mediaTitle },
+                metadata: { deprecated: true, note: "Use unified bookmark system" },
                 timestamp: new Date(),
             });
         });
@@ -95,13 +52,13 @@ class LibraryService {
             }
             let library = user.library || [];
             if (filters.contentType) {
-                library = library.filter((item) => item.contentType === filters.contentType);
+                library = library.filter(item => item.contentType === filters.contentType);
             }
             if (filters.mediaType) {
-                library = library.filter((item) => item.mediaType === filters.mediaType);
+                library = library.filter(item => item.mediaType === filters.mediaType);
             }
             if (filters.isFavorite !== undefined) {
-                library = library.filter((item) => item.isFavorite === filters.isFavorite);
+                library = library.filter(item => item.isFavorite === filters.isFavorite);
             }
             library.sort((a, b) => {
                 const aDate = a.lastAccessed || a.savedAt;
@@ -235,21 +192,21 @@ class LibraryService {
             const stats = {
                 totalItems: library.length,
                 byContentType: {
-                    videos: library.filter((item) => item.contentType === "videos").length,
-                    music: library.filter((item) => item.contentType === "music").length,
-                    books: library.filter((item) => item.contentType === "books").length,
+                    videos: library.filter(item => item.contentType === "videos").length,
+                    music: library.filter(item => item.contentType === "music").length,
+                    books: library.filter(item => item.contentType === "books").length,
                 },
                 byMediaType: {
-                    videos: library.filter((item) => item.mediaType === "videos").length,
-                    audio: library.filter((item) => item.mediaType === "audio").length,
-                    ebooks: library.filter((item) => item.mediaType === "ebooks").length,
+                    videos: library.filter(item => item.mediaType === "videos").length,
+                    audio: library.filter(item => item.mediaType === "audio").length,
+                    ebooks: library.filter(item => item.mediaType === "ebooks").length,
                 },
-                favorites: library.filter((item) => item.isFavorite).length,
+                favorites: library.filter(item => item.isFavorite).length,
                 totalPlayCount: library.reduce((sum, item) => sum + (item.playCount || 0), 0),
                 mostPlayed: library
                     .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
                     .slice(0, 5)
-                    .map((item) => ({
+                    .map(item => ({
                     mediaId: item.mediaId,
                     mediaTitle: item.mediaTitle,
                     playCount: item.playCount,
@@ -257,17 +214,17 @@ class LibraryService {
                 recentlyAdded: library
                     .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
                     .slice(0, 5)
-                    .map((item) => ({
+                    .map(item => ({
                     mediaId: item.mediaId,
                     mediaTitle: item.mediaTitle,
                     savedAt: item.savedAt,
                 })),
                 recentlyAccessed: library
-                    .filter((item) => item.lastAccessed)
+                    .filter(item => item.lastAccessed)
                     .sort((a, b) => new Date(b.lastAccessed).getTime() -
                     new Date(a.lastAccessed).getTime())
                     .slice(0, 5)
-                    .map((item) => ({
+                    .map(item => ({
                     mediaId: item.mediaId,
                     mediaTitle: item.mediaTitle,
                     lastAccessed: item.lastAccessed,
@@ -286,7 +243,7 @@ class LibraryService {
             let library = user.library || [];
             if (query) {
                 const searchQuery = query.toLowerCase();
-                library = library.filter((item) => item.mediaTitle.toLowerCase().includes(searchQuery) ||
+                library = library.filter(item => item.mediaTitle.toLowerCase().includes(searchQuery) ||
                     (item.artistName &&
                         item.artistName.toLowerCase().includes(searchQuery)));
             }
@@ -325,7 +282,7 @@ class LibraryService {
             }
             let library = user.library || [];
             if (category) {
-                library = library.filter((item) => item.contentType === category);
+                library = library.filter(item => item.contentType === category);
             }
             library.sort((a, b) => {
                 const aDate = a.lastAccessed || a.savedAt;

@@ -325,10 +325,27 @@ export const getAllContentForAllTab = async (
   try {
     const result = await mediaService.getAllContentForAllTab();
 
+    // Optional personalization: include recommendations when user is authenticated
+    let recommendations: any = undefined;
+    const userIdentifier = request.userId;
+    try {
+      recommendations = await mediaService.getRecommendationsForAllContent(
+        userIdentifier,
+        {
+          limitPerSection: 12,
+          mood: (request.query?.mood as string) || undefined,
+        }
+      );
+    } catch (err) {
+      // Non-blocking failure; proceed without recommendations
+      recommendations = undefined;
+    }
+
     response.status(200).json({
       success: true,
       media: result.media,
       total: result.total,
+      recommendations,
     });
   } catch (error: any) {
     console.error("Fetch all content error:", error);
@@ -1689,10 +1706,25 @@ export const getPublicAllContent = async (
   try {
     const result = await mediaService.getAllContentForAllTab();
 
+    // Public endpoint can still include non-personalized recommendations
+    let recommendations: any = undefined;
+    try {
+      recommendations = await mediaService.getRecommendationsForAllContent(
+        undefined,
+        {
+          limitPerSection: 12,
+          mood: (request.query?.mood as string) || undefined,
+        }
+      );
+    } catch (err) {
+      recommendations = undefined;
+    }
+
     response.status(200).json({
       success: true,
       media: result.media,
       total: result.total,
+      recommendations,
     });
   } catch (error: any) {
     console.error("Fetch public all content error:", error);

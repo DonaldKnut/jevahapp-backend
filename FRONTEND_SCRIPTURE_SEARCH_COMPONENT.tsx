@@ -328,3 +328,4 @@ export const ScriptureSearch: React.FC<ScriptureSearchProps> = ({
 };
 
 export default ScriptureSearch;
+

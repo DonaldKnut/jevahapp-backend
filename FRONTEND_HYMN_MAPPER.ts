@@ -349,3 +349,4 @@ export const getHymnStatistics = (hymns: HymnData[]) => {
 
   return stats;
 };
+

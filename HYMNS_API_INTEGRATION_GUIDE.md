@@ -759,3 +759,4 @@ GET / api / hymns / { id };
 5. **Add hymns to your existing audio UI** - it should work seamlessly!
 
 This approach lets you reuse your existing `MusicCard` component and audio player while adding hymns as a new content type. The hymns will integrate with your existing interaction system (likes, comments, saves, views) automatically.
+

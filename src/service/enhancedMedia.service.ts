@@ -376,9 +376,7 @@ class EnhancedMediaService {
     }
   }
 
-  /**
-   * Add media to user's library
-   */
+  // Deprecated: Use UnifiedBookmarkService via controller shim
   async addToLibrary(
     userId: string,
     mediaId: string,
@@ -386,99 +384,32 @@ class EnhancedMediaService {
     notes?: string,
     rating?: number
   ): Promise<void> {
-    const startTime = Date.now();
-
-    try {
-      // Check if already in library
-      const existing = await Library.findOne({
-        userId: new Types.ObjectId(userId),
-        mediaId: new Types.ObjectId(mediaId),
-        mediaType,
-      });
-
-      if (existing) {
-        throw new Error("Media already in library");
-      }
-
-      // Add to library
-      await Library.create({
-        userId: new Types.ObjectId(userId),
-        mediaId: new Types.ObjectId(mediaId),
+    logger.warn(
+      "Deprecated addToLibrary called; route delegates to unified bookmark",
+      {
+        userId,
+        mediaId,
         mediaType,
         notes,
         rating,
-        addedAt: new Date(),
-      });
-
-      // Update media record
-      if (mediaType === "media") {
-        await Media.findByIdAndUpdate(mediaId, {
-          isInLibrary: true,
-          libraryAddedAt: new Date(),
-        });
       }
-
-      const duration = Date.now() - startTime;
-      logger.logDatabase("create", "library", duration, {
-        userId,
-        mediaId,
-        mediaType,
-      });
-    } catch (error: any) {
-      const duration = Date.now() - startTime;
-      logger.error("Error adding to library", {
-        error: error.message,
-        userId,
-        mediaId,
-        mediaType,
-        duration: `${duration}ms`,
-      });
-      throw error;
-    }
+    );
   }
 
-  /**
-   * Remove media from user's library
-   */
+  // Deprecated: Use UnifiedBookmarkService via controller shim
   async removeFromLibrary(
     userId: string,
     mediaId: string,
     mediaType: "media" | "merchandise" = "media"
   ): Promise<void> {
-    const startTime = Date.now();
-
-    try {
-      await Library.findOneAndDelete({
-        userId: new Types.ObjectId(userId),
-        mediaId: new Types.ObjectId(mediaId),
+    logger.warn(
+      "Deprecated removeFromLibrary called; route delegates to unified bookmark",
+      {
+        userId,
+        mediaId,
         mediaType,
-      });
-
-      // Update media record
-      if (mediaType === "media") {
-        await Media.findByIdAndUpdate(mediaId, {
-          isInLibrary: false,
-          $unset: { libraryAddedAt: 1 },
-        });
       }
-
-      const duration = Date.now() - startTime;
-      logger.logDatabase("delete", "library", duration, {
-        userId,
-        mediaId,
-        mediaType,
-      });
-    } catch (error: any) {
-      const duration = Date.now() - startTime;
-      logger.error("Error removing from library", {
-        error: error.message,
-        userId,
-        mediaId,
-        mediaType,
-        duration: `${duration}ms`,
-      });
-      throw error;
-    }
+    );
   }
 
   /**

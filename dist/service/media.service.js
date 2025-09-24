@@ -55,6 +55,8 @@ const mediaUserAction_model_1 = require("../models/mediaUserAction.model");
 const mongoose_1 = require("mongoose");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
 const email_config_1 = require("../config/email.config");
+const enhancedMedia_service_1 = __importDefault(require("./enhancedMedia.service"));
+const recommendationEngine_service_1 = require("./recommendationEngine.service");
 class MediaService {
     uploadMedia(data) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -375,6 +377,340 @@ class MediaService {
                 console.error("Error fetching all content:", error);
                 throw new Error("Failed to retrieve all content");
             }
+        });
+    }
+    /**
+     * Build a reusable aggregation pipeline that mirrors getAllContentForAllTab's projection
+     */
+    buildAggregationPipeline(matchStage, options) {
+        const pipeline = [];
+        if (matchStage && Object.keys(matchStage).length > 0) {
+            pipeline.push({ $match: matchStage });
+        }
+        pipeline.push({
+            $lookup: {
+                from: "users",
+                localField: "uploadedBy",
+                foreignField: "_id",
+                as: "author",
+            },
+        }, { $unwind: "$author" }, {
+            $lookup: {
+                from: "mediauseractions",
+                localField: "_id",
+                foreignField: "media",
+                as: "userActions",
+            },
+        }, {
+            $lookup: {
+                from: "mediainteractions",
+                localField: "_id",
+                foreignField: "media",
+                as: "interactions",
+            },
+        }, {
+            $addFields: {
+                totalLikes: {
+                    $size: {
+                        $filter: {
+                            input: "$userActions",
+                            as: "action",
+                            cond: { $eq: ["$$action.actionType", "like"] },
+                        },
+                    },
+                },
+                totalShares: {
+                    $size: {
+                        $filter: {
+                            input: "$userActions",
+                            as: "action",
+                            cond: { $eq: ["$$action.actionType", "share"] },
+                        },
+                    },
+                },
+                totalViews: {
+                    $size: {
+                        $filter: {
+                            input: "$interactions",
+                            as: "interaction",
+                            cond: { $eq: ["$$interaction.interactionType", "view"] },
+                        },
+                    },
+                },
+                authorInfo: {
+                    _id: "$author._id",
+                    firstName: "$author.firstName",
+                    lastName: "$author.lastName",
+                    fullName: {
+                        $concat: [
+                            { $ifNull: ["$author.firstName", ""] },
+                            " ",
+                            { $ifNull: ["$author.lastName", ""] },
+                        ],
+                    },
+                    avatar: "$author.avatar",
+                    section: "$author.section",
+                },
+                formattedCreatedAt: {
+                    $dateToString: {
+                        format: "%Y-%m-%dT%H:%M:%S.%LZ",
+                        date: "$createdAt",
+                    },
+                },
+                thumbnail: "$thumbnailUrl",
+            },
+        }, {
+            $project: {
+                _id: 1,
+                title: 1,
+                description: 1,
+                contentType: 1,
+                category: 1,
+                fileUrl: 1,
+                thumbnailUrl: 1,
+                topics: 1,
+                duration: 1,
+                authorInfo: 1,
+                totalLikes: 1,
+                totalShares: 1,
+                totalViews: 1,
+                likeCount: 1,
+                shareCount: 1,
+                viewCount: 1,
+                commentCount: 1,
+                createdAt: 1,
+                formattedCreatedAt: 1,
+                updatedAt: 1,
+                thumbnail: 1,
+            },
+        });
+        if (options === null || options === void 0 ? void 0 : options.sort) {
+            pipeline.push({ $sort: options.sort });
+        }
+        if ((options === null || options === void 0 ? void 0 : options.sampleSize) && options.sampleSize > 0) {
+            pipeline.push({ $sample: { size: options.sampleSize } });
+        }
+        if ((options === null || options === void 0 ? void 0 : options.limit) && options.limit > 0) {
+            pipeline.push({ $limit: options.limit });
+        }
+        return pipeline;
+    }
+    /**
+     * Generate dynamic recommendations to accompany the all-content feed.
+     * Includes seeded default content, personalized picks, trending, and random explores.
+     * Enhanced with collaborative filtering, topic embeddings, and A/B testing.
+     */
+    getRecommendationsForAllContent(userId, options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const limitPerSection = (options === null || options === void 0 ? void 0 : options.limitPerSection) || 12;
+            // Track media already seen by the user to de-duplicate recommendations
+            const seenMediaIds = new Set();
+            let lastViewedMedia = null;
+            let userProfile = null;
+            if (userId && mongoose_1.Types.ObjectId.isValid(userId)) {
+                try {
+                    // Build comprehensive user profile with all signals
+                    userProfile =
+                        yield recommendationEngine_service_1.recommendationEngineService.buildUserProfile(userId);
+                    // Get recently viewed for "because you watched" section
+                    const viewed = (yield userViewedMedia_model_1.UserViewedMedia.findOne({
+                        user: new mongoose_1.Types.ObjectId(userId),
+                    })
+                        .populate({
+                        path: "viewedMedia.media",
+                        select: "title topics category contentType uploadedBy createdAt thumbnailUrl fileUrl",
+                        populate: {
+                            path: "uploadedBy",
+                            select: "firstName lastName avatar",
+                        },
+                    })
+                        .lean());
+                    const viewedList = (viewed === null || viewed === void 0 ? void 0 : viewed.viewedMedia) || [];
+                    if (viewedList.length > 0) {
+                        lastViewedMedia = ((_a = viewedList[viewedList.length - 1]) === null || _a === void 0 ? void 0 : _a.media) || null;
+                    }
+                    // Add all user's media to seen set
+                    [
+                        ...userProfile.viewedMedia,
+                        ...userProfile.favoriteMedia,
+                        ...userProfile.sharedMedia,
+                        ...userProfile.bookmarkedMedia,
+                    ].forEach(m => seenMediaIds.add(m.mediaId));
+                }
+                catch (err) {
+                    console.error("Personalization bootstrap failed:", err);
+                }
+            }
+            // Helper to exclude seen ids
+            const excludeSeen = (match = {}) => {
+                if (seenMediaIds.size > 0) {
+                    return Object.assign(Object.assign({}, match), { _id: {
+                            $nin: Array.from(seenMediaIds).map(id => new mongoose_1.Types.ObjectId(id)),
+                        } });
+                }
+                return match;
+            };
+            // Get A/B test variant for section ordering
+            const abTestVariant = userId
+                ? recommendationEngine_service_1.recommendationEngineService.generateABTestVariant(userId)
+                : "control";
+            const sectionOrdering = recommendationEngine_service_1.recommendationEngineService.getSectionOrdering(userId);
+            const sections = [];
+            // 1) Editorial picks (ensure seeded default content shows)
+            try {
+                const editorial = yield media_model_1.Media.aggregate(this.buildAggregationPipeline(excludeSeen({ isDefaultContent: true }), {
+                    sampleSize: limitPerSection,
+                }));
+                if (editorial.length > 0) {
+                    editorial.forEach((m) => seenMediaIds.add(String(m._id)));
+                    sections.push({
+                        key: "editorial",
+                        title: "Jevah Picks",
+                        media: editorial,
+                        metadata: { abTestVariant },
+                    });
+                }
+            }
+            catch (_b) { }
+            // 2) Enhanced personalized For You with collaborative filtering
+            try {
+                let match = {};
+                if (userProfile) {
+                    const topTopics = Object.keys(userProfile.topTopics).slice(0, 10);
+                    const topCategories = Object.keys(userProfile.topCategories).slice(0, 5);
+                    const topTypes = Object.keys(userProfile.topContentTypes).slice(0, 3);
+                    const orClauses = [];
+                    if (topTopics.length > 0)
+                        orClauses.push({ topics: { $in: topTopics } });
+                    if (topCategories.length > 0)
+                        orClauses.push({ category: { $in: topCategories } });
+                    if (topTypes.length > 0)
+                        orClauses.push({ contentType: { $in: topTypes } });
+                    if (orClauses.length > 0)
+                        match = { $or: orClauses };
+                }
+                const personalized = yield media_model_1.Media.aggregate(this.buildAggregationPipeline(excludeSeen(match), {
+                    sampleSize: limitPerSection,
+                }));
+                if (personalized.length > 0) {
+                    // Enhance with collaborative filtering scores
+                    const enhancedPersonalized = yield Promise.all(personalized.map((media) => __awaiter(this, void 0, void 0, function* () {
+                        const collaborativeSignals = yield recommendationEngine_service_1.recommendationEngineService.getCollaborativeSignals(media._id, userId);
+                        const qualityScore = recommendationEngine_service_1.recommendationEngineService.calculateContentQualityScore(media);
+                        const collaborativeScore = collaborativeSignals.length > 0
+                            ? collaborativeSignals[0].predictedScore
+                            : 0;
+                        return Object.assign(Object.assign({}, media), { _collaborativeScore: collaborativeScore, _qualityScore: qualityScore });
+                    })));
+                    // Sort by combined score
+                    enhancedPersonalized.sort((a, b) => b._collaborativeScore +
+                        b._qualityScore -
+                        (a._collaborativeScore + a._qualityScore));
+                    enhancedPersonalized.forEach((m) => seenMediaIds.add(String(m._id)));
+                    sections.push({
+                        key: "for_you",
+                        title: "For You",
+                        media: enhancedPersonalized,
+                        reason: "Based on your activity and similar users",
+                        metadata: {
+                            abTestVariant,
+                            qualityScore: enhancedPersonalized.reduce((sum, m) => sum + m._qualityScore, 0) / enhancedPersonalized.length,
+                            collaborativeScore: enhancedPersonalized.reduce((sum, m) => sum + m._collaborativeScore, 0) / enhancedPersonalized.length,
+                        },
+                    });
+                }
+            }
+            catch (_c) { }
+            // 3) Because you watched/listened/read (similar to last item with topic embeddings)
+            try {
+                if (lastViewedMedia && lastViewedMedia._id) {
+                    const lv = lastViewedMedia;
+                    const similarMatch = {
+                        _id: { $ne: new mongoose_1.Types.ObjectId(String(lv._id)) },
+                    };
+                    const or = [];
+                    if (Array.isArray(lv.topics) && lv.topics.length > 0) {
+                        or.push({ topics: { $in: lv.topics } });
+                    }
+                    if (lv.category) {
+                        or.push({ category: lv.category });
+                    }
+                    if (lv.contentType) {
+                        or.push({ contentType: lv.contentType });
+                    }
+                    if (or.length > 0)
+                        similarMatch.$or = or;
+                    const similar = yield media_model_1.Media.aggregate(this.buildAggregationPipeline(excludeSeen(similarMatch), {
+                        sampleSize: limitPerSection,
+                    }));
+                    if (similar.length > 0) {
+                        // Enhance with topic similarity scoring
+                        const enhancedSimilar = similar.map((media) => {
+                            const topicSimilarity = userProfile
+                                ? recommendationEngine_service_1.recommendationEngineService["calculateTopicSimilarity"](lv.topics || [], media.topics || [])
+                                : 0;
+                            return Object.assign(Object.assign({}, media), { _topicSimilarity: topicSimilarity });
+                        });
+                        enhancedSimilar.sort((a, b) => b._topicSimilarity - a._topicSimilarity);
+                        enhancedSimilar.forEach((m) => seenMediaIds.add(String(m._id)));
+                        sections.push({
+                            key: "because_you_watched",
+                            title: "Because you watched",
+                            media: enhancedSimilar,
+                            metadata: { abTestVariant },
+                        });
+                    }
+                }
+            }
+            catch (_d) { }
+            // 4) Trending now (recent window)
+            try {
+                const trending = yield enhancedMedia_service_1.default.getTrendingMedia(undefined, limitPerSection, 14);
+                if (Array.isArray(trending) && trending.length > 0) {
+                    const trendingProjected = yield media_model_1.Media.aggregate(this.buildAggregationPipeline(excludeSeen({
+                        _id: {
+                            $in: trending.map((t) => new mongoose_1.Types.ObjectId(String(t._id))),
+                        },
+                    }), { limit: limitPerSection }));
+                    if (trendingProjected.length > 0) {
+                        trendingProjected.forEach((m) => seenMediaIds.add(String(m._id)));
+                        sections.push({
+                            key: "trending",
+                            title: "Trending",
+                            media: trendingProjected,
+                            metadata: { abTestVariant },
+                        });
+                    }
+                }
+            }
+            catch (_e) { }
+            // 5) Quick picks (random explore with light filtering by mood/type when provided)
+            try {
+                const mood = ((options === null || options === void 0 ? void 0 : options.mood) || "").toLowerCase();
+                const moodFilters = {};
+                if (["worship", "praise", "inspiration"].includes(mood)) {
+                    moodFilters.category = mood;
+                }
+                const quickPicks = yield media_model_1.Media.aggregate(this.buildAggregationPipeline(excludeSeen(moodFilters), {
+                    sampleSize: limitPerSection,
+                }));
+                if (quickPicks.length > 0) {
+                    quickPicks.forEach((m) => seenMediaIds.add(String(m._id)));
+                    sections.push({
+                        key: "quick_picks",
+                        title: "Explore",
+                        media: quickPicks,
+                        metadata: { abTestVariant },
+                    });
+                }
+            }
+            catch (_f) { }
+            // Reorder sections based on A/B test variant
+            const orderedSections = sectionOrdering
+                .map(key => sections.find(s => s.key === key))
+                .filter(Boolean);
+            return { sections: orderedSections };
         });
     }
     getMediaByIdentifier(mediaIdentifier) {

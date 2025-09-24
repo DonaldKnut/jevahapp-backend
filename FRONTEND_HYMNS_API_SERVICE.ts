@@ -432,3 +432,4 @@ class HymnsAPI {
 // Export singleton instance
 export const hymnsAPI = new HymnsAPI();
 export default hymnsAPI;
+

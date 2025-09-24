@@ -2,6 +2,7 @@ import mongoose, { Types, ClientSession } from "mongoose";
 import { Bookmark } from "../models/bookmark.model";
 import { Media } from "../models/media.model";
 import logger from "../utils/logger";
+import { AuditService } from "./audit.service";
 import { NotificationService } from "./notification.service";
 
 export interface BookmarkResult {
@@ -103,6 +104,22 @@ export class UnifiedBookmarkService {
         bookmarkCount,
         timestamp: new Date().toISOString(),
       });
+
+      // Audit log (media_save when bookmarked; media_remove when unbookmarked)
+      try {
+        await AuditService.logMediaInteraction(
+          userId,
+          bookmarked ? "media_save" : "media_remove",
+          mediaId
+        );
+      } catch (auditError: any) {
+        logger.warn("Failed to write audit log for bookmark toggle", {
+          error: auditError?.message,
+          userId,
+          mediaId,
+          bookmarked,
+        });
+      }
 
       return {
         bookmarked,

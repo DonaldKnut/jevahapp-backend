@@ -325,95 +325,26 @@ class EnhancedMediaService {
             }
         });
     }
-    /**
-     * Add media to user's library
-     */
+    // Deprecated: Use UnifiedBookmarkService via controller shim
     addToLibrary(userId_1, mediaId_1) {
         return __awaiter(this, arguments, void 0, function* (userId, mediaId, mediaType = "media", notes, rating) {
-            const startTime = Date.now();
-            try {
-                // Check if already in library
-                const existing = yield library_model_1.Library.findOne({
-                    userId: new mongoose_1.Types.ObjectId(userId),
-                    mediaId: new mongoose_1.Types.ObjectId(mediaId),
-                    mediaType,
-                });
-                if (existing) {
-                    throw new Error("Media already in library");
-                }
-                // Add to library
-                yield library_model_1.Library.create({
-                    userId: new mongoose_1.Types.ObjectId(userId),
-                    mediaId: new mongoose_1.Types.ObjectId(mediaId),
-                    mediaType,
-                    notes,
-                    rating,
-                    addedAt: new Date(),
-                });
-                // Update media record
-                if (mediaType === "media") {
-                    yield media_model_1.Media.findByIdAndUpdate(mediaId, {
-                        isInLibrary: true,
-                        libraryAddedAt: new Date(),
-                    });
-                }
-                const duration = Date.now() - startTime;
-                logger_1.default.logDatabase("create", "library", duration, {
-                    userId,
-                    mediaId,
-                    mediaType,
-                });
-            }
-            catch (error) {
-                const duration = Date.now() - startTime;
-                logger_1.default.error("Error adding to library", {
-                    error: error.message,
-                    userId,
-                    mediaId,
-                    mediaType,
-                    duration: `${duration}ms`,
-                });
-                throw error;
-            }
+            logger_1.default.warn("Deprecated addToLibrary called; route delegates to unified bookmark", {
+                userId,
+                mediaId,
+                mediaType,
+                notes,
+                rating,
+            });
         });
     }
-    /**
-     * Remove media from user's library
-     */
+    // Deprecated: Use UnifiedBookmarkService via controller shim
     removeFromLibrary(userId_1, mediaId_1) {
         return __awaiter(this, arguments, void 0, function* (userId, mediaId, mediaType = "media") {
-            const startTime = Date.now();
-            try {
-                yield library_model_1.Library.findOneAndDelete({
-                    userId: new mongoose_1.Types.ObjectId(userId),
-                    mediaId: new mongoose_1.Types.ObjectId(mediaId),
-                    mediaType,
-                });
-                // Update media record
-                if (mediaType === "media") {
-                    yield media_model_1.Media.findByIdAndUpdate(mediaId, {
-                        isInLibrary: false,
-                        $unset: { libraryAddedAt: 1 },
-                    });
-                }
-                const duration = Date.now() - startTime;
-                logger_1.default.logDatabase("delete", "library", duration, {
-                    userId,
-                    mediaId,
-                    mediaType,
-                });
-            }
-            catch (error) {
-                const duration = Date.now() - startTime;
-                logger_1.default.error("Error removing from library", {
-                    error: error.message,
-                    userId,
-                    mediaId,
-                    mediaType,
-                    duration: `${duration}ms`,
-                });
-                throw error;
-            }
+            logger_1.default.warn("Deprecated removeFromLibrary called; route delegates to unified bookmark", {
+                userId,
+                mediaId,
+                mediaType,
+            });
         });
     }
     /**

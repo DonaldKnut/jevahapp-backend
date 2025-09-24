@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCurrentlyWatching = exports.updateWatchProgress = exports.getUserLibrary = exports.removeFromLibrary = exports.addToLibrary = exports.searchMediaWithFilters = exports.getMostViewedMedia = exports.getTrendingMedia = void 0;
 const enhancedMedia_service_1 = __importDefault(require("../service/enhancedMedia.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
+const unifiedBookmark_service_1 = require("../service/unifiedBookmark.service");
 /**
  * Get trending media
  */
@@ -175,7 +176,7 @@ exports.searchMediaWithFilters = searchMediaWithFilters;
  */
 const addToLibrary = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { mediaId, mediaType = "media", notes, rating } = request.body;
+        const { mediaId } = request.body;
         const userIdentifier = request.userId;
         if (!userIdentifier) {
             response.status(401).json({
@@ -191,10 +192,22 @@ const addToLibrary = (request, response) => __awaiter(void 0, void 0, void 0, fu
             });
             return;
         }
-        yield enhancedMedia_service_1.default.addToLibrary(userIdentifier, mediaId, mediaType, notes, rating ? parseInt(rating) : undefined);
+        // Delegate to unified bookmark system (idempotent "add" semantics)
+        const alreadyBookmarked = yield unifiedBookmark_service_1.UnifiedBookmarkService.isBookmarked(userIdentifier, mediaId);
+        let bookmarked = alreadyBookmarked;
+        let bookmarkCount;
+        if (!alreadyBookmarked) {
+            const result = yield unifiedBookmark_service_1.UnifiedBookmarkService.toggleBookmark(userIdentifier, mediaId);
+            bookmarked = result.bookmarked;
+            bookmarkCount = result.bookmarkCount;
+        }
+        else {
+            bookmarkCount = yield unifiedBookmark_service_1.UnifiedBookmarkService.getBookmarkCount(mediaId);
+        }
         response.status(200).json({
             success: true,
             message: "Media added to library successfully",
+            data: { bookmarked, bookmarkCount },
         });
     }
     catch (error) {
@@ -215,7 +228,7 @@ exports.addToLibrary = addToLibrary;
  */
 const removeFromLibrary = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { mediaId, mediaType = "media" } = request.params;
+        const { mediaId } = request.params;
         const userIdentifier = request.userId;
         if (!userIdentifier) {
             response.status(401).json({
@@ -224,10 +237,22 @@ const removeFromLibrary = (request, response) => __awaiter(void 0, void 0, void 
             });
             return;
         }
-        yield enhancedMedia_service_1.default.removeFromLibrary(userIdentifier, mediaId, mediaType);
+        // Delegate to unified bookmark system (idempotent "remove" semantics)
+        const isBookmarked = yield unifiedBookmark_service_1.UnifiedBookmarkService.isBookmarked(userIdentifier, mediaId);
+        let bookmarked = isBookmarked;
+        let bookmarkCount;
+        if (isBookmarked) {
+            const result = yield unifiedBookmark_service_1.UnifiedBookmarkService.toggleBookmark(userIdentifier, mediaId);
+            bookmarked = result.bookmarked;
+            bookmarkCount = result.bookmarkCount;
+        }
+        else {
+            bookmarkCount = yield unifiedBookmark_service_1.UnifiedBookmarkService.getBookmarkCount(mediaId);
+        }
         response.status(200).json({
             success: true,
             message: "Media removed from library successfully",
+            data: { bookmarked, bookmarkCount },
         });
     }
     catch (error) {

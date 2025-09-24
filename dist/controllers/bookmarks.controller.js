@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.removeBookmark = exports.addBookmark = exports.getBookmarkedMedia = void 0;
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
+const unifiedBookmark_service_1 = require("../service/unifiedBookmark.service");
 /**
  * Get all bookmarked media for the current user
  */
@@ -77,37 +78,22 @@ const addBookmark = (request, response) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
-        const existing = yield bookmark_model_1.Bookmark.findOne({
-            user: new mongoose_1.Types.ObjectId(userId),
-            media: new mongoose_1.Types.ObjectId(mediaId),
-        });
-        if (existing) {
-            response.status(400).json({
-                success: false,
-                message: "Media already saved",
-            });
-            return;
-        }
-        const bookmark = new bookmark_model_1.Bookmark({
-            user: new mongoose_1.Types.ObjectId(userId),
-            media: new mongoose_1.Types.ObjectId(mediaId),
-        });
-        yield bookmark.save();
-        response.status(201).json({
+        // Delegate to unified bookmark toggle for idempotent behavior
+        const already = yield unifiedBookmark_service_1.UnifiedBookmarkService.isBookmarked(userId, mediaId);
+        const result = already
+            ? {
+                bookmarked: true,
+                bookmarkCount: yield unifiedBookmark_service_1.UnifiedBookmarkService.getBookmarkCount(mediaId),
+            }
+            : yield unifiedBookmark_service_1.UnifiedBookmarkService.toggleBookmark(userId, mediaId);
+        response.status(200).json({
             success: true,
             message: "Media saved to library",
-            data: bookmark,
+            data: result,
         });
     }
     catch (error) {
         console.error("Add bookmark error:", error);
-        if (error.code === 11000) {
-            response.status(400).json({
-                success: false,
-                message: "Media already saved",
-            });
-            return;
-        }
         response.status(500).json({
             success: false,
             message: "Failed to save media",
@@ -136,20 +122,18 @@ const removeBookmark = (request, response) => __awaiter(void 0, void 0, void 0, 
             });
             return;
         }
-        const result = yield bookmark_model_1.Bookmark.findOneAndDelete({
-            user: new mongoose_1.Types.ObjectId(userId),
-            media: new mongoose_1.Types.ObjectId(mediaId),
-        });
-        if (!result) {
-            response.status(404).json({
-                success: false,
-                message: "Bookmark not found",
-            });
-            return;
-        }
+        // Delegate to unified bookmark toggle for idempotent behavior
+        const isBookmarked = yield unifiedBookmark_service_1.UnifiedBookmarkService.isBookmarked(userId, mediaId);
+        const result = isBookmarked
+            ? yield unifiedBookmark_service_1.UnifiedBookmarkService.toggleBookmark(userId, mediaId)
+            : {
+                bookmarked: false,
+                bookmarkCount: yield unifiedBookmark_service_1.UnifiedBookmarkService.getBookmarkCount(mediaId),
+            };
         response.status(200).json({
             success: true,
             message: "Media removed from library",
+            data: result,
         });
     }
     catch (error) {

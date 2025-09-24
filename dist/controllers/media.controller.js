@@ -239,12 +239,27 @@ const getAllMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
 exports.getAllMedia = getAllMedia;
 // New endpoint specifically for the "All" tab - returns all content for all users
 const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const result = yield media_service_1.mediaService.getAllContentForAllTab();
+        // Optional personalization: include recommendations when user is authenticated
+        let recommendations = undefined;
+        const userIdentifier = request.userId;
+        try {
+            recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(userIdentifier, {
+                limitPerSection: 12,
+                mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
+            });
+        }
+        catch (err) {
+            // Non-blocking failure; proceed without recommendations
+            recommendations = undefined;
+        }
         response.status(200).json({
             success: true,
             media: result.media,
             total: result.total,
+            recommendations,
         });
     }
     catch (error) {
@@ -1377,12 +1392,25 @@ const getPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, 
 });
 exports.getPublicMedia = getPublicMedia;
 const getPublicAllContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const result = yield media_service_1.mediaService.getAllContentForAllTab();
+        // Public endpoint can still include non-personalized recommendations
+        let recommendations = undefined;
+        try {
+            recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(undefined, {
+                limitPerSection: 12,
+                mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
+            });
+        }
+        catch (err) {
+            recommendations = undefined;
+        }
         response.status(200).json({
             success: true,
             media: result.media,
             total: result.total,
+            recommendations,
         });
     }
     catch (error) {
