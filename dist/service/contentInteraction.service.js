@@ -25,6 +25,24 @@ const mentionDetection_service_1 = __importDefault(require("./mentionDetection.s
 const logger_1 = __importDefault(require("../utils/logger"));
 const bookmark_model_1 = require("../models/bookmark.model");
 class ContentInteractionService {
+    sanitizeCommentContent(raw) {
+        const urlRegex = /(https?:\/\/|www\.)[^\s]+/gi;
+        let text = (raw || "").toString();
+        text = text.replace(urlRegex, "");
+        const list = (process.env.PROFANITY_BLOCK_LIST || "")
+            .split(",")
+            .map(w => w.trim())
+            .filter(Boolean);
+        let hadProfanity = false;
+        for (const word of list) {
+            const pattern = new RegExp(`\\b${word.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "ig");
+            if (pattern.test(text)) {
+                hadProfanity = true;
+                text = text.replace(pattern, "***");
+            }
+        }
+        return { text: text.trim(), hadProfanity };
+    }
     /**
      * Toggle like on any content type
      */
@@ -265,12 +283,13 @@ class ContentInteractionService {
             }
             const session = yield media_model_1.Media.startSession();
             try {
+                const { text: sanitizedText } = this.sanitizeCommentContent(content);
                 const comment = yield session.withTransaction(() => __awaiter(this, void 0, void 0, function* () {
                     const commentData = {
                         user: new mongoose_1.Types.ObjectId(userId),
                         media: new mongoose_1.Types.ObjectId(contentId),
                         interactionType: "comment",
-                        content: content.trim(),
+                        content: sanitizedText,
                     };
                     if (parentCommentId && mongoose_1.Types.ObjectId.isValid(parentCommentId)) {
                         commentData.parentCommentId = new mongoose_1.Types.ObjectId(parentCommentId);
@@ -281,6 +300,10 @@ class ContentInteractionService {
                     // Update content comment count
                     if (contentType === "media") {
                         yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { commentCount: 1 } }, { session });
+                    }
+                    // If this is a reply, increment parent's replyCount
+                    if (commentData.parentCommentId) {
+                        yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentData.parentCommentId, { $inc: { replyCount: 1 } }, { session });
                     }
                     return comment[0];
                 }));
@@ -346,6 +369,27 @@ class ContentInteractionService {
                 const populatedComment = yield mediaInteraction_model_1.MediaInteraction.findById(comment._id)
                     .populate("user", "firstName lastName avatar")
                     .populate("parentCommentId", "content user");
+                // Emit real-time new comment
+                try {
+                    const io = require("../socket/socketManager").getIO();
+                    if (io) {
+                        const payload = {
+                            contentId,
+                            contentType,
+                            comment: {
+                                _id: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment._id,
+                                content: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.content,
+                                user: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.user,
+                                parentCommentId: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.parentCommentId,
+                                replyCount: (populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.replyCount) || 0,
+                                createdAt: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.createdAt,
+                            },
+                        };
+                        io.emit("content-comment", payload);
+                        io.to(`content:${contentId}`).emit("new-comment", payload.comment);
+                    }
+                }
+                catch (_a) { }
                 return populatedComment;
             }
             finally {
@@ -357,7 +401,7 @@ class ContentInteractionService {
      * Get comments for content
      */
     getContentComments(contentId_1, contentType_1) {
-        return __awaiter(this, arguments, void 0, function* (contentId, contentType, page = 1, limit = 20) {
+        return __awaiter(this, arguments, void 0, function* (contentId, contentType, page = 1, limit = 20, sortBy = "newest") {
             if (!mongoose_1.Types.ObjectId.isValid(contentId)) {
                 throw new Error("Invalid content ID");
             }
@@ -367,20 +411,90 @@ class ContentInteractionService {
             const skip = (page - 1) * limit;
             // For now, we'll use MediaInteraction for both media and devotional
             // TODO: Create a more generic ContentInteraction model in the future
+            // Return only top-level comments with replyCount and basic fields
+            if (sortBy === "top") {
+                // Aggregate to compute a rough score: replyCount + total reactions
+                const pipeline = [
+                    {
+                        $match: {
+                            media: new mongoose_1.Types.ObjectId(contentId),
+                            interactionType: "comment",
+                            isRemoved: { $ne: true },
+                            isHidden: { $ne: true },
+                            parentCommentId: { $exists: false },
+                        },
+                    },
+                    {
+                        $addFields: {
+                            reactionsArray: { $objectToArray: "$reactions" },
+                        },
+                    },
+                    {
+                        $addFields: {
+                            reactionTotal: {
+                                $sum: {
+                                    $map: {
+                                        input: "$reactionsArray",
+                                        as: "r",
+                                        in: { $size: "$$r.v" },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    {
+                        $addFields: {
+                            score: { $add: ["$replyCount", "$reactionTotal"] },
+                        },
+                    },
+                    { $sort: { score: -1, createdAt: -1 } },
+                    { $skip: skip },
+                    { $limit: limit },
+                ];
+                const comments = yield mediaInteraction_model_1.MediaInteraction.aggregate(pipeline);
+                // Populate user after aggregation
+                const ids = comments.map((c) => c._id);
+                const withUsers = yield mediaInteraction_model_1.MediaInteraction.find({ _id: { $in: ids } })
+                    .populate("user", "firstName lastName avatar")
+                    .lean();
+                const map = new Map(withUsers.map((c) => [c._id.toString(), c]));
+                const ordered = comments.map((c) => (Object.assign(Object.assign({}, map.get(c._id.toString())), { score: c.score })));
+                const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+                    media: new mongoose_1.Types.ObjectId(contentId),
+                    interactionType: "comment",
+                    isRemoved: { $ne: true },
+                    isHidden: { $ne: true },
+                    parentCommentId: { $exists: false },
+                });
+                return {
+                    comments: ordered,
+                    pagination: {
+                        page,
+                        limit,
+                        total,
+                        pages: Math.ceil(total / limit),
+                    },
+                };
+            }
+            const sortStageStr = sortBy === "oldest" ? "createdAt" : "-createdAt";
             const comments = yield mediaInteraction_model_1.MediaInteraction.find({
                 media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "comment",
                 isRemoved: { $ne: true },
+                isHidden: { $ne: true },
+                parentCommentId: { $exists: false },
             })
                 .populate("user", "firstName lastName avatar")
-                .populate("parentCommentId", "content user")
-                .sort({ createdAt: -1 })
+                .sort(sortStageStr)
                 .skip(skip)
-                .limit(limit);
+                .limit(limit)
+                .lean();
             const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
                 media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "comment",
                 isRemoved: { $ne: true },
+                isHidden: { $ne: true },
+                parentCommentId: { $exists: false },
             });
             return {
                 comments,
@@ -394,6 +508,103 @@ class ContentInteractionService {
         });
     }
     /**
+     * Get replies for a specific comment
+     */
+    getCommentReplies(commentId_1) {
+        return __awaiter(this, arguments, void 0, function* (commentId, page = 1, limit = 20) {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId)) {
+                throw new Error("Invalid comment ID");
+            }
+            const skip = (page - 1) * limit;
+            const replies = yield mediaInteraction_model_1.MediaInteraction.find({
+                parentCommentId: new mongoose_1.Types.ObjectId(commentId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+                isHidden: { $ne: true },
+            })
+                .populate("user", "firstName lastName avatar")
+                .sort("createdAt")
+                .skip(skip)
+                .limit(limit)
+                .lean();
+            const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+                parentCommentId: new mongoose_1.Types.ObjectId(commentId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+                isHidden: { $ne: true },
+            });
+            return {
+                replies,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit),
+                },
+            };
+        });
+    }
+    /**
+     * Edit a comment (owner only)
+     */
+    editContentComment(commentId, userId, newContent) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+                throw new Error("Invalid comment or user ID");
+            }
+            if (!newContent || newContent.trim().length === 0) {
+                throw new Error("Comment content is required");
+            }
+            const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                _id: new mongoose_1.Types.ObjectId(commentId),
+                user: new mongoose_1.Types.ObjectId(userId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            });
+            if (!comment) {
+                throw new Error("Comment not found or you don't have permission to edit it");
+            }
+            const { text: sanitized } = this.sanitizeCommentContent(newContent);
+            yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentId, {
+                content: sanitized,
+            });
+            const updatedDoc = yield mediaInteraction_model_1.MediaInteraction.findById(commentId).populate("user", "firstName lastName avatar");
+            const updated = (updatedDoc === null || updatedDoc === void 0 ? void 0 : updatedDoc.toObject)
+                ? updatedDoc.toObject()
+                : updatedDoc;
+            // Emit real-time edit
+            try {
+                const io = require("../socket/socketManager").getIO();
+                if (io) {
+                    io.emit("comment-edited", {
+                        commentId,
+                        content: sanitized,
+                    });
+                }
+            }
+            catch (_a) { }
+            return updated;
+        });
+    }
+    /**
+     * Report a comment
+     */
+    reportContentComment(commentId, userId, reason) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+                throw new Error("Invalid comment or user ID");
+            }
+            const update = yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentId, {
+                $inc: { reportCount: 1 },
+                $addToSet: { reportedBy: new mongoose_1.Types.ObjectId(userId) },
+            }, { new: true }).select("reportCount");
+            if (!update) {
+                throw new Error("Comment not found");
+            }
+            return { reportCount: update.reportCount || 0 };
+        });
+    }
+    /**
      * Remove comment
      */
     removeContentComment(commentId, userId) {
@@ -403,11 +614,15 @@ class ContentInteractionService {
             }
             const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
                 _id: commentId,
-                user: userId,
                 interactionType: "comment",
                 isRemoved: { $ne: true },
-            });
+            }).select("user media parentCommentId");
             if (!comment) {
+                throw new Error("Comment not found or you don't have permission to delete it");
+            }
+            // Permission: owner can delete; moderators/admins can hide
+            const isOwner = comment.user.toString() === userId;
+            if (!isOwner) {
                 throw new Error("Comment not found or you don't have permission to delete it");
             }
             // Soft delete the comment
@@ -420,6 +635,45 @@ class ContentInteractionService {
                 yield media_model_1.Media.findByIdAndUpdate(comment.media, {
                     $inc: { commentCount: -1 },
                 });
+            }
+            // If it was a reply, decrement parent's replyCount
+            if (comment.parentCommentId) {
+                yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(comment.parentCommentId, {
+                    $inc: { replyCount: -1 },
+                });
+            }
+            // Emit real-time removal and reply count update
+            try {
+                const io = require("../socket/socketManager").getIO();
+                if (io) {
+                    io.emit("comment-removed", { commentId });
+                    if (comment.parentCommentId) {
+                        io.emit("reply-count-updated", {
+                            commentId: comment.parentCommentId.toString(),
+                            delta: -1,
+                        });
+                    }
+                }
+            }
+            catch (_a) { }
+        });
+    }
+    /**
+     * Moderator hide comment (does not affect counts)
+     */
+    moderateHideComment(commentId, moderatorId, reason) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId) ||
+                !mongoose_1.Types.ObjectId.isValid(moderatorId)) {
+                throw new Error("Invalid comment or user ID");
+            }
+            const updated = yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentId, {
+                isHidden: true,
+                hiddenBy: new mongoose_1.Types.ObjectId(moderatorId),
+                hiddenReason: reason === null || reason === void 0 ? void 0 : reason.toString().slice(0, 500),
+            }, { new: true }).select("_id");
+            if (!updated) {
+                throw new Error("Comment not found");
             }
         });
     }

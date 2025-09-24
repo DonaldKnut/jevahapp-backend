@@ -16,8 +16,14 @@ export interface IMediaInteraction extends Document {
   content?: string; // For comments
   parentCommentId?: mongoose.Types.ObjectId; // For nested comments
   reactions?: {
-    [key: string]: number; // Dynamic reactions like "heart", "thumbsUp", etc.
+    [reactionType: string]: mongoose.Types.ObjectId[]; // Per-user reactions for toggling
   };
+  replyCount?: number; // Denormalized count of direct replies
+  isHidden?: boolean; // Moderator-hidden
+  hiddenReason?: string;
+  hiddenBy?: mongoose.Types.ObjectId; // ref: User
+  reportCount?: number; // Number of reports
+  reportedBy?: mongoose.Types.ObjectId[]; // Users who reported
   isRemoved?: boolean; // For soft deletion
   interactions: {
     timestamp: Date;
@@ -70,9 +76,31 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
     },
     reactions: {
       type: Map,
-      of: Number,
+      of: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: {},
     },
+    replyCount: {
+      type: Number,
+      default: 0,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
+    },
+    hiddenReason: {
+      type: String,
+      maxlength: 500,
+    },
+    hiddenBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    reportCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    reportedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
     isRemoved: {
       type: Boolean,
       default: false,
@@ -95,6 +123,7 @@ mediaInteractionSchema.index({ user: 1, media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ parentCommentId: 1 });
 mediaInteractionSchema.index({ createdAt: -1 });
+mediaInteractionSchema.index({ media: 1, parentCommentId: 1, createdAt: -1 });
 
 export const MediaInteraction =
   mongoose.models.MediaInteraction ||

@@ -40,20 +40,17 @@ class InteractionService {
                 const result = yield session.withTransaction(() => __awaiter(this, void 0, void 0, function* () {
                     const userId = new mongoose_1.Types.ObjectId(data.userId);
                     const currentReactions = comment.reactions || {};
-                    const userReactions = currentReactions[data.reactionType] || [];
-                    let newReactions;
-                    if (userReactions.includes(userId)) {
-                        // Remove reaction
-                        newReactions = userReactions.filter((id) => !id.equals(userId));
-                    }
-                    else {
-                        // Add reaction
-                        newReactions = [...userReactions, userId];
-                    }
-                    const updatedComment = yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(data.commentId, { [`reactions.${data.reactionType}`]: newReactions }, { new: true, session });
+                    const existing = Array.isArray(currentReactions[data.reactionType])
+                        ? currentReactions[data.reactionType]
+                        : [];
+                    const hasReacted = existing.some((id) => id.equals(userId));
+                    const updatedArray = hasReacted
+                        ? existing.filter((id) => !id.equals(userId))
+                        : [...existing, userId];
+                    yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(data.commentId, { [`reactions.${data.reactionType}`]: updatedArray }, { new: false, session });
                     return {
                         reactionType: data.reactionType,
-                        count: newReactions.length,
+                        count: updatedArray.length,
                     };
                 }));
                 return result;

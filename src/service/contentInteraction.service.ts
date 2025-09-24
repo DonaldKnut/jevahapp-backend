@@ -55,6 +55,30 @@ export interface ContentMetadata {
 }
 
 export class ContentInteractionService {
+  private sanitizeCommentContent(raw: string): {
+    text: string;
+    hadProfanity: boolean;
+  } {
+    const urlRegex = /(https?:\/\/|www\.)[^\s]+/gi;
+    let text = (raw || "").toString();
+    text = text.replace(urlRegex, "");
+    const list = (process.env.PROFANITY_BLOCK_LIST || "")
+      .split(",")
+      .map(w => w.trim())
+      .filter(Boolean);
+    let hadProfanity = false;
+    for (const word of list) {
+      const pattern = new RegExp(
+        `\\b${word.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`,
+        "ig"
+      );
+      if (pattern.test(text)) {
+        hadProfanity = true;
+        text = text.replace(pattern, "***");
+      }
+    }
+    return { text: text.trim(), hadProfanity };
+  }
   /**
    * Toggle like on any content type
    */
@@ -381,12 +405,13 @@ export class ContentInteractionService {
 
     const session: ClientSession = await Media.startSession();
     try {
+      const { text: sanitizedText } = this.sanitizeCommentContent(content);
       const comment = await session.withTransaction(async () => {
         const commentData: any = {
           user: new Types.ObjectId(userId),
           media: new Types.ObjectId(contentId),
           interactionType: "comment",
-          content: content.trim(),
+          content: sanitizedText,
         };
 
         if (parentCommentId && Types.ObjectId.isValid(parentCommentId)) {
@@ -402,6 +427,15 @@ export class ContentInteractionService {
           await Media.findByIdAndUpdate(
             contentId,
             { $inc: { commentCount: 1 } },
+            { session }
+          );
+        }
+
+        // If this is a reply, increment parent's replyCount
+        if (commentData.parentCommentId) {
+          await MediaInteraction.findByIdAndUpdate(
+            commentData.parentCommentId,
+            { $inc: { replyCount: 1 } },
             { session }
           );
         }
@@ -500,6 +534,27 @@ export class ContentInteractionService {
         .populate("user", "firstName lastName avatar")
         .populate("parentCommentId", "content user");
 
+      // Emit real-time new comment
+      try {
+        const io = require("../socket/socketManager").getIO();
+        if (io) {
+          const payload = {
+            contentId,
+            contentType,
+            comment: {
+              _id: populatedComment?._id,
+              content: populatedComment?.content,
+              user: populatedComment?.user,
+              parentCommentId: populatedComment?.parentCommentId,
+              replyCount: populatedComment?.replyCount || 0,
+              createdAt: populatedComment?.createdAt,
+            },
+          };
+          io.emit("content-comment", payload);
+          io.to(`content:${contentId}`).emit("new-comment", payload.comment);
+        }
+      } catch {}
+
       return populatedComment;
     } finally {
       session.endSession();
@@ -513,7 +568,8 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string,
     page: number = 1,
-    limit: number = 20
+    limit: number = 20,
+    sortBy: "newest" | "oldest" | "top" = "newest"
   ): Promise<any> {
     if (!Types.ObjectId.isValid(contentId)) {
       throw new Error("Invalid content ID");
@@ -527,21 +583,102 @@ export class ContentInteractionService {
 
     // For now, we'll use MediaInteraction for both media and devotional
     // TODO: Create a more generic ContentInteraction model in the future
+    // Return only top-level comments with replyCount and basic fields
+    if (sortBy === "top") {
+      // Aggregate to compute a rough score: replyCount + total reactions
+      const pipeline: any[] = [
+        {
+          $match: {
+            media: new Types.ObjectId(contentId),
+            interactionType: "comment",
+            isRemoved: { $ne: true },
+            isHidden: { $ne: true },
+            parentCommentId: { $exists: false },
+          },
+        },
+        {
+          $addFields: {
+            reactionsArray: { $objectToArray: "$reactions" },
+          },
+        },
+        {
+          $addFields: {
+            reactionTotal: {
+              $sum: {
+                $map: {
+                  input: "$reactionsArray",
+                  as: "r",
+                  in: { $size: "$$r.v" },
+                },
+              },
+            },
+          },
+        },
+        {
+          $addFields: {
+            score: { $add: ["$replyCount", "$reactionTotal"] },
+          },
+        },
+        { $sort: { score: -1, createdAt: -1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ];
+
+      const comments = await MediaInteraction.aggregate(pipeline);
+
+      // Populate user after aggregation
+      const ids = comments.map((c: any) => c._id);
+      const withUsers = await MediaInteraction.find({ _id: { $in: ids } })
+        .populate("user", "firstName lastName avatar")
+        .lean();
+      const map: any = new Map(
+        withUsers.map((c: any) => [c._id.toString(), c])
+      );
+      const ordered = comments.map((c: any) => ({
+        ...map.get(c._id.toString()),
+        score: c.score,
+      }));
+
+      const total = await MediaInteraction.countDocuments({
+        media: new Types.ObjectId(contentId),
+        interactionType: "comment",
+        isRemoved: { $ne: true },
+        isHidden: { $ne: true },
+        parentCommentId: { $exists: false },
+      });
+
+      return {
+        comments: ordered,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    const sortStageStr = sortBy === "oldest" ? "createdAt" : "-createdAt";
+
     const comments = await MediaInteraction.find({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
+      isHidden: { $ne: true },
+      parentCommentId: { $exists: false },
     })
       .populate("user", "firstName lastName avatar")
-      .populate("parentCommentId", "content user")
-      .sort({ createdAt: -1 })
+      .sort(sortStageStr)
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     const total = await MediaInteraction.countDocuments({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
+      isHidden: { $ne: true },
+      parentCommentId: { $exists: false },
     });
 
     return {
@@ -556,6 +693,133 @@ export class ContentInteractionService {
   }
 
   /**
+   * Get replies for a specific comment
+   */
+  async getCommentReplies(
+    commentId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<any> {
+    if (!Types.ObjectId.isValid(commentId)) {
+      throw new Error("Invalid comment ID");
+    }
+
+    const skip = (page - 1) * limit;
+
+    const replies = await MediaInteraction.find({
+      parentCommentId: new Types.ObjectId(commentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+      isHidden: { $ne: true },
+    })
+      .populate("user", "firstName lastName avatar")
+      .sort("createdAt")
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await MediaInteraction.countDocuments({
+      parentCommentId: new Types.ObjectId(commentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+      isHidden: { $ne: true },
+    });
+
+    return {
+      replies,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Edit a comment (owner only)
+   */
+  async editContentComment(
+    commentId: string,
+    userId: string,
+    newContent: string
+  ): Promise<any> {
+    if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId)) {
+      throw new Error("Invalid comment or user ID");
+    }
+    if (!newContent || newContent.trim().length === 0) {
+      throw new Error("Comment content is required");
+    }
+
+    const comment = await MediaInteraction.findOne({
+      _id: new Types.ObjectId(commentId),
+      user: new Types.ObjectId(userId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    });
+
+    if (!comment) {
+      throw new Error(
+        "Comment not found or you don't have permission to edit it"
+      );
+    }
+
+    const { text: sanitized } = this.sanitizeCommentContent(newContent);
+    await MediaInteraction.findByIdAndUpdate(commentId, {
+      content: sanitized,
+    });
+
+    const updatedDoc = await MediaInteraction.findById(commentId).populate(
+      "user",
+      "firstName lastName avatar"
+    );
+    const updated: any = updatedDoc?.toObject
+      ? updatedDoc.toObject()
+      : updatedDoc;
+
+    // Emit real-time edit
+    try {
+      const io = require("../socket/socketManager").getIO();
+      if (io) {
+        io.emit("comment-edited", {
+          commentId,
+          content: sanitized,
+        });
+      }
+    } catch {}
+
+    return updated;
+  }
+
+  /**
+   * Report a comment
+   */
+  async reportContentComment(
+    commentId: string,
+    userId: string,
+    reason?: string
+  ): Promise<{ reportCount: number }> {
+    if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId)) {
+      throw new Error("Invalid comment or user ID");
+    }
+
+    const update = await MediaInteraction.findByIdAndUpdate(
+      commentId,
+      {
+        $inc: { reportCount: 1 },
+        $addToSet: { reportedBy: new Types.ObjectId(userId) },
+      },
+      { new: true }
+    ).select("reportCount");
+
+    if (!update) {
+      throw new Error("Comment not found");
+    }
+
+    return { reportCount: update.reportCount || 0 };
+  }
+
+  /**
    * Remove comment
    */
   async removeContentComment(commentId: string, userId: string): Promise<void> {
@@ -565,12 +829,19 @@ export class ContentInteractionService {
 
     const comment = await MediaInteraction.findOne({
       _id: commentId,
-      user: userId,
       interactionType: "comment",
       isRemoved: { $ne: true },
-    });
+    }).select("user media parentCommentId");
 
     if (!comment) {
+      throw new Error(
+        "Comment not found or you don't have permission to delete it"
+      );
+    }
+
+    // Permission: owner can delete; moderators/admins can hide
+    const isOwner = comment.user.toString() === userId;
+    if (!isOwner) {
       throw new Error(
         "Comment not found or you don't have permission to delete it"
       );
@@ -587,6 +858,57 @@ export class ContentInteractionService {
       await Media.findByIdAndUpdate(comment.media, {
         $inc: { commentCount: -1 },
       });
+    }
+
+    // If it was a reply, decrement parent's replyCount
+    if (comment.parentCommentId) {
+      await MediaInteraction.findByIdAndUpdate(comment.parentCommentId, {
+        $inc: { replyCount: -1 },
+      });
+    }
+
+    // Emit real-time removal and reply count update
+    try {
+      const io = require("../socket/socketManager").getIO();
+      if (io) {
+        io.emit("comment-removed", { commentId });
+        if (comment.parentCommentId) {
+          io.emit("reply-count-updated", {
+            commentId: comment.parentCommentId.toString(),
+            delta: -1,
+          });
+        }
+      }
+    } catch {}
+  }
+
+  /**
+   * Moderator hide comment (does not affect counts)
+   */
+  async moderateHideComment(
+    commentId: string,
+    moderatorId: string,
+    reason?: string
+  ): Promise<void> {
+    if (
+      !Types.ObjectId.isValid(commentId) ||
+      !Types.ObjectId.isValid(moderatorId)
+    ) {
+      throw new Error("Invalid comment or user ID");
+    }
+
+    const updated = await MediaInteraction.findByIdAndUpdate(
+      commentId,
+      {
+        isHidden: true,
+        hiddenBy: new Types.ObjectId(moderatorId),
+        hiddenReason: reason?.toString().slice(0, 500),
+      },
+      { new: true }
+    ).select("_id");
+
+    if (!updated) {
+      throw new Error("Comment not found");
     }
   }
 

@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.shareContent = exports.getContentComments = exports.removeContentComment = exports.getBatchContentMetadata = exports.recordContentView = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
+exports.shareContent = exports.hideContentComment = exports.reportContentComment = exports.editContentComment = exports.getCommentReplies = exports.getContentComments = exports.removeContentComment = exports.getBatchContentMetadata = exports.recordContentView = exports.getContentMetadata = exports.addContentComment = exports.toggleContentLike = void 0;
 const mongoose_1 = require("mongoose");
 const contentInteraction_service_1 = __importDefault(require("../service/contentInteraction.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
@@ -181,11 +181,10 @@ const addContentComment = (req, res) => __awaiter(void 0, void 0, void 0, functi
             });
             return;
         }
-        if (!contentType ||
-            !["media", "devotional", "artist", "merch", "ebook", "podcast"].includes(contentType)) {
+        if (!contentType || !["media", "devotional"].includes(contentType)) {
             res.status(400).json({
                 success: false,
-                message: "Invalid content type",
+                message: "Comments not supported for this content type",
             });
             return;
         }
@@ -408,6 +407,7 @@ const getContentComments = (req, res) => __awaiter(void 0, void 0, void 0, funct
         const { contentId, contentType } = req.params;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
+        const sortBy = req.query.sortBy;
         if (!contentId || !mongoose_1.Types.ObjectId.isValid(contentId)) {
             res.status(400).json({
                 success: false,
@@ -422,7 +422,7 @@ const getContentComments = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        const result = yield contentInteraction_service_1.default.getContentComments(contentId, contentType, page, limit);
+        const result = yield contentInteraction_service_1.default.getContentComments(contentId, contentType, page, limit, sortBy === "oldest" || sortBy === "top" ? sortBy : "newest");
         res.status(200).json({
             success: true,
             data: result,
@@ -441,6 +441,112 @@ const getContentComments = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getContentComments = getContentComments;
+// Get replies for a comment
+const getCommentReplies = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { commentId } = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        if (!commentId || !mongoose_1.Types.ObjectId.isValid(commentId)) {
+            res.status(400).json({ success: false, message: "Invalid comment ID" });
+            return;
+        }
+        const data = yield contentInteraction_service_1.default.getCommentReplies(commentId, page, limit);
+        res.status(200).json({ success: true, data });
+    }
+    catch (error) {
+        logger_1.default.error("Get comment replies error", { error: error.message });
+        res
+            .status(500)
+            .json({ success: false, message: "Failed to get comment replies" });
+    }
+});
+exports.getCommentReplies = getCommentReplies;
+// Edit comment
+const editContentComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { commentId } = req.params;
+        const { content } = req.body;
+        const userId = req.userId;
+        if (!userId) {
+            res.status(401).json({ success: false, message: "Unauthorized" });
+            return;
+        }
+        if (!commentId || !mongoose_1.Types.ObjectId.isValid(commentId)) {
+            res.status(400).json({ success: false, message: "Invalid comment ID" });
+            return;
+        }
+        if (!content || content.trim().length === 0) {
+            res
+                .status(400)
+                .json({ success: false, message: "Comment content is required" });
+            return;
+        }
+        const updated = yield contentInteraction_service_1.default.editContentComment(commentId, userId, content);
+        res
+            .status(200)
+            .json({ success: true, message: "Comment updated", data: updated });
+    }
+    catch (error) {
+        logger_1.default.error("Edit comment error", { error: error.message });
+        res.status(500).json({ success: false, message: "Failed to edit comment" });
+    }
+});
+exports.editContentComment = editContentComment;
+// Report comment
+const reportContentComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { commentId } = req.params;
+        const { reason } = req.body || {};
+        const userId = req.userId;
+        if (!userId) {
+            res.status(401).json({ success: false, message: "Unauthorized" });
+            return;
+        }
+        if (!commentId || !mongoose_1.Types.ObjectId.isValid(commentId)) {
+            res.status(400).json({ success: false, message: "Invalid comment ID" });
+            return;
+        }
+        const result = yield contentInteraction_service_1.default.reportContentComment(commentId, userId, reason);
+        res.status(200).json({ success: true, data: result });
+    }
+    catch (error) {
+        logger_1.default.error("Report comment error", { error: error.message });
+        res
+            .status(500)
+            .json({ success: false, message: "Failed to report comment" });
+    }
+});
+exports.reportContentComment = reportContentComment;
+// Hide comment (moderator/admin)
+const hideContentComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const { commentId } = req.params;
+        const { reason } = req.body || {};
+        const userId = req.userId;
+        const role = (_a = req.user) === null || _a === void 0 ? void 0 : _a.role;
+        if (!userId) {
+            res.status(401).json({ success: false, message: "Unauthorized" });
+            return;
+        }
+        if (!commentId || !mongoose_1.Types.ObjectId.isValid(commentId)) {
+            res.status(400).json({ success: false, message: "Invalid comment ID" });
+            return;
+        }
+        if (!role || !["admin", "moderator"].includes(role)) {
+            res.status(403).json({ success: false, message: "Forbidden" });
+            return;
+        }
+        yield contentInteraction_service_1.default.moderateHideComment(commentId, userId, reason);
+        res.status(200).json({ success: true, message: "Comment hidden" });
+    }
+    catch (error) {
+        logger_1.default.error("Hide comment error", { error: error.message });
+        res.status(500).json({ success: false, message: "Failed to hide comment" });
+    }
+});
+exports.hideContentComment = hideContentComment;
 // Share content
 const shareContent = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

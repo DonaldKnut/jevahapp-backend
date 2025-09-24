@@ -77,6 +77,30 @@ router.delete("/comments/:commentId", auth_middleware_1.verifyToken, contentInte
  */
 router.get("/:contentType/:contentId/comments", contentInteraction_controller_1.getContentComments);
 /**
+ * @route   GET /api/content/comments/:commentId/replies
+ * @desc    Get replies for a comment
+ * @access  Public
+ */
+router.get("/comments/:commentId/replies", contentInteraction_controller_1.getCommentReplies);
+/**
+ * @route   PATCH /api/content/comments/:commentId
+ * @desc    Edit a comment (owner only)
+ * @access  Protected
+ */
+router.patch("/comments/:commentId", auth_middleware_1.verifyToken, contentInteraction_controller_1.editContentComment);
+/**
+ * @route   POST /api/content/comments/:commentId/report
+ * @desc    Report a comment
+ * @access  Protected
+ */
+router.post("/comments/:commentId/report", auth_middleware_1.verifyToken, contentInteraction_controller_1.reportContentComment);
+/**
+ * @route   POST /api/content/comments/:commentId/hide
+ * @desc    Hide a comment (moderator/admin)
+ * @access  Protected
+ */
+router.post("/comments/:commentId/hide", auth_middleware_1.verifyToken, contentInteraction_controller_1.hideContentComment);
+/**
  * @route   POST /api/content/:contentType/:contentId/share
  * @desc    Share content to social platforms
  * @access  Protected

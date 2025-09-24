@@ -38,6 +38,7 @@ const enhancedMedia_route_1 = __importDefault(require("./routes/enhancedMedia.ro
 const merchandise_route_1 = __importDefault(require("./routes/merchandise.route"));
 const analytics_routes_1 = __importDefault(require("./routes/analytics.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
+const hymns_routes_1 = __importDefault(require("./routes/hymns.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -119,6 +120,7 @@ app.get("/", (req, res) => {
             trending: "/api/trending",
             userProfiles: "/api/user-profiles",
             healthCheck: "/api/health",
+            hymns: "/api/hymns",
         },
         features: [
             "User Authentication & Authorization",
@@ -128,6 +130,7 @@ app.get("/", (req, res) => {
             "Trending Analytics",
             "Real-time Interactions",
             "User Profile Management",
+            "Hymns & Scripture-based Music",
         ],
         documentation: "https://jevahapp-backend.onrender.com/api-docs",
     });
@@ -183,6 +186,7 @@ app.use("/api/enhanced-media", enhancedMedia_route_1.default);
 app.use("/api/merchandise", merchandise_route_1.default);
 app.use("/api/analytics", analytics_routes_1.default);
 app.use("/api/notifications", notification_routes_1.default);
+app.use("/api/hymns", hymns_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

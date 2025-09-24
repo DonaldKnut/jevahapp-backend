@@ -45,27 +45,25 @@ export class InteractionService {
     try {
       const result = await session.withTransaction(async () => {
         const userId = new Types.ObjectId(data.userId);
-        const currentReactions = comment.reactions || {};
-        const userReactions = currentReactions[data.reactionType] || [];
+        const currentReactions: any = (comment.reactions as any) || {};
+        const existing = Array.isArray(currentReactions[data.reactionType])
+          ? currentReactions[data.reactionType]
+          : [];
 
-        let newReactions;
-        if (userReactions.includes(userId)) {
-          // Remove reaction
-          newReactions = userReactions.filter((id: any) => !id.equals(userId));
-        } else {
-          // Add reaction
-          newReactions = [...userReactions, userId];
-        }
+        const hasReacted = existing.some((id: any) => id.equals(userId));
+        const updatedArray = hasReacted
+          ? existing.filter((id: any) => !id.equals(userId))
+          : [...existing, userId];
 
-        const updatedComment = await MediaInteraction.findByIdAndUpdate(
+        await MediaInteraction.findByIdAndUpdate(
           data.commentId,
-          { [`reactions.${data.reactionType}`]: newReactions },
-          { new: true, session }
+          { [`reactions.${data.reactionType}`]: updatedArray },
+          { new: false, session }
         );
 
         return {
           reactionType: data.reactionType,
-          count: newReactions.length,
+          count: updatedArray.length,
         };
       });
 

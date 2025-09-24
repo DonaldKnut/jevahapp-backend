@@ -35,6 +35,7 @@ import enhancedMediaRoutes from "./routes/enhancedMedia.route";
 import merchandiseRoutes from "./routes/merchandise.route";
 import analyticsRoutes from "./routes/analytics.routes";
 import notificationRoutes from "./routes/notification.routes";
+import hymnsRoutes from "./routes/hymns.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -129,6 +130,7 @@ app.get("/", (req, res) => {
       trending: "/api/trending",
       userProfiles: "/api/user-profiles",
       healthCheck: "/api/health",
+      hymns: "/api/hymns",
     },
     features: [
       "User Authentication & Authorization",
@@ -138,6 +140,7 @@ app.get("/", (req, res) => {
       "Trending Analytics",
       "Real-time Interactions",
       "User Profile Management",
+      "Hymns & Scripture-based Music",
     ],
     documentation: "https://jevahapp-backend.onrender.com/api-docs",
   });
@@ -201,6 +204,7 @@ app.use("/api/enhanced-media", enhancedMediaRoutes);
 app.use("/api/merchandise", merchandiseRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/hymns", hymnsRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

@@ -75,9 +75,31 @@ const mediaInteractionSchema = new mongoose_1.Schema({
     },
     reactions: {
         type: Map,
-        of: Number,
+        of: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
         default: {},
     },
+    replyCount: {
+        type: Number,
+        default: 0,
+    },
+    isHidden: {
+        type: Boolean,
+        default: false,
+    },
+    hiddenReason: {
+        type: String,
+        maxlength: 500,
+    },
+    hiddenBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User",
+    },
+    reportCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    reportedBy: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
     isRemoved: {
         type: Boolean,
         default: false,
@@ -97,5 +119,6 @@ mediaInteractionSchema.index({ user: 1, media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ parentCommentId: 1 });
 mediaInteractionSchema.index({ createdAt: -1 });
+mediaInteractionSchema.index({ media: 1, parentCommentId: 1, createdAt: -1 });
 exports.MediaInteraction = mongoose_1.default.models.MediaInteraction ||
     mongoose_1.default.model("MediaInteraction", mediaInteractionSchema);

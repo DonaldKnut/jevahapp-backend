@@ -8,6 +8,10 @@ import {
   getContentMetadata,
   getBatchContentMetadata,
   getContentComments,
+  getCommentReplies,
+  editContentComment,
+  reportContentComment,
+  hideContentComment,
   shareContent,
   recordContentView,
 } from "../controllers/contentInteraction.controller";
@@ -100,6 +104,34 @@ router.delete("/comments/:commentId", verifyToken, removeContentComment);
  * @returns { success: boolean, data: { comments: array, pagination: object } }
  */
 router.get("/:contentType/:contentId/comments", getContentComments);
+
+/**
+ * @route   GET /api/content/comments/:commentId/replies
+ * @desc    Get replies for a comment
+ * @access  Public
+ */
+router.get("/comments/:commentId/replies", getCommentReplies);
+
+/**
+ * @route   PATCH /api/content/comments/:commentId
+ * @desc    Edit a comment (owner only)
+ * @access  Protected
+ */
+router.patch("/comments/:commentId", verifyToken, editContentComment);
+
+/**
+ * @route   POST /api/content/comments/:commentId/report
+ * @desc    Report a comment
+ * @access  Protected
+ */
+router.post("/comments/:commentId/report", verifyToken, reportContentComment);
+
+/**
+ * @route   POST /api/content/comments/:commentId/hide
+ * @desc    Hide a comment (moderator/admin)
+ * @access  Protected
+ */
+router.post("/comments/:commentId/hide", verifyToken, hideContentComment);
 
 /**
  * @route   POST /api/content/:contentType/:contentId/share

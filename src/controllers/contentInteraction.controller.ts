@@ -161,15 +161,10 @@ export const addContentComment = async (
       return;
     }
 
-    if (
-      !contentType ||
-      !["media", "devotional", "artist", "merch", "ebook", "podcast"].includes(
-        contentType
-      )
-    ) {
+    if (!contentType || !["media", "devotional"].includes(contentType)) {
       res.status(400).json({
         success: false,
-        message: "Invalid content type",
+        message: "Comments not supported for this content type",
       });
       return;
     }
@@ -453,6 +448,7 @@ export const getContentComments = async (
     const { contentId, contentType } = req.params;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
+    const sortBy = req.query.sortBy as string as any;
 
     if (!contentId || !Types.ObjectId.isValid(contentId)) {
       res.status(400).json({
@@ -474,7 +470,8 @@ export const getContentComments = async (
       contentId,
       contentType,
       page,
-      limit
+      limit,
+      sortBy === "oldest" || sortBy === "top" ? sortBy : "newest"
     );
 
     res.status(200).json({
@@ -492,6 +489,144 @@ export const getContentComments = async (
       success: false,
       message: "Failed to get comments",
     });
+  }
+};
+
+// Get replies for a comment
+export const getCommentReplies = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({ success: false, message: "Invalid comment ID" });
+      return;
+    }
+
+    const data = await contentInteractionService.getCommentReplies(
+      commentId,
+      page,
+      limit
+    );
+
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    logger.error("Get comment replies error", { error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to get comment replies" });
+  }
+};
+
+// Edit comment
+export const editContentComment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const { content } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({ success: false, message: "Invalid comment ID" });
+      return;
+    }
+    if (!content || content.trim().length === 0) {
+      res
+        .status(400)
+        .json({ success: false, message: "Comment content is required" });
+      return;
+    }
+
+    const updated = await contentInteractionService.editContentComment(
+      commentId,
+      userId,
+      content
+    );
+    res
+      .status(200)
+      .json({ success: true, message: "Comment updated", data: updated });
+  } catch (error: any) {
+    logger.error("Edit comment error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to edit comment" });
+  }
+};
+
+// Report comment
+export const reportContentComment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const { reason } = req.body || {};
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({ success: false, message: "Invalid comment ID" });
+      return;
+    }
+
+    const result = await contentInteractionService.reportContentComment(
+      commentId,
+      userId,
+      reason
+    );
+    res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    logger.error("Report comment error", { error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to report comment" });
+  }
+};
+
+// Hide comment (moderator/admin)
+export const hideContentComment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const { reason } = req.body || {};
+    const userId = req.userId;
+    const role = req.user?.role;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({ success: false, message: "Invalid comment ID" });
+      return;
+    }
+    if (!role || !["admin", "moderator"].includes(role as any)) {
+      res.status(403).json({ success: false, message: "Forbidden" });
+      return;
+    }
+
+    await contentInteractionService.moderateHideComment(
+      commentId,
+      userId,
+      reason
+    );
+    res.status(200).json({ success: true, message: "Comment hidden" });
+  } catch (error: any) {
+    logger.error("Hide comment error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to hide comment" });
   }
 };
 
