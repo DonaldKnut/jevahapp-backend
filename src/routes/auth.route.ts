@@ -200,6 +200,16 @@ router.post(
 // - Calls authController.logout to blacklist token
 router.post("/logout", verifyToken, asyncHandler(authController.logout));
 
+// POST /refresh
+// Refreshes an existing JWT token
+// - Uses authRateLimiter to prevent abuse
+// - Calls authController.refreshToken to issue new token
+router.post(
+  "/refresh",
+  authRateLimiter,
+  asyncHandler(authController.refreshToken)
+);
+
 // Admin Routes
 // These routes require admin privileges
 

@@ -897,6 +897,39 @@ class AuthService {
       hasProfilePicture: !!profilePicture,
     };
   }
+
+  async refreshToken(token: string) {
+    try {
+      // Verify the existing token (even if expired, we'll still decode it)
+      const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }) as { userId: string };
+      
+      // Check if user still exists
+      const user = await User.findById(decoded.userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Generate new token
+      const newToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
+        expiresIn: "7d",
+      });
+
+      return {
+        token: newToken,
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          avatar: user.avatar,
+          role: user.role,
+          isProfileComplete: user.isProfileComplete,
+        },
+      };
+    } catch (error) {
+      throw new Error("Invalid or expired token");
+    }
+  }
 }
 
 export default new AuthService();

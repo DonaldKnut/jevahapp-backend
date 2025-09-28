@@ -1,7 +1,8 @@
 import { Server as SocketIOServer } from "socket.io";
 import { Server as HTTPServer } from "http";
-import { verifyToken } from "../middleware/auth.middleware";
+import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
+import { BlacklistedToken } from "../models/blacklistedToken.model";
 import { Media } from "../models/media.model";
 import { MediaInteraction } from "../models/mediaInteraction.model";
 import { MediaUserAction } from "../models/mediaUserAction.model";
@@ -80,14 +81,23 @@ class SocketService {
       try {
         const token =
           socket.handshake.auth.token ||
-          socket.handshake.headers.authorization?.replace("Bearer ", "");
+          socket.handshake.headers.authorization?.replace("Bearer ", "") ||
+          socket.handshake.query.token;
 
         if (!token) {
           return next(new Error("Authentication token required"));
         }
 
-        const decoded = await verifyToken(token, {} as any, {} as any);
-        const user = await User.findById((decoded as any).userId).select(
+        // Direct JWT verification instead of middleware call
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+        
+        // Check if token is blacklisted
+        const isBlacklisted = await BlacklistedToken.findOne({ token });
+        if (isBlacklisted) {
+          return next(new Error("Token has been invalidated"));
+        }
+
+        const user = await User.findById(decoded.userId).select(
           "email firstName lastName role"
         );
 

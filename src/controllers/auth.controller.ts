@@ -972,6 +972,38 @@ class AuthController {
       return next(error);
     }
   }
+
+  async refreshToken(req: Request, res: Response): Promise<void> {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        res.status(400).json({
+          success: false,
+          message: "Token is required",
+        });
+        return;
+      }
+
+      // Verify the existing token
+      const result = await authService.refreshToken(token);
+
+      res.json({
+        success: true,
+        message: "Token refreshed successfully",
+        data: {
+          token: result.token,
+          user: result.user,
+        },
+      });
+    } catch (error: any) {
+      console.error("Token refresh error:", error);
+      res.status(401).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
+  }
 }
 
 export default new AuthController();

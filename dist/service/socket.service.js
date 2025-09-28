@@ -46,8 +46,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const socket_io_1 = require("socket.io");
-const auth_middleware_1 = require("../middleware/auth.middleware");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = require("../models/user.model");
+const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
 const media_model_1 = require("../models/media.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const mediaUserAction_model_1 = require("../models/mediaUserAction.model");
@@ -87,11 +88,18 @@ class SocketService {
             var _a;
             try {
                 const token = socket.handshake.auth.token ||
-                    ((_a = socket.handshake.headers.authorization) === null || _a === void 0 ? void 0 : _a.replace("Bearer ", ""));
+                    ((_a = socket.handshake.headers.authorization) === null || _a === void 0 ? void 0 : _a.replace("Bearer ", "")) ||
+                    socket.handshake.query.token;
                 if (!token) {
                     return next(new Error("Authentication token required"));
                 }
-                const decoded = yield (0, auth_middleware_1.verifyToken)(token, {}, {});
+                // Direct JWT verification instead of middleware call
+                const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+                // Check if token is blacklisted
+                const isBlacklisted = yield blacklistedToken_model_1.BlacklistedToken.findOne({ token });
+                if (isBlacklisted) {
+                    return next(new Error("Token has been invalidated"));
+                }
                 const user = yield user_model_1.User.findById(decoded.userId).select("email firstName lastName role");
                 if (!user) {
                     return next(new Error("User not found"));

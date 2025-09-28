@@ -698,5 +698,37 @@ class AuthService {
             };
         });
     }
+    refreshToken(token) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                // Verify the existing token (even if expired, we'll still decode it)
+                const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET, { ignoreExpiration: true });
+                // Check if user still exists
+                const user = yield user_model_1.User.findById(decoded.userId);
+                if (!user) {
+                    throw new Error("User not found");
+                }
+                // Generate new token
+                const newToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
+                    expiresIn: "7d",
+                });
+                return {
+                    token: newToken,
+                    user: {
+                        id: user._id,
+                        email: user.email,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        avatar: user.avatar,
+                        role: user.role,
+                        isProfileComplete: user.isProfileComplete,
+                    },
+                };
+            }
+            catch (error) {
+                throw new Error("Invalid or expired token");
+            }
+        });
+    }
 }
 exports.default = new AuthService();

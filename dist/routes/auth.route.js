@@ -115,6 +115,11 @@ router.post("/avatar", auth_middleware_1.verifyToken, upload.single("avatar"), (
 // - Uses verifyToken to ensure user is authenticated
 // - Calls authController.logout to blacklist token
 router.post("/logout", auth_middleware_1.verifyToken, (0, asyncHandler_1.asyncHandler)(auth_controller_1.default.logout));
+// POST /refresh
+// Refreshes an existing JWT token
+// - Uses authRateLimiter to prevent abuse
+// - Calls authController.refreshToken to issue new token
+router.post("/refresh", rateLimiter_1.authRateLimiter, (0, asyncHandler_1.asyncHandler)(auth_controller_1.default.refreshToken));
 // Admin Routes
 // These routes require admin privileges
 // POST /artist/:userId/verify

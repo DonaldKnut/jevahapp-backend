@@ -820,5 +820,36 @@ class AuthController {
             }
         });
     }
+    refreshToken(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const { token } = req.body;
+                if (!token) {
+                    res.status(400).json({
+                        success: false,
+                        message: "Token is required",
+                    });
+                    return;
+                }
+                // Verify the existing token
+                const result = yield auth_service_1.default.refreshToken(token);
+                res.json({
+                    success: true,
+                    message: "Token refreshed successfully",
+                    data: {
+                        token: result.token,
+                        user: result.user,
+                    },
+                });
+            }
+            catch (error) {
+                console.error("Token refresh error:", error);
+                res.status(401).json({
+                    success: false,
+                    message: "Invalid or expired token",
+                });
+            }
+        });
+    }
 }
 exports.default = new AuthController();
