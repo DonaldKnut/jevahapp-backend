@@ -26,7 +26,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 const { page = 1, limit = 20, type, unreadOnly } = req.query;
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
@@ -54,7 +54,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 const { notificationId } = req.params;
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
@@ -87,7 +87,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
                     return;
@@ -115,7 +115,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
                     return;
@@ -142,7 +142,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 const preferences = req.body;
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
@@ -171,7 +171,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 const { contentId, contentType, sharePlatform } = req.body;
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
@@ -277,7 +277,7 @@ class NotificationController {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
-                const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+                const userId = req.userId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id);
                 if (!userId) {
                     res.status(401).json({ error: "User not authenticated" });
                     return;

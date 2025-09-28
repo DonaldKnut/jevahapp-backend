@@ -11,7 +11,7 @@ export class NotificationController {
    */
   async getUserNotifications(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
       const { page = 1, limit = 20, type, unreadOnly } = req.query;
 
       if (!userId) {
@@ -44,7 +44,7 @@ export class NotificationController {
    */
   async markAsRead(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
       const { notificationId } = req.params;
 
       if (!userId) {
@@ -79,7 +79,7 @@ export class NotificationController {
    */
   async markAllAsRead(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
 
       if (!userId) {
         res.status(401).json({ error: "User not authenticated" });
@@ -107,7 +107,7 @@ export class NotificationController {
    */
   async getNotificationPreferences(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
 
       if (!userId) {
         res.status(401).json({ error: "User not authenticated" });
@@ -138,7 +138,7 @@ export class NotificationController {
     res: Response
   ): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
       const preferences = req.body;
 
       if (!userId) {
@@ -171,7 +171,7 @@ export class NotificationController {
    */
   async shareContent(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
       const { contentId, contentType, sharePlatform } = req.body;
 
       if (!userId) {
@@ -294,7 +294,7 @@ export class NotificationController {
    */
   async getNotificationStats(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user?.id;
+      const userId = (req as any).userId || (req as any).user?.id;
 
       if (!userId) {
         res.status(401).json({ error: "User not authenticated" });
