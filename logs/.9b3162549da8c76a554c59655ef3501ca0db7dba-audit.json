@@ -6,11 +6,6 @@
     "auditLog": "/Users/user/Desktop/jevah-app_backend/logs/.9b3162549da8c76a554c59655ef3501ca0db7dba-audit.json",
     "files": [
         {
-            "date": 1757906753445,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-15.log",
-            "hash": "abacafb9f5a89d6bd67f6be6d4277e7a3421aa1fd451b185af41ffd5a241811d"
-        },
-        {
             "date": 1758149467347,
             "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-17.log",
             "hash": "97ebd0e17668e5ddc39bad1934cdb8acd4c1a0c17af98f6c090bd2bbf4c9b1bb"
@@ -34,6 +29,11 @@
             "date": 1758668725722,
             "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-24.log",
             "hash": "7a3838d7aaf3241fc06ab448e51ebc68692c013c0f02615f822757dd1aaae2bb"
+        },
+        {
+            "date": 1759232654756,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-30.log",
+            "hash": "50230992e3dc3bb5a964c8154412f5d58d66c1beab4359b75fb0121f272ccd7b"
         }
     ],
     "hashType": "sha256"
