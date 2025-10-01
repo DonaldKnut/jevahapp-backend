@@ -37,6 +37,18 @@ export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({
                 borderBottom: "1px solid #E5E7EB",
               }}
             >
+              <div style={{ marginBottom: "12px" }}>
+                <img
+                  src="https://res.cloudinary.com/ddgzzjp4x/image/upload/v1755907362/jevah-hq-removebg-preview_tv9rtc.png"
+                  alt="Jevah Logo"
+                  style={{
+                    height: "64px",
+                    width: "auto",
+                    display: "block",
+                    margin: "0 auto",
+                  }}
+                />
+              </div>
               <h1
                 style={{
                   fontSize: "28px",

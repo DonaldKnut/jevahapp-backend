@@ -23,6 +23,13 @@ const ResetPasswordEmail = ({ firstName, resetLink, }) => {
                             textAlign: "center",
                             borderBottom: "1px solid #E5E7EB",
                         } },
+                        react_1.default.createElement("div", { style: { marginBottom: "12px" } },
+                            react_1.default.createElement("img", { src: "https://res.cloudinary.com/ddgzzjp4x/image/upload/v1755907362/jevah-hq-removebg-preview_tv9rtc.png", alt: "Jevah Logo", style: {
+                                    height: "64px",
+                                    width: "auto",
+                                    display: "block",
+                                    margin: "0 auto",
+                                } })),
                         react_1.default.createElement("h1", { style: {
                                 fontSize: "28px",
                                 fontWeight: "700",

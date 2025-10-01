@@ -1,37 +1,4 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -50,7 +17,8 @@ const logger_1 = __importDefault(require("../utils/logger"));
 class EmailService {
     constructor() {
         this.useResend = !!process.env.RESEND_API_KEY;
-        this.fallbackEnabled = true;
+        // SMTP fallback is disabled to enforce Resend-only delivery
+        this.fallbackEnabled = false;
     }
     /**
      * Test email connection
@@ -66,15 +34,7 @@ class EmailService {
                         return true;
                     }
                 }
-                if (this.fallbackEnabled) {
-                    logger_1.default.info("Testing SMTP fallback connection...");
-                    const { testEmailConnection } = yield Promise.resolve().then(() => __importStar(require("../utils/mailer")));
-                    const smtpConnected = yield testEmailConnection();
-                    if (smtpConnected) {
-                        logger_1.default.info("✅ SMTP fallback connection successful");
-                        return true;
-                    }
-                }
+                // Resend-only mode: do not attempt SMTP fallback
                 logger_1.default.error("❌ All email connections failed");
                 return false;
             }
@@ -90,7 +50,7 @@ class EmailService {
     sendVerificationEmail(email, firstName, code) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
-            // Try Resend first
+            // Resend-only mode
             if (this.useResend) {
                 try {
                     logger_1.default.info("Sending verification email via Resend...", { email });
@@ -107,17 +67,12 @@ class EmailService {
                 }
                 catch (error) {
                     logger_1.default.error("❌ Resend verification email failed:", error);
-                    if (this.fallbackEnabled) {
-                        logger_1.default.info("Trying SMTP fallback for verification email...");
-                        return this.sendVerificationEmailSMTP(email, firstName, code);
-                    }
-                    else {
-                        throw error;
-                    }
+                    // Fallback disabled
+                    throw error;
                 }
             }
-            // Use SMTP directly if Resend not configured
-            return this.sendVerificationEmailSMTP(email, firstName, code);
+            // Resend not configured and fallback disabled
+            throw new Error("Resend is not configured (RESEND_API_KEY missing) and SMTP fallback is disabled");
         });
     }
     /**
@@ -125,27 +80,8 @@ class EmailService {
      */
     sendVerificationEmailSMTP(email, firstName, code) {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { sendVerificationEmail } = yield Promise.resolve().then(() => __importStar(require("../utils/mailer")));
-                const result = yield sendVerificationEmail(email, firstName, code);
-                logger_1.default.info("✅ Verification email sent via SMTP", {
-                    email,
-                    messageId: result.messageId,
-                });
-                return {
-                    success: true,
-                    messageId: result.messageId,
-                    service: "smtp",
-                };
-            }
-            catch (error) {
-                logger_1.default.error("❌ SMTP verification email failed:", error);
-                return {
-                    success: false,
-                    service: "smtp",
-                    error: error instanceof Error ? error.message : String(error),
-                };
-            }
+            // SMTP path disabled in Resend-only mode
+            throw new Error("SMTP (Zoho) is disabled. Resend is the only email provider in use.");
         });
     }
     /**
@@ -154,7 +90,7 @@ class EmailService {
     sendPasswordResetEmail(email, firstName, resetCode) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
-            // Try Resend first
+            // Resend-only mode
             if (this.useResend) {
                 try {
                     logger_1.default.info("Sending password reset email via Resend...", { email });
@@ -171,17 +107,12 @@ class EmailService {
                 }
                 catch (error) {
                     logger_1.default.error("❌ Resend password reset email failed:", error);
-                    if (this.fallbackEnabled) {
-                        logger_1.default.info("Trying SMTP fallback for password reset email...");
-                        return this.sendPasswordResetEmailSMTP(email, firstName, resetCode);
-                    }
-                    else {
-                        throw error;
-                    }
+                    // Fallback disabled
+                    throw error;
                 }
             }
-            // Use SMTP directly if Resend not configured
-            return this.sendPasswordResetEmailSMTP(email, firstName, resetCode);
+            // Resend not configured and fallback disabled
+            throw new Error("Resend is not configured (RESEND_API_KEY missing) and SMTP fallback is disabled");
         });
     }
     /**
@@ -189,27 +120,8 @@ class EmailService {
      */
     sendPasswordResetEmailSMTP(email, firstName, resetCode) {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { sendResetPasswordEmail } = yield Promise.resolve().then(() => __importStar(require("../utils/mailer")));
-                const result = yield sendResetPasswordEmail(email, firstName, resetCode);
-                logger_1.default.info("✅ Password reset email sent via SMTP", {
-                    email,
-                    messageId: result.messageId,
-                });
-                return {
-                    success: true,
-                    messageId: result.messageId,
-                    service: "smtp",
-                };
-            }
-            catch (error) {
-                logger_1.default.error("❌ SMTP password reset email failed:", error);
-                return {
-                    success: false,
-                    service: "smtp",
-                    error: error instanceof Error ? error.message : String(error),
-                };
-            }
+            // SMTP path disabled in Resend-only mode
+            throw new Error("SMTP (Zoho) is disabled. Resend is the only email provider in use.");
         });
     }
     /**
@@ -218,7 +130,7 @@ class EmailService {
     sendWelcomeEmail(email, firstName) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b;
-            // Try Resend first
+            // Resend-only mode
             if (this.useResend) {
                 try {
                     logger_1.default.info("Sending welcome email via Resend...", { email });
@@ -235,17 +147,12 @@ class EmailService {
                 }
                 catch (error) {
                     logger_1.default.error("❌ Resend welcome email failed:", error);
-                    if (this.fallbackEnabled) {
-                        logger_1.default.info("Trying SMTP fallback for welcome email...");
-                        return this.sendWelcomeEmailSMTP(email, firstName);
-                    }
-                    else {
-                        throw error;
-                    }
+                    // Fallback disabled
+                    throw error;
                 }
             }
-            // Use SMTP directly if Resend not configured
-            return this.sendWelcomeEmailSMTP(email, firstName);
+            // Resend not configured and fallback disabled
+            throw new Error("Resend is not configured (RESEND_API_KEY missing) and SMTP fallback is disabled");
         });
     }
     /**
@@ -253,27 +160,8 @@ class EmailService {
      */
     sendWelcomeEmailSMTP(email, firstName) {
         return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const { sendWelcomeEmail } = yield Promise.resolve().then(() => __importStar(require("../utils/mailer")));
-                const result = yield sendWelcomeEmail(email, firstName);
-                logger_1.default.info("✅ Welcome email sent via SMTP", {
-                    email,
-                    messageId: result.messageId,
-                });
-                return {
-                    success: true,
-                    messageId: result.messageId,
-                    service: "smtp",
-                };
-            }
-            catch (error) {
-                logger_1.default.error("❌ SMTP welcome email failed:", error);
-                return {
-                    success: false,
-                    service: "smtp",
-                    error: error instanceof Error ? error.message : String(error),
-                };
-            }
+            // SMTP path disabled in Resend-only mode
+            throw new Error("SMTP (Zoho) is disabled. Resend is the only email provider in use.");
         });
     }
     /**
@@ -282,8 +170,8 @@ class EmailService {
     getServiceStatus() {
         return {
             resendConfigured: this.useResend,
-            fallbackEnabled: this.fallbackEnabled,
-            primaryService: this.useResend ? "resend" : "smtp",
+            fallbackEnabled: false,
+            primaryService: "resend",
             resendApiKey: this.useResend ? "configured" : "not configured",
         };
     }
