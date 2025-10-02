@@ -110,13 +110,13 @@ class ResendEmailService {
         background: #0a1f1c;
         border-radius: 12px;
         overflow: hidden;
-        border: 1px solid rgba(249, 200, 51, 0.2);
+        border: 1px solid rgba(255, 107, 53, 0.2);
       }
 
       .header {
         padding: 40px 40px 20px;
         text-align: center;
-        border-bottom: 1px solid rgba(249, 200, 51, 0.1);
+        border-bottom: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .logo-container {
@@ -134,7 +134,7 @@ class ResendEmailService {
       .verify-title {
         font-size: 28px;
         font-weight: 600;
-        color: #f9c833;
+        color: #ff6b35;
         letter-spacing: -0.5px;
       }
 
@@ -150,7 +150,7 @@ class ResendEmailService {
       }
 
       .highlight {
-        color: #f9c833;
+        color: #ff6b35;
         font-weight: 600;
       }
 
@@ -163,7 +163,7 @@ class ResendEmailService {
 
       .verification-code {
         background: #112e2a;
-        border: 1px solid #f9c833;
+        border: 1px solid #ff6b35;
         border-radius: 8px;
         padding: 24px;
         margin: 32px 0;
@@ -173,14 +173,14 @@ class ResendEmailService {
       .code-text {
         font-size: 32px;
         font-weight: 600;
-        color: #f9c833;
+        color: #ff6b35;
         letter-spacing: 4px;
         font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
       }
 
       .expiry-notice {
-        background: rgba(249, 200, 51, 0.08);
-        border-left: 3px solid #f9c833;
+        background: rgba(255, 107, 53, 0.08);
+        border-left: 3px solid #ff6b35;
         padding: 16px 20px;
         margin: 24px 0;
         border-radius: 4px;
@@ -222,14 +222,14 @@ class ResendEmailService {
 
       .divider {
         height: 1px;
-        background: rgba(249, 200, 51, 0.2);
+        background: rgba(255, 107, 53, 0.2);
         margin: 32px 0;
       }
 
       .footer {
         padding: 24px 40px 32px;
         text-align: center;
-        border-top: 1px solid rgba(249, 200, 51, 0.1);
+        border-top: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .footer-address {
@@ -248,7 +248,7 @@ class ResendEmailService {
       }
 
       .help-link {
-        color: #f9c833;
+        color: #ff6b35;
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
@@ -256,7 +256,7 @@ class ResendEmailService {
       }
 
       .help-link:hover {
-        color: #ffd700;
+        color: #ff8c42;
       }
 
       @media (max-width: 600px) {
@@ -387,13 +387,13 @@ class ResendEmailService {
         background: #0a1f1c;
         border-radius: 12px;
         overflow: hidden;
-        border: 1px solid rgba(249, 200, 51, 0.2);
+        border: 1px solid rgba(255, 107, 53, 0.2);
       }
 
       .header {
         padding: 40px 40px 20px;
         text-align: center;
-        border-bottom: 1px solid rgba(249, 200, 51, 0.1);
+        border-bottom: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .logo-container {
@@ -411,7 +411,7 @@ class ResendEmailService {
       .reset-title {
         font-size: 28px;
         font-weight: 600;
-        color: #f9c833;
+        color: #ff6b35;
         letter-spacing: -0.5px;
       }
 
@@ -427,7 +427,7 @@ class ResendEmailService {
       }
 
       .highlight {
-        color: #f9c833;
+        color: #ff6b35;
         font-weight: 600;
       }
 
@@ -440,7 +440,7 @@ class ResendEmailService {
 
       .verification-code {
         background: #112e2a;
-        border: 1px solid #f9c833;
+        border: 1px solid #ff6b35;
         border-radius: 8px;
         padding: 24px;
         margin: 32px 0;
@@ -450,14 +450,14 @@ class ResendEmailService {
       .code-text {
         font-size: 32px;
         font-weight: 600;
-        color: #f9c833;
+        color: #ff6b35;
         letter-spacing: 4px;
         font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
       }
 
       .expiry-notice {
-        background: rgba(249, 200, 51, 0.08);
-        border-left: 3px solid #f9c833;
+        background: rgba(255, 107, 53, 0.08);
+        border-left: 3px solid #ff6b35;
         padding: 16px 20px;
         margin: 24px 0;
         border-radius: 4px;
@@ -499,14 +499,14 @@ class ResendEmailService {
 
       .divider {
         height: 1px;
-        background: rgba(249, 200, 51, 0.2);
+        background: rgba(255, 107, 53, 0.2);
         margin: 32px 0;
       }
 
       .footer {
         padding: 24px 40px 32px;
         text-align: center;
-        border-top: 1px solid rgba(249, 200, 51, 0.1);
+        border-top: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .footer-address {
@@ -525,7 +525,7 @@ class ResendEmailService {
       }
 
       .help-link {
-        color: #f9c833;
+        color: #ff6b35;
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
@@ -533,7 +533,7 @@ class ResendEmailService {
       }
 
       .help-link:hover {
-        color: #ffd700;
+        color: #ff8c42;
       }
 
       @media (max-width: 600px) {
@@ -664,13 +664,13 @@ class ResendEmailService {
         background: #0a1f1c;
         border-radius: 12px;
         overflow: hidden;
-        border: 1px solid rgba(249, 200, 51, 0.2);
+        border: 1px solid rgba(255, 107, 53, 0.2);
       }
 
       .header {
         padding: 40px 40px 20px;
         text-align: center;
-        border-bottom: 1px solid rgba(249, 200, 51, 0.1);
+        border-bottom: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .logo-container {
@@ -688,7 +688,7 @@ class ResendEmailService {
       .welcome-title {
         font-size: 28px;
         font-weight: 600;
-        color: #f9c833;
+        color: #ff6b35;
         letter-spacing: -0.5px;
       }
 
@@ -704,7 +704,7 @@ class ResendEmailService {
       }
 
       .highlight {
-        color: #f9c833;
+        color: #ff6b35;
         font-weight: 600;
       }
 
@@ -726,7 +726,7 @@ class ResendEmailService {
         padding: 16px;
         background: rgba(255, 255, 255, 0.03);
         border-radius: 6px;
-        border-left: 3px solid #f9c833;
+        border-left: 3px solid #ff6b35;
       }
 
       .feature-icon {
@@ -742,7 +742,7 @@ class ResendEmailService {
 
       .cta-button {
         display: inline-block;
-        background: #f9c833;
+        background: #ff6b35;
         color: #0a1f1c;
         padding: 14px 28px;
         border-radius: 6px;
@@ -754,19 +754,19 @@ class ResendEmailService {
       }
 
       .cta-button:hover {
-        background: #ffd700;
+        background: #ff8c42;
       }
 
       .divider {
         height: 1px;
-        background: rgba(249, 200, 51, 0.2);
+        background: rgba(255, 107, 53, 0.2);
         margin: 32px 0;
       }
 
       .footer {
         padding: 24px 40px 32px;
         text-align: center;
-        border-top: 1px solid rgba(249, 200, 51, 0.1);
+        border-top: 1px solid rgba(255, 107, 53, 0.1);
       }
 
       .footer-address {
@@ -785,7 +785,7 @@ class ResendEmailService {
       }
 
       .help-link {
-        color: #f9c833;
+        color: #ff6b35;
         text-decoration: none;
         font-size: 13px;
         font-weight: 500;
@@ -793,7 +793,7 @@ class ResendEmailService {
       }
 
       .help-link:hover {
-        color: #ffd700;
+        color: #ff8c42;
       }
 
       @media (max-width: 600px) {

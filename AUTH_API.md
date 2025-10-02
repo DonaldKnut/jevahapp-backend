@@ -139,3 +139,4 @@ This document is generated from the actual routes and controllers in `src/routes
 - Rate limiting is applied to sensitive endpoints (login, email, reset) per middleware in `auth.route.ts`.
 - Validation and exact error messages come from `auth.controller.ts` and `auth.service.ts`.
 
+

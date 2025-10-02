@@ -39,6 +39,9 @@ const merchandise_route_1 = __importDefault(require("./routes/merchandise.route"
 const analytics_routes_1 = __importDefault(require("./routes/analytics.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const hymns_routes_1 = __importDefault(require("./routes/hymns.routes"));
+const places_routes_1 = __importDefault(require("./routes/places.routes"));
+const churches_admin_routes_1 = __importDefault(require("./routes/churches.admin.routes"));
+const userContent_routes_1 = __importDefault(require("./routes/userContent.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -187,6 +190,9 @@ app.use("/api/merchandise", merchandise_route_1.default);
 app.use("/api/analytics", analytics_routes_1.default);
 app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/hymns", hymns_routes_1.default);
+app.use("/api", places_routes_1.default);
+app.use("/api", churches_admin_routes_1.default);
+app.use("/api", userContent_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

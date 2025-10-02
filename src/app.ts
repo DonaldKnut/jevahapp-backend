@@ -36,6 +36,9 @@ import merchandiseRoutes from "./routes/merchandise.route";
 import analyticsRoutes from "./routes/analytics.routes";
 import notificationRoutes from "./routes/notification.routes";
 import hymnsRoutes from "./routes/hymns.routes";
+import placesRoutes from "./routes/places.routes";
+import churchesAdminRoutes from "./routes/churches.admin.routes";
+import userContentRoutes from "./routes/userContent.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -205,6 +208,9 @@ app.use("/api/merchandise", merchandiseRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/hymns", hymnsRoutes);
+app.use("/api", placesRoutes);
+app.use("/api", churchesAdminRoutes);
+app.use("/api", userContentRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {
