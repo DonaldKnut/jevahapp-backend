@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -12,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMediaFile = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.refreshVideoUrl = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMediaFile = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -1583,6 +1616,81 @@ const getDefaultContent = (request, response) => __awaiter(void 0, void 0, void 
     }
 });
 exports.getDefaultContent = getDefaultContent;
+// Video URL refresh endpoint for seamless playback
+const refreshVideoUrl = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { mediaId } = request.params;
+        const userIdentifier = request.userId;
+        if (!mediaId || !mongoose_1.Types.ObjectId.isValid(mediaId)) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media ID",
+            });
+            return;
+        }
+        // Find the media
+        const media = yield media_model_1.Media.findById(mediaId);
+        if (!media) {
+            response.status(404).json({
+                success: false,
+                message: "Media not found",
+            });
+            return;
+        }
+        // Check if media is public or user has access
+        if (!media.isPublic && media.uploadedBy.toString() !== userIdentifier) {
+            response.status(403).json({
+                success: false,
+                message: "Access denied",
+            });
+            return;
+        }
+        // Import file upload service
+        const { default: fileUploadService } = yield Promise.resolve().then(() => __importStar(require("../service/fileUpload.service")));
+        // Extract object key from fileUrl
+        const objectKey = extractObjectKeyFromUrl(media.fileUrl);
+        if (!objectKey) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid media file URL",
+            });
+            return;
+        }
+        // Generate new signed URL with 6-hour expiration
+        const newSignedUrl = yield fileUploadService.getPresignedGetUrl(objectKey, 21600); // 6 hours
+        response.status(200).json({
+            success: true,
+            data: {
+                mediaId: media._id,
+                newUrl: newSignedUrl,
+                expiresIn: 21600, // 6 hours in seconds
+                expiresAt: new Date(Date.now() + 21600 * 1000).toISOString(),
+            },
+            message: "Video URL refreshed successfully",
+        });
+    }
+    catch (error) {
+        console.error("Refresh video URL error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to refresh video URL",
+        });
+    }
+});
+exports.refreshVideoUrl = refreshVideoUrl;
+// Helper function to extract object key from URL
+const extractObjectKeyFromUrl = (url) => {
+    try {
+        if (url.includes("/")) {
+            const parts = url.split("/");
+            return parts.slice(3).join("/"); // Remove domain parts
+        }
+        return url;
+    }
+    catch (error) {
+        return null;
+    }
+};
 // Helper function to map content types
 const mapContentType = (contentType) => {
     switch (contentType) {

@@ -130,7 +130,7 @@ class FileUploadService {
 
   async getPresignedGetUrl(
     objectKey: string,
-    expiresInSeconds: number = 3600
+    expiresInSeconds: number = 21600 // 6 hours instead of 1 hour
   ): Promise<string> {
     const signedUrl = await getSignedUrl(
       s3Client,
@@ -154,8 +154,10 @@ class FileUploadService {
     }
 
     // Use the same format as seeded content: pub-xxx.r2.dev/jevah/...
-    const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
-    
+    const publicDevUrl =
+      process.env.R2_PUBLIC_DEV_URL ||
+      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+
     return `${publicDevUrl}/jevah/${objectKey}`;
   }
 }

@@ -1918,6 +1918,95 @@ export const getDefaultContent = async (
   }
 };
 
+// Video URL refresh endpoint for seamless playback
+export const refreshVideoUrl = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { mediaId } = request.params;
+    const userIdentifier = request.userId;
+
+    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media ID",
+      });
+      return;
+    }
+
+    // Find the media
+    const media = await Media.findById(mediaId);
+    if (!media) {
+      response.status(404).json({
+        success: false,
+        message: "Media not found",
+      });
+      return;
+    }
+
+    // Check if media is public or user has access
+    if (!media.isPublic && media.uploadedBy.toString() !== userIdentifier) {
+      response.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+      return;
+    }
+
+    // Import file upload service
+    const { default: fileUploadService } = await import(
+      "../service/fileUpload.service"
+    );
+
+    // Extract object key from fileUrl
+    const objectKey = extractObjectKeyFromUrl(media.fileUrl);
+    if (!objectKey) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid media file URL",
+      });
+      return;
+    }
+
+    // Generate new signed URL with 6-hour expiration
+    const newSignedUrl = await fileUploadService.getPresignedGetUrl(
+      objectKey,
+      21600
+    ); // 6 hours
+
+    response.status(200).json({
+      success: true,
+      data: {
+        mediaId: media._id,
+        newUrl: newSignedUrl,
+        expiresIn: 21600, // 6 hours in seconds
+        expiresAt: new Date(Date.now() + 21600 * 1000).toISOString(),
+      },
+      message: "Video URL refreshed successfully",
+    });
+  } catch (error: any) {
+    console.error("Refresh video URL error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to refresh video URL",
+    });
+  }
+};
+
+// Helper function to extract object key from URL
+const extractObjectKeyFromUrl = (url: string): string | null => {
+  try {
+    if (url.includes("/")) {
+      const parts = url.split("/");
+      return parts.slice(3).join("/"); // Remove domain parts
+    }
+    return url;
+  } catch (error) {
+    return null;
+  }
+};
+
 // Helper function to map content types
 const mapContentType = (contentType: string): "video" | "audio" | "image" => {
   switch (contentType) {

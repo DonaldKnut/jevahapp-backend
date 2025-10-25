@@ -45,6 +45,8 @@ import {
   // Default content methods
   getDefaultContent,
   getOnboardingContent,
+  // Video URL refresh method
+  refreshVideoUrl,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdminOrCreator } from "../middleware/role.middleware";
@@ -488,5 +490,20 @@ router.get("/recordings", verifyToken, apiRateLimiter, getUserRecordings);
  * @returns { success: boolean, data: { welcome: object, quickStart: object, featured: object, devotionals: object } }
  */
 router.get("/onboarding", verifyToken, apiRateLimiter, getOnboardingContent);
+
+// Video URL Refresh routes
+
+/**
+ * @route   GET /api/media/refresh-url/:mediaId
+ * @desc    Refresh video URL for seamless playback (extends expiration)
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, data: { mediaId: string, newUrl: string, expiresIn: number, expiresAt: string } }
+ */
+router.get(
+  "/refresh-url/:mediaId",
+  verifyToken,
+  apiRateLimiter,
+  refreshVideoUrl
+);
 
 export default router;

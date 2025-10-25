@@ -108,7 +108,8 @@ class FileUploadService {
         });
     }
     getPresignedGetUrl(objectKey_1) {
-        return __awaiter(this, arguments, void 0, function* (objectKey, expiresInSeconds = 3600) {
+        return __awaiter(this, arguments, void 0, function* (objectKey, expiresInSeconds = 21600 // 6 hours instead of 1 hour
+        ) {
             const signedUrl = yield (0, s3_request_presigner_1.getSignedUrl)(s3Client, new client_s3_1.GetObjectCommand({
                 Bucket: process.env.R2_BUCKET,
                 Key: objectKey,
@@ -125,7 +126,8 @@ class FileUploadService {
             return `https://${customDomain}/${objectKey}`;
         }
         // Use the same format as seeded content: pub-xxx.r2.dev/jevah/...
-        const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+        const publicDevUrl = process.env.R2_PUBLIC_DEV_URL ||
+            "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
         return `${publicDevUrl}/jevah/${objectKey}`;
     }
 }

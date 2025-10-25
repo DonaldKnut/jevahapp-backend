@@ -308,4 +308,12 @@ router.get("/recordings", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLi
  * @returns { success: boolean, data: { welcome: object, quickStart: object, featured: object, devotionals: object } }
  */
 router.get("/onboarding", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getOnboardingContent);
+// Video URL Refresh routes
+/**
+ * @route   GET /api/media/refresh-url/:mediaId
+ * @desc    Refresh video URL for seamless playback (extends expiration)
+ * @access  Protected (Authenticated users only)
+ * @returns { success: boolean, data: { mediaId: string, newUrl: string, expiresIn: number, expiresAt: string } }
+ */
+router.get("/refresh-url/:mediaId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.refreshVideoUrl);
 exports.default = router;
