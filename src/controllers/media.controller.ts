@@ -1969,21 +1969,20 @@ export const refreshVideoUrl = async (
       return;
     }
 
-    // Generate new signed URL with 6-hour expiration
-    const newSignedUrl = await fileUploadService.getPresignedGetUrl(
-      objectKey,
-      21600
-    ); // 6 hours
+    // Since we use public URLs, just return the existing public URL
+    // No need to generate signed URLs as they're permanent public URLs
+    const publicUrl = media.fileUrl; // This is already a permanent public URL
 
     response.status(200).json({
       success: true,
       data: {
         mediaId: media._id,
-        newUrl: newSignedUrl,
-        expiresIn: 21600, // 6 hours in seconds
-        expiresAt: new Date(Date.now() + 21600 * 1000).toISOString(),
+        newUrl: publicUrl, // Return the same public URL (it doesn't expire)
+        expiresIn: null, // Public URLs don't expire
+        expiresAt: null, // Public URLs don't expire
+        isPublicUrl: true, // Indicate this is a permanent public URL
       },
-      message: "Video URL refreshed successfully",
+      message: "Video URL refreshed successfully (using permanent public URL)",
     });
   } catch (error: any) {
     console.error("Refresh video URL error:", error);

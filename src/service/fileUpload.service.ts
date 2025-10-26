@@ -130,7 +130,7 @@ class FileUploadService {
 
   async getPresignedGetUrl(
     objectKey: string,
-    expiresInSeconds: number = 21600 // 6 hours instead of 1 hour
+    expiresInSeconds: number = 3600 // 1 hour (reverted - not used for video playback)
   ): Promise<string> {
     const signedUrl = await getSignedUrl(
       s3Client,
