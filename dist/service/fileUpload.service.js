@@ -108,7 +108,7 @@ class FileUploadService {
         });
     }
     getPresignedGetUrl(objectKey_1) {
-        return __awaiter(this, arguments, void 0, function* (objectKey, expiresInSeconds = 21600 // 6 hours instead of 1 hour
+        return __awaiter(this, arguments, void 0, function* (objectKey, expiresInSeconds = 3600 // 1 hour (reverted - not used for video playback)
         ) {
             const signedUrl = yield (0, s3_request_presigner_1.getSignedUrl)(s3Client, new client_s3_1.GetObjectCommand({
                 Bucket: process.env.R2_BUCKET,
