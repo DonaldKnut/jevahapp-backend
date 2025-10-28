@@ -223,7 +223,23 @@ class BibleService {
                     isActive: true,
                 };
                 if (book) {
-                    searchQuery.bookName = { $regex: new RegExp(`^${book}$`, "i") };
+                    // Try to match book name or abbreviation (e.g., "pro" -> "Proverbs" or "Pro")
+                    const matchingBooks = yield bible_model_1.BibleBook.find({
+                        $or: [
+                            { name: { $regex: new RegExp(`^${book}`, "i") } }, // Starts with (e.g., "pro" matches "Proverbs")
+                            { abbreviation: { $regex: new RegExp(`^${book}`, "i") } }, // Abbreviation match (e.g., "pro" matches "Pro")
+                        ],
+                        isActive: true,
+                    }).select("name");
+                    if (matchingBooks.length > 0) {
+                        // Use the first matching book name
+                        const bookName = matchingBooks[0].name;
+                        searchQuery.bookName = { $regex: new RegExp(`^${bookName}$`, "i") };
+                    }
+                    else {
+                        // Fallback to exact match if no abbreviation/partial match found
+                        searchQuery.bookName = { $regex: new RegExp(`^${book}$`, "i") };
+                    }
                 }
                 if (testament) {
                     // Get book IDs for the testament
