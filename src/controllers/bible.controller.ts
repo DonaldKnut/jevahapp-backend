@@ -253,8 +253,16 @@ export const getVerseRange = async (
 ): Promise<void> => {
   try {
     const { reference } = request.params;
+    
     // Decode URL-encoded reference (e.g., "Romans%208:28-31" -> "Romans 8:28-31")
-    const decodedReference = decodeURIComponent(reference);
+    let decodedReference: string;
+    try {
+      decodedReference = decodeURIComponent(reference);
+    } catch (decodeError) {
+      // If decoding fails (invalid encoding), use the original reference
+      decodedReference = reference;
+    }
+    
     const range = bibleService.parseBibleReference(decodedReference);
 
     if (!range) {
