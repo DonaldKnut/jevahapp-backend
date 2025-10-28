@@ -194,3 +194,4 @@ renderProfileSurface(data.sections);
 
 - The `AUTH_API.md` is the source of truth and aligns with current backend routes and controllers.
 - If you change auth routes or shapes, update both `AUTH_API.md` and this guide to keep parity.
+

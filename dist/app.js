@@ -42,6 +42,8 @@ const hymns_routes_1 = __importDefault(require("./routes/hymns.routes"));
 const places_routes_1 = __importDefault(require("./routes/places.routes"));
 const churches_admin_routes_1 = __importDefault(require("./routes/churches.admin.routes"));
 const userContent_routes_1 = __importDefault(require("./routes/userContent.routes"));
+const ebook_routes_1 = __importDefault(require("./routes/ebook.routes"));
+const bible_routes_1 = __importDefault(require("./routes/bible.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -124,6 +126,9 @@ app.get("/", (req, res) => {
             userProfiles: "/api/user-profiles",
             healthCheck: "/api/health",
             hymns: "/api/hymns",
+            ebooks: "/api/ebooks",
+            tts: "/api/tts",
+            bible: "/api/bible",
         },
         features: [
             "User Authentication & Authorization",
@@ -134,6 +139,8 @@ app.get("/", (req, res) => {
             "Real-time Interactions",
             "User Profile Management",
             "Hymns & Scripture-based Music",
+            "Ebook Text Extraction & TTS",
+            "Complete Bible Access & Search",
         ],
         documentation: "https://jevahapp-backend.onrender.com/api-docs",
     });
@@ -145,7 +152,7 @@ app.get("/health", (req, res) => {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || "development",
-        version: process.env.npm_package_version || "1.0.0",
+        version: process.env.npm_package_version || "2.0.0",
     });
 });
 // API documentation - enabled for testing
@@ -193,6 +200,9 @@ app.use("/api/hymns", hymns_routes_1.default);
 app.use("/api", places_routes_1.default);
 app.use("/api", churches_admin_routes_1.default);
 app.use("/api", userContent_routes_1.default);
+app.use("/api/ebooks", ebook_routes_1.default);
+app.use("/api/tts", ebook_routes_1.default);
+app.use("/api/bible", bible_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

@@ -140,3 +140,11 @@ This document is generated from the actual routes and controllers in `src/routes
 - Validation and exact error messages come from `auth.controller.ts` and `auth.service.ts`.
 
 
+
+
+
+
+
+
+
+

@@ -127,8 +127,10 @@ class ResendEmailService {
       }
 
       .logo {
-        height: 60px;
+        height: 120px;
         width: auto;
+        display: block;
+        margin: 0 auto;
       }
 
       .verify-title {
@@ -404,8 +406,10 @@ class ResendEmailService {
       }
 
       .logo {
-        height: 60px;
+        height: 120px;
         width: auto;
+        display: block;
+        margin: 0 auto;
       }
 
       .reset-title {
@@ -681,8 +685,10 @@ class ResendEmailService {
       }
 
       .logo {
-        height: 60px;
+        height: 120px;
         width: auto;
+        display: block;
+        margin: 0 auto;
       }
 
       .welcome-title {

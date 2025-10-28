@@ -1,6 +1,6 @@
 {
   "name": "Jevah-app",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "dist/app.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
@@ -37,6 +37,7 @@
     "@mux/mux-node": "^11.1.0",
     "@react-email/render": "^1.1.2",
     "@types/bcryptjs": "^2.4.6",
+    "@types/pdf-parse": "^1.1.5",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
@@ -54,6 +55,7 @@
     "mongoose": "^8.15.0",
     "multer": "^2.0.1",
     "nodemailer": "^7.0.3",
+    "pdf-parse": "^2.2.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "resend": "^4.8.0",

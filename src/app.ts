@@ -39,6 +39,8 @@ import hymnsRoutes from "./routes/hymns.routes";
 import placesRoutes from "./routes/places.routes";
 import churchesAdminRoutes from "./routes/churches.admin.routes";
 import userContentRoutes from "./routes/userContent.routes";
+import ebookRoutes from "./routes/ebook.routes";
+import bibleRoutes from "./routes/bible.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -134,6 +136,9 @@ app.get("/", (req, res) => {
       userProfiles: "/api/user-profiles",
       healthCheck: "/api/health",
       hymns: "/api/hymns",
+      ebooks: "/api/ebooks",
+      tts: "/api/tts",
+      bible: "/api/bible",
     },
     features: [
       "User Authentication & Authorization",
@@ -144,6 +149,8 @@ app.get("/", (req, res) => {
       "Real-time Interactions",
       "User Profile Management",
       "Hymns & Scripture-based Music",
+      "Ebook Text Extraction & TTS",
+      "Complete Bible Access & Search",
     ],
     documentation: "https://jevahapp-backend.onrender.com/api-docs",
   });
@@ -156,7 +163,7 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || "development",
-    version: process.env.npm_package_version || "1.0.0",
+    version: process.env.npm_package_version || "2.0.0",
   });
 });
 
@@ -211,6 +218,9 @@ app.use("/api/hymns", hymnsRoutes);
 app.use("/api", placesRoutes);
 app.use("/api", churchesAdminRoutes);
 app.use("/api", userContentRoutes);
+app.use("/api/ebooks", ebookRoutes);
+app.use("/api/tts", ebookRoutes);
+app.use("/api/bible", bibleRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

@@ -6,34 +6,14 @@
     "auditLog": "/Users/user/Desktop/jevah-app_backend/logs/.9b3162549da8c76a554c59655ef3501ca0db7dba-audit.json",
     "files": [
         {
-            "date": 1758505328143,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-22.log",
-            "hash": "2d8033887e302e90e6210fc12b2c9ed805a9b73bcf6ea11d5a52ad8da21baaf9"
+            "date": 1761016449904,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-10-21.log",
+            "hash": "b9eb4a7e7054ceffaca3b44599ea7eefc788beebc39c6c70f4165ff9a265c905"
         },
         {
-            "date": 1758631564995,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-23.log",
-            "hash": "358d3f586688143850ee159a205356aadee09bf2fdeb5223cf06f3ee11e5942f"
-        },
-        {
-            "date": 1758668725722,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-24.log",
-            "hash": "7a3838d7aaf3241fc06ab448e51ebc68692c013c0f02615f822757dd1aaae2bb"
-        },
-        {
-            "date": 1759232654756,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-09-30.log",
-            "hash": "50230992e3dc3bb5a964c8154412f5d58d66c1beab4359b75fb0121f272ccd7b"
-        },
-        {
-            "date": 1759328305731,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-10-01.log",
-            "hash": "dcb4effac2fa9e15d3b43d794e01f20fa5d2bace2d61b60c3b3969f1da44093f"
-        },
-        {
-            "date": 1759409631135,
-            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-10-02.log",
-            "hash": "0c75f6adfbc5df1680a8691a379bb9b140d576a4f84e6214b2ec549852e2b9d1"
+            "date": 1761395941384,
+            "name": "/Users/user/Desktop/jevah-app_backend/logs/exceptions-2025-10-25.log",
+            "hash": "09517c3828ddd7c1942b6edd89f4c54c60e264ebedf51e21b712e51a16b5fe68"
         }
     ],
     "hashType": "sha256"
