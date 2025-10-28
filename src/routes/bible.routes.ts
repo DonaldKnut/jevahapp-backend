@@ -9,6 +9,7 @@ import {
   getVerse,
   getVerseRange,
   searchBible,
+  advancedSearchBible,
   getRandomVerse,
   getVerseOfTheDay,
   getPopularVerses,
@@ -62,6 +63,9 @@ router.get(
 // Search and Discovery
 // GET /api/bible/search?q=query&book=bookName&testament=old|new&limit=50&offset=0 - Search Bible text
 router.get("/search", apiRateLimiter, searchBible);
+
+// GET /api/bible/search/advanced?q=query&book=bookName&testament=old|new&limit=20 - Advanced AI-powered search
+router.get("/search/advanced", apiRateLimiter, advancedSearchBible);
 
 // Verse range endpoint - MUST come before other /verses routes
 // GET /api/bible/verses/range/:reference - Get a range of verses (e.g., "John 3:16-18")

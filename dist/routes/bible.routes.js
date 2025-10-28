@@ -25,6 +25,8 @@ router.get("/books/:bookName/chapters/:chapterNumber/verses/:verseNumber", rateL
 // Search and Discovery
 // GET /api/bible/search?q=query&book=bookName&testament=old|new&limit=50&offset=0 - Search Bible text
 router.get("/search", rateLimiter_1.apiRateLimiter, bible_controller_1.searchBible);
+// GET /api/bible/search/advanced?q=query&book=bookName&testament=old|new&limit=20 - Advanced AI-powered search
+router.get("/search/advanced", rateLimiter_1.apiRateLimiter, bible_controller_1.advancedSearchBible);
 // Verse range endpoint - MUST come before other /verses routes
 // GET /api/bible/verses/range/:reference - Get a range of verses (e.g., "John 3:16-18")
 router.get("/verses/range/:reference", rateLimiter_1.apiRateLimiter, bible_controller_1.getVerseRange);

@@ -142,7 +142,7 @@ export const getChapter = async (
     if (chapter) {
       // Get actual verse count from database
       const verseCount = await bibleService.getVerseCount(bookName, chapterNum);
-      
+
       response.status(200).json({
         success: true,
         data: {
@@ -336,6 +336,67 @@ export const searchBible = async (
     response.status(500).json({
       success: false,
       message: "Failed to search Bible",
+    });
+  }
+};
+
+/**
+ * Advanced AI-powered Bible search
+ * Understands natural language queries
+ */
+export const advancedSearchBible = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const { q, book, testament, limit = 20 } = request.query;
+
+    if (!q || typeof q !== "string") {
+      response.status(400).json({
+        success: false,
+        message: "Search query is required",
+      });
+      return;
+    }
+
+    // Import AI search service
+    const aiBibleSearchService = (await import("../service/aiBibleSearch.service")).default;
+
+    const searchOptions = {
+      limit: parseInt(limit as string) || 20,
+      book: book as string,
+      testament: testament as "old" | "new",
+    };
+
+    const aiResults = await aiBibleSearchService.advancedSearch(q, searchOptions);
+
+    // Transform results for frontend
+    const transformedResults = aiResults.results.map((result) => ({
+      _id: result.verse._id,
+      bookName: result.verse.bookName,
+      chapterNumber: result.verse.chapterNumber,
+      verseNumber: result.verse.verseNumber,
+      text: result.verse.text,
+      highlightedText: result.highlightedText, // Text with matched terms highlighted
+      relevanceScore: result.relevanceScore,
+      matchedTerms: result.matchedTerms,
+      explanation: result.explanation, // AI explanation of why this matches
+    }));
+
+    response.status(200).json({
+      success: true,
+      data: transformedResults,
+      count: transformedResults.length,
+      queryInterpretation: aiResults.queryInterpretation, // What AI thinks user is looking for
+      suggestedVerses: aiResults.suggestedVerses, // AI-suggested specific verse references
+      searchTerms: aiResults.searchTerms,
+      isAIEnhanced: true,
+    });
+  } catch (error) {
+    logger.error("Advanced AI search error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to perform advanced search",
     });
   }
 };
