@@ -17,6 +17,7 @@ import {
   getReadingPlans,
   getCrossReferences,
   getCommentary,
+  getAvailableTranslations,
 } from "../controllers/bible.controller";
 import { apiRateLimiter } from "../middleware/rateLimiter";
 
@@ -66,6 +67,9 @@ router.get("/search", apiRateLimiter, searchBible);
 
 // GET /api/bible/search/advanced?q=query&book=bookName&testament=old|new&limit=20 - Advanced AI-powered search
 router.get("/search/advanced", apiRateLimiter, advancedSearchBible);
+
+// GET /api/bible/translations - Get available translations
+router.get("/translations", apiRateLimiter, getAvailableTranslations);
 
 // Verse range endpoint - MUST come before other /verses routes
 // GET /api/bible/verses/range/:reference - Get a range of verses (e.g., "John 3:16-18")

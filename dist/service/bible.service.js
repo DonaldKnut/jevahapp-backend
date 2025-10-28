@@ -128,14 +128,19 @@ class BibleService {
     /**
      * Get verses for a specific chapter
      */
-    getVersesByChapter(bookName, chapterNumber) {
+    getVersesByChapter(bookName, chapterNumber, translation) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const verses = yield bible_model_1.BibleVerse.find({
+                const query = {
                     bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
                     chapterNumber,
                     isActive: true,
-                }).sort({ verseNumber: 1 });
+                };
+                // Filter by translation if provided
+                if (translation) {
+                    query.translation = translation.toUpperCase();
+                }
+                const verses = yield bible_model_1.BibleVerse.find(query).sort({ verseNumber: 1 });
                 return verses;
             }
             catch (error) {
@@ -147,15 +152,20 @@ class BibleService {
     /**
      * Get a specific verse
      */
-    getVerse(bookName, chapterNumber, verseNumber) {
+    getVerse(bookName, chapterNumber, verseNumber, translation) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const verse = yield bible_model_1.BibleVerse.findOne({
+                const query = {
                     bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
                     chapterNumber,
                     verseNumber,
                     isActive: true,
-                });
+                };
+                // Filter by translation if provided
+                if (translation) {
+                    query.translation = translation.toUpperCase();
+                }
+                const verse = yield bible_model_1.BibleVerse.findOne(query);
                 return verse;
             }
             catch (error) {
@@ -459,6 +469,47 @@ class BibleService {
                 readings: [], // Would be populated with daily readings
             },
         ];
+    }
+    /**
+     * Get available translations
+     */
+    getAvailableTranslations() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const translations = yield bible_model_1.BibleVerse.aggregate([
+                    { $match: { isActive: true } },
+                    {
+                        $group: {
+                            _id: "$translation",
+                            count: { $sum: 1 },
+                        },
+                    },
+                    { $sort: { count: -1 } },
+                ]);
+                // Map translation codes to names
+                const translationNames = {
+                    WEB: "World English Bible",
+                    KJV: "King James Version",
+                    ASV: "American Standard Version",
+                    NIV: "New International Version",
+                    AMP: "Amplified Bible",
+                    DARBY: "Darby Translation",
+                    YLT: "Young's Literal Translation",
+                    ESV: "English Standard Version",
+                    NASB: "New American Standard Bible",
+                    NLT: "New Living Translation",
+                };
+                return translations.map((t) => ({
+                    code: t._id,
+                    name: translationNames[t._id] || t._id,
+                    count: t.count,
+                }));
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get translations:", error);
+                return [{ code: "WEB", name: "World English Bible", count: 0 }];
+            }
+        });
     }
     /**
      * Get cross-references for a verse (placeholder - would need external API)

@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCommentary = exports.getCrossReferences = exports.getReadingPlans = exports.getBibleStats = exports.getPopularVerses = exports.getVerseOfTheDay = exports.getRandomVerse = exports.advancedSearchBible = exports.searchBible = exports.getVerseRange = exports.getVerse = exports.getVerses = exports.getChapter = exports.getChapters = exports.getBook = exports.getBooksByTestament = exports.getAllBooks = void 0;
+exports.getCommentary = exports.getCrossReferences = exports.getReadingPlans = exports.getBibleStats = exports.getPopularVerses = exports.getVerseOfTheDay = exports.getRandomVerse = exports.getAvailableTranslations = exports.advancedSearchBible = exports.searchBible = exports.getVerseRange = exports.getVerse = exports.getVerses = exports.getChapter = exports.getChapters = exports.getBook = exports.getBooksByTestament = exports.getAllBooks = void 0;
 const bible_service_1 = __importDefault(require("../service/bible.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
 /**
@@ -194,6 +194,7 @@ exports.getChapter = getChapter;
 const getVerses = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { bookName, chapterNumber } = request.params;
+        const { translation = "WEB" } = request.query; // Default to WEB
         const chapterNum = parseInt(chapterNumber);
         if (isNaN(chapterNum) || chapterNum < 1) {
             response.status(400).json({
@@ -202,11 +203,12 @@ const getVerses = (request, response) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        const verses = yield bible_service_1.default.getVersesByChapter(bookName, chapterNum);
+        const verses = yield bible_service_1.default.getVersesByChapter(bookName, chapterNum, translation);
         response.status(200).json({
             success: true,
             data: verses,
             count: verses.length,
+            translation: translation.toUpperCase(),
         });
     }
     catch (error) {
@@ -224,6 +226,7 @@ exports.getVerses = getVerses;
 const getVerse = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { bookName, chapterNumber, verseNumber } = request.params;
+        const { translation = "WEB" } = request.query; // Default to WEB
         const chapterNum = parseInt(chapterNumber);
         const verseNum = parseInt(verseNumber);
         if (isNaN(chapterNum) || chapterNum < 1) {
@@ -240,17 +243,18 @@ const getVerse = (request, response) => __awaiter(void 0, void 0, void 0, functi
             });
             return;
         }
-        const verse = yield bible_service_1.default.getVerse(bookName, chapterNum, verseNum);
+        const verse = yield bible_service_1.default.getVerse(bookName, chapterNum, verseNum, translation);
         if (verse) {
             response.status(200).json({
                 success: true,
                 data: verse,
+                translation: translation.toUpperCase(),
             });
         }
         else {
             response.status(404).json({
                 success: false,
-                message: "Verse not found",
+                message: `Verse not found in ${translation.toUpperCase()} translation`,
             });
         }
     }
@@ -393,6 +397,28 @@ const advancedSearchBible = (request, response) => __awaiter(void 0, void 0, voi
     }
 });
 exports.advancedSearchBible = advancedSearchBible;
+/**
+ * Get available translations
+ */
+const getAvailableTranslations = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Get unique translations from database
+        const translations = yield bible_service_1.default.getAvailableTranslations();
+        response.status(200).json({
+            success: true,
+            data: translations,
+            count: translations.length,
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Get translations error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to get translations",
+        });
+    }
+});
+exports.getAvailableTranslations = getAvailableTranslations;
 /**
  * Get random verse
  */

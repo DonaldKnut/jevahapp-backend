@@ -151,14 +151,22 @@ class BibleService {
    */
   async getVersesByChapter(
     bookName: string,
-    chapterNumber: number
+    chapterNumber: number,
+    translation?: string
   ): Promise<IBibleVerse[]> {
     try {
-      const verses = await BibleVerse.find({
+      const query: any = {
         bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
         chapterNumber,
         isActive: true,
-      }).sort({ verseNumber: 1 });
+      };
+
+      // Filter by translation if provided
+      if (translation) {
+        query.translation = translation.toUpperCase();
+      }
+
+      const verses = await BibleVerse.find(query).sort({ verseNumber: 1 });
       return verses;
     } catch (error) {
       logger.error("Failed to get verses by chapter:", error);
@@ -172,15 +180,23 @@ class BibleService {
   async getVerse(
     bookName: string,
     chapterNumber: number,
-    verseNumber: number
+    verseNumber: number,
+    translation?: string
   ): Promise<IBibleVerse | null> {
     try {
-      const verse = await BibleVerse.findOne({
+      const query: any = {
         bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
         chapterNumber,
         verseNumber,
         isActive: true,
-      });
+      };
+
+      // Filter by translation if provided
+      if (translation) {
+        query.translation = translation.toUpperCase();
+      }
+
+      const verse = await BibleVerse.findOne(query);
       return verse;
     } catch (error) {
       logger.error("Failed to get verse:", error);
@@ -516,6 +532,49 @@ class BibleService {
         readings: [], // Would be populated with daily readings
       },
     ];
+  }
+
+  /**
+   * Get available translations
+   */
+  async getAvailableTranslations(): Promise<
+    Array<{ code: string; name: string; count: number }>
+  > {
+    try {
+      const translations = await BibleVerse.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: "$translation",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1 } },
+      ]);
+
+      // Map translation codes to names
+      const translationNames: { [key: string]: string } = {
+        WEB: "World English Bible",
+        KJV: "King James Version",
+        ASV: "American Standard Version",
+        NIV: "New International Version",
+        AMP: "Amplified Bible",
+        DARBY: "Darby Translation",
+        YLT: "Young's Literal Translation",
+        ESV: "English Standard Version",
+        NASB: "New American Standard Bible",
+        NLT: "New Living Translation",
+      };
+
+      return translations.map((t) => ({
+        code: t._id,
+        name: translationNames[t._id] || t._id,
+        count: t.count,
+      }));
+    } catch (error) {
+      logger.error("Failed to get translations:", error);
+      return [{ code: "WEB", name: "World English Bible", count: 0 }];
+    }
   }
 
   /**

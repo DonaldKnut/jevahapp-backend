@@ -174,6 +174,7 @@ export const getVerses = async (
 ): Promise<void> => {
   try {
     const { bookName, chapterNumber } = request.params;
+    const { translation = "WEB" } = request.query; // Default to WEB
     const chapterNum = parseInt(chapterNumber);
 
     if (isNaN(chapterNum) || chapterNum < 1) {
@@ -184,13 +185,18 @@ export const getVerses = async (
       return;
     }
 
-    const verses = await bibleService.getVersesByChapter(bookName, chapterNum);
+    const verses = await bibleService.getVersesByChapter(
+      bookName,
+      chapterNum,
+      translation as string
+    );
 
-    response.status(200).json({
-      success: true,
-      data: verses,
-      count: verses.length,
-    });
+      response.status(200).json({
+        success: true,
+        data: verses,
+        count: verses.length,
+        translation: (translation as string).toUpperCase(),
+      });
   } catch (error) {
     logger.error("Get verses error:", error);
     response.status(500).json({
@@ -209,6 +215,7 @@ export const getVerse = async (
 ): Promise<void> => {
   try {
     const { bookName, chapterNumber, verseNumber } = request.params;
+    const { translation = "WEB" } = request.query; // Default to WEB
     const chapterNum = parseInt(chapterNumber);
     const verseNum = parseInt(verseNumber);
 
@@ -228,17 +235,23 @@ export const getVerse = async (
       return;
     }
 
-    const verse = await bibleService.getVerse(bookName, chapterNum, verseNum);
+    const verse = await bibleService.getVerse(
+      bookName,
+      chapterNum,
+      verseNum,
+      translation as string
+    );
 
     if (verse) {
       response.status(200).json({
         success: true,
         data: verse,
+        translation: (translation as string).toUpperCase(),
       });
     } else {
       response.status(404).json({
         success: false,
-        message: "Verse not found",
+        message: `Verse not found in ${(translation as string).toUpperCase()} translation`,
       });
     }
   } catch (error) {
@@ -397,6 +410,31 @@ export const advancedSearchBible = async (
     response.status(500).json({
       success: false,
       message: "Failed to perform advanced search",
+    });
+  }
+};
+
+/**
+ * Get available translations
+ */
+export const getAvailableTranslations = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    // Get unique translations from database
+    const translations = await bibleService.getAvailableTranslations();
+
+    response.status(200).json({
+      success: true,
+      data: translations,
+      count: translations.length,
+    });
+  } catch (error) {
+    logger.error("Get translations error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to get translations",
     });
   }
 };
