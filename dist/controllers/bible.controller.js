@@ -132,9 +132,11 @@ const getChapter = (request, response) => __awaiter(void 0, void 0, void 0, func
         }
         const chapter = yield bible_service_1.default.getChapter(bookName, chapterNum);
         if (chapter) {
+            // Get actual verse count from database
+            const verseCount = yield bible_service_1.default.getVerseCount(bookName, chapterNum);
             response.status(200).json({
                 success: true,
-                data: chapter,
+                data: Object.assign(Object.assign({}, chapter.toObject()), { actualVerseCount: verseCount }),
             });
         }
         else {

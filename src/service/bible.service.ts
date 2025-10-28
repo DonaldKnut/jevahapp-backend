@@ -127,6 +127,23 @@ class BibleService {
   }
 
   /**
+   * Get verse count for a chapter
+   */
+  async getVerseCount(bookName: string, chapterNumber: number): Promise<number> {
+    try {
+      const count = await BibleVerse.countDocuments({
+        bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
+        chapterNumber,
+        isActive: true,
+      });
+      return count;
+    } catch (error) {
+      logger.error("Failed to get verse count:", error);
+      return 0;
+    }
+  }
+
+  /**
    * Get verses for a specific chapter
    */
   async getVersesByChapter(

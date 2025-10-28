@@ -107,6 +107,25 @@ class BibleService {
         });
     }
     /**
+     * Get verse count for a chapter
+     */
+    getVerseCount(bookName, chapterNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const count = yield bible_model_1.BibleVerse.countDocuments({
+                    bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
+                    chapterNumber,
+                    isActive: true,
+                });
+                return count;
+            }
+            catch (error) {
+                logger_1.default.error("Failed to get verse count:", error);
+                return 0;
+            }
+        });
+    }
+    /**
      * Get verses for a specific chapter
      */
     getVersesByChapter(bookName, chapterNumber) {

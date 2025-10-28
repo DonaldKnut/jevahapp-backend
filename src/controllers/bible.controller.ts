@@ -140,9 +140,15 @@ export const getChapter = async (
     const chapter = await bibleService.getChapter(bookName, chapterNum);
 
     if (chapter) {
+      // Get actual verse count from database
+      const verseCount = await bibleService.getVerseCount(bookName, chapterNum);
+      
       response.status(200).json({
         success: true,
-        data: chapter,
+        data: {
+          ...chapter.toObject(),
+          actualVerseCount: verseCount, // Actual count from verses in DB
+        },
       });
     } else {
       response.status(404).json({
@@ -253,7 +259,7 @@ export const getVerseRange = async (
 ): Promise<void> => {
   try {
     const { reference } = request.params;
-    
+
     // Decode URL-encoded reference (e.g., "Romans%208:28-31" -> "Romans 8:28-31")
     let decodedReference: string;
     try {
@@ -262,7 +268,7 @@ export const getVerseRange = async (
       // If decoding fails (invalid encoding), use the original reference
       decodedReference = reference;
     }
-    
+
     const range = bibleService.parseBibleReference(decodedReference);
 
     if (!range) {
