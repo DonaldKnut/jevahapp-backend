@@ -73,13 +73,49 @@ app.use(
   })
 );
 
-// CORS configuration
+// CORS configuration - Allow all frontend origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "http://localhost:3000",
+  "http://localhost:19006", // Expo local dev server
+  "http://10.0.2.2:4000",   // Android emulator
+  "http://localhost:4000",  // iOS simulator
+  // Add network-based origins dynamically
+  ...(process.env.ALLOWED_ORIGINS?.split(",") || []),
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.some(allowed => origin.includes(allowed.replace(/^https?:\/\//, "")))) {
+        return callback(null, true);
+      }
+      
+      // For development, allow any localhost/network origin
+      if (process.env.NODE_ENV === "development") {
+        if (
+          origin.includes("localhost") ||
+          origin.includes("127.0.0.1") ||
+          /^http:\/\/192\.168\.\d+\.\d+:19006$/.test(origin) || // Expo network
+          /^http:\/\/10\.\d+\.\d+\.\d+:4000$/.test(origin)      // Network backend
+        ) {
+          return callback(null, true);
+        }
+      }
+      
+      // Allow Render preview deployments
+      if (origin.includes(".onrender.com")) {
+        return callback(null, true);
+      }
+      
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "expo-platform"],
   })
 );
 
