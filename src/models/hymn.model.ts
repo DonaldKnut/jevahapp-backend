@@ -124,20 +124,20 @@ const hymnSchema = new Schema<IHymn>(
       {
         type: String,
         trim: true,
-        index: true,
+        // Index defined at schema level (line 198)
       },
     ],
     source: {
       type: String,
       enum: ["hymnary", "openhymnal", "manual"],
       default: "manual",
-      index: true,
+      // Index defined at schema level as compound index (line 196)
     },
     externalId: {
       type: String,
-      index: true,
       unique: true,
       sparse: true,
+      // Index defined at schema level as compound index (line 196)
     },
     viewCount: {
       type: Number,
