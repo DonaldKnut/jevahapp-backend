@@ -15,7 +15,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.EbookService = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const axios_1 = __importDefault(require("axios"));
-const pdf_parse_1 = require("pdf-parse");
+// pdf-parse uses pdfjs-dist (ES Module) which requires dynamic import
+// import { PDFParse } from "pdf-parse";
 const logger_1 = __importDefault(require("../utils/logger"));
 class EbookService {
     constructor() {
@@ -61,8 +62,12 @@ class EbookService {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
             try {
+                // Dynamic import for pdf-parse (uses ES Module pdfjs-dist)
+                // Must use Function constructor to create true dynamic import at runtime
+                const pdfParseModule = yield new Function('return import("pdf-parse")')();
+                const { PDFParse } = pdfParseModule;
                 // Create PDFParse instance
-                const pdfParser = new pdf_parse_1.PDFParse({ data: pdfBuffer });
+                const pdfParser = new PDFParse({ data: pdfBuffer });
                 // Get text result
                 const textResult = yield pdfParser.getText();
                 // Get info for metadata

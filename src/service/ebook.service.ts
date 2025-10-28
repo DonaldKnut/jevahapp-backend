@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
-import { PDFParse } from "pdf-parse";
+// pdf-parse uses pdfjs-dist (ES Module) which requires dynamic import
+// import { PDFParse } from "pdf-parse";
 import logger from "../utils/logger";
 
 export interface PageText {
@@ -81,6 +82,11 @@ export class EbookService {
     pages: PageText[];
   }> {
     try {
+      // Dynamic import for pdf-parse (uses ES Module pdfjs-dist)
+      // Must use Function constructor to create true dynamic import at runtime
+      const pdfParseModule = await new Function('return import("pdf-parse")')();
+      const { PDFParse } = pdfParseModule;
+      
       // Create PDFParse instance
       const pdfParser = new PDFParse({ data: pdfBuffer });
 
