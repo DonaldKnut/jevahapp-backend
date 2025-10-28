@@ -59,13 +59,15 @@ router.get(
   getVerse
 );
 
-// GET /api/bible/verses/range/:reference - Get a range of verses (e.g., "John 3:16-18")
-router.get("/verses/range/:reference", apiRateLimiter, getVerseRange);
-
 // Search and Discovery
 // GET /api/bible/search?q=query&book=bookName&testament=old|new&limit=50&offset=0 - Search Bible text
 router.get("/search", apiRateLimiter, searchBible);
 
+// Verse range endpoint - MUST come before other /verses routes
+// GET /api/bible/verses/range/:reference - Get a range of verses (e.g., "John 3:16-18")
+router.get("/verses/range/:reference", apiRateLimiter, getVerseRange);
+
+// Random, daily, popular verses
 // GET /api/bible/verses/random - Get a random verse
 router.get("/verses/random", apiRateLimiter, getRandomVerse);
 
