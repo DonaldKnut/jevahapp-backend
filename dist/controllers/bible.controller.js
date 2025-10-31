@@ -367,7 +367,7 @@ const advancedSearchBible = (request, response) => __awaiter(void 0, void 0, voi
         };
         const aiResults = yield aiBibleSearchService.advancedSearch(q, searchOptions);
         // Transform results for frontend
-        const transformedResults = aiResults.results.map((result) => ({
+        const transformedResults = aiResults.results.map(result => ({
             _id: result.verse._id,
             bookName: result.verse.bookName,
             chapterNumber: result.verse.chapterNumber,

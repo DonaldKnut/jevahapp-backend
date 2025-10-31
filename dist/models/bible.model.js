@@ -163,8 +163,8 @@ const bibleVerseSchema = new mongoose_1.Schema({
 });
 // Create compound indexes for efficient queries
 bibleChapterSchema.index({ bookId: 1, chapterNumber: 1 }, { unique: true });
-bibleVerseSchema.index({ bookId: 1, chapterNumber: 1, verseNumber: 1 }, { unique: true });
-bibleVerseSchema.index({ bookName: 1, chapterNumber: 1, verseNumber: 1 }, { unique: true });
+bibleVerseSchema.index({ bookId: 1, chapterNumber: 1, verseNumber: 1, translation: 1 }, { unique: true });
+bibleVerseSchema.index({ bookName: 1, chapterNumber: 1, verseNumber: 1, translation: 1 }, { unique: true });
 // Text search index for verse content
 bibleVerseSchema.index({ text: "text" });
 // Export models

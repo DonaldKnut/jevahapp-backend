@@ -108,7 +108,7 @@ exports.removeComment = removeComment;
 const addCommentReaction = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { commentId } = req.params;
-        const { reactionType } = req.body;
+        const { reactionType = "like" } = req.body; // Default to "like"
         const userId = req.userId;
         if (!userId) {
             res.status(401).json({
@@ -124,26 +124,20 @@ const addCommentReaction = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        if (!reactionType) {
-            res.status(400).json({
-                success: false,
-                message: "Reaction type is required",
-            });
-            return;
-        }
-        const result = yield interaction_service_1.default.addCommentReaction({
-            userId,
-            commentId,
-            reactionType,
-        });
+        // Use the new contentInteractionService method
+        const contentInteractionService = (yield Promise.resolve().then(() => __importStar(require("../service/contentInteraction.service")))).default;
+        const result = yield contentInteractionService.toggleCommentReaction(commentId, userId, reactionType);
+        // Match frontend expected response format
         res.status(200).json({
             success: true,
-            message: "Reaction added successfully",
-            data: result,
+            data: {
+                liked: result.liked,
+                totalLikes: result.totalLikes,
+            },
         });
     }
     catch (error) {
-        logger_1.default.error("Add comment reaction error", {
+        logger_1.default.error("Toggle comment reaction error", {
             error: error.message,
             userId: req.userId,
             commentId: req.params.commentId,
@@ -157,7 +151,7 @@ const addCommentReaction = (req, res) => __awaiter(void 0, void 0, void 0, funct
         }
         res.status(500).json({
             success: false,
-            message: "Failed to add reaction",
+            message: "Failed to toggle comment reaction",
         });
     }
 });

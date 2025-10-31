@@ -79,7 +79,7 @@ export const addCommentReaction = async (
 ): Promise<void> => {
   try {
     const { commentId } = req.params;
-    const { reactionType } = req.body;
+    const { reactionType = "like" } = req.body; // Default to "like"
     const userId = req.userId;
 
     if (!userId) {
@@ -98,27 +98,27 @@ export const addCommentReaction = async (
       return;
     }
 
-    if (!reactionType) {
-      res.status(400).json({
-        success: false,
-        message: "Reaction type is required",
-      });
-      return;
-    }
-
-    const result = await interactionService.addCommentReaction({
-      userId,
+    // Use the new contentInteractionService method
+    const contentInteractionService = (
+      await import("../service/contentInteraction.service")
+    ).default;
+    
+    const result = await contentInteractionService.toggleCommentReaction(
       commentId,
-      reactionType,
-    });
+      userId,
+      reactionType
+    );
 
+    // Match frontend expected response format
     res.status(200).json({
       success: true,
-      message: "Reaction added successfully",
-      data: result,
+      data: {
+        liked: result.liked,
+        totalLikes: result.totalLikes,
+      },
     });
   } catch (error: any) {
-    logger.error("Add comment reaction error", {
+    logger.error("Toggle comment reaction error", {
       error: error.message,
       userId: req.userId,
       commentId: req.params.commentId,
@@ -134,7 +134,7 @@ export const addCommentReaction = async (
 
     res.status(500).json({
       success: false,
-      message: "Failed to add reaction",
+      message: "Failed to toggle comment reaction",
     });
   }
 };

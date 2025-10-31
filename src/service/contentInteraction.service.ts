@@ -532,7 +532,12 @@ export class ContentInteractionService {
       // Populate user info for response
       const populatedComment = await MediaInteraction.findById(comment._id)
         .populate("user", "firstName lastName avatar")
-        .populate("parentCommentId", "content user");
+        .populate("parentCommentId", "content user")
+        .lean();
+
+      // Format comment for frontend compatibility
+      const formattedComment = this.formatCommentWithReplies(populatedComment, false);
+      formattedComment.replies = []; // New comments don't have replies yet
 
       // Emit real-time new comment
       try {
@@ -541,21 +546,14 @@ export class ContentInteractionService {
           const payload = {
             contentId,
             contentType,
-            comment: {
-              _id: populatedComment?._id,
-              content: populatedComment?.content,
-              user: populatedComment?.user,
-              parentCommentId: populatedComment?.parentCommentId,
-              replyCount: populatedComment?.replyCount || 0,
-              createdAt: populatedComment?.createdAt,
-            },
+            comment: formattedComment,
           };
           io.emit("content-comment", payload);
-          io.to(`content:${contentId}`).emit("new-comment", payload.comment);
+          io.to(`content:${contentId}`).emit("new-comment", formattedComment);
         }
       } catch {}
 
-      return populatedComment;
+      return formattedComment;
     } finally {
       session.endSession();
     }
@@ -564,6 +562,78 @@ export class ContentInteractionService {
   /**
    * Get comments for content
    */
+  /**
+   * Helper function to format comment with nested replies and frontend-compatible fields
+   */
+  private formatCommentWithReplies(comment: any, includeReplies: boolean = true): any {
+    // Calculate reactions count
+    const reactionsCount = comment.reactions
+      ? Object.values(comment.reactions as Record<string, any[]>).reduce(
+          (sum: number, arr: any[]) => sum + arr.length,
+          0
+        )
+      : 0;
+
+    const formatted: any = {
+      _id: comment._id,
+      id: comment._id.toString(), // Alias for frontend compatibility
+      content: comment.content,
+      authorId: comment.user?._id?.toString() || comment.user?.toString(),
+      userId: comment.user?._id?.toString() || comment.user?.toString(), // Alias
+      // Provide both 'user' and 'author' for frontend compatibility
+      user: comment.user
+        ? {
+            _id: comment.user._id || comment.user,
+            firstName: comment.user.firstName || "",
+            lastName: comment.user.lastName || "",
+            avatar: comment.user.avatar || null,
+          }
+        : null,
+      author: comment.user
+        ? {
+            _id: comment.user._id || comment.user,
+            firstName: comment.user.firstName || "",
+            lastName: comment.user.lastName || "",
+            avatar: comment.user.avatar || null,
+          }
+        : null,
+      createdAt: comment.createdAt,
+      timestamp: comment.createdAt, // Alias
+      reactionsCount,
+      likes: reactionsCount, // Alias for frontend
+      replyCount: comment.replyCount || 0,
+      replies: [], // Will be populated if includeReplies is true
+    };
+
+    // Add nested replies if requested (limit to first 50 replies per comment)
+    if (includeReplies && comment._id) {
+      // This will be populated by the calling function
+    }
+
+    return formatted;
+  }
+
+  /**
+   * Helper function to fetch and format replies for a comment
+   */
+  private async fetchCommentReplies(
+    commentId: Types.ObjectId,
+    limit: number = 50
+  ): Promise<any[]> {
+    const replies = await MediaInteraction.find({
+      parentCommentId: commentId,
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+      isHidden: { $ne: true },
+    })
+      .populate("user", "firstName lastName avatar")
+      .sort("createdAt")
+      .limit(limit)
+      .lean();
+
+    return replies.map((reply: any) => this.formatCommentWithReplies(reply, false));
+  }
+
   async getContentComments(
     contentId: string,
     contentType: string,
@@ -583,7 +653,7 @@ export class ContentInteractionService {
 
     // For now, we'll use MediaInteraction for both media and devotional
     // TODO: Create a more generic ContentInteraction model in the future
-    // Return only top-level comments with replyCount and basic fields
+    // Return top-level comments with nested replies array
     if (sortBy === "top") {
       // Aggregate to compute a rough score: replyCount + total reactions
       const pipeline: any[] = [
@@ -639,6 +709,16 @@ export class ContentInteractionService {
         score: c.score,
       }));
 
+      // Fetch nested replies for each comment
+      const commentsWithReplies = await Promise.all(
+        ordered.map(async (comment: any) => {
+          const formatted = this.formatCommentWithReplies(comment, true);
+          const replies = await this.fetchCommentReplies(comment._id);
+          formatted.replies = replies;
+          return formatted;
+        })
+      );
+
       const total = await MediaInteraction.countDocuments({
         media: new Types.ObjectId(contentId),
         interactionType: "comment",
@@ -647,8 +727,12 @@ export class ContentInteractionService {
         parentCommentId: { $exists: false },
       });
 
+      const hasMore = (page * limit) < total;
+
       return {
-        comments: ordered,
+        comments: commentsWithReplies,
+        totalComments: total,
+        hasMore,
         pagination: {
           page,
           limit,
@@ -673,6 +757,16 @@ export class ContentInteractionService {
       .limit(limit)
       .lean();
 
+    // Fetch nested replies for each comment
+    const commentsWithReplies = await Promise.all(
+      comments.map(async (comment: any) => {
+        const formatted = this.formatCommentWithReplies(comment, true);
+        const replies = await this.fetchCommentReplies(comment._id);
+        formatted.replies = replies;
+        return formatted;
+      })
+    );
+
     const total = await MediaInteraction.countDocuments({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
@@ -681,8 +775,12 @@ export class ContentInteractionService {
       parentCommentId: { $exists: false },
     });
 
+    const hasMore = (page * limit) < total;
+
     return {
-      comments,
+      comments: commentsWithReplies,
+      totalComments: total,
+      hasMore,
       pagination: {
         page,
         limit,
@@ -690,6 +788,84 @@ export class ContentInteractionService {
         pages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Toggle reaction (like) on a comment
+   */
+  async toggleCommentReaction(
+    commentId: string,
+    userId: string,
+    reactionType: string = "like"
+  ): Promise<{ liked: boolean; totalLikes: number }> {
+    if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId)) {
+      throw new Error("Invalid comment or user ID");
+    }
+
+    const comment = await MediaInteraction.findOne({
+      _id: new Types.ObjectId(commentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    });
+
+    if (!comment) {
+      throw new Error("Comment not found");
+    }
+
+    // Handle reactions - Mongoose Maps can be Map or plain object when loaded
+    let reactions: any = comment.reactions;
+    
+    // Convert to Map if it's a plain object
+    if (!(reactions instanceof Map)) {
+      reactions = new Map(Object.entries(reactions || {}));
+    }
+
+    // Get reaction array for the specified type
+    const reactionArray = reactions.get(reactionType) || [];
+    const userIdObj = new Types.ObjectId(userId);
+    const userIdStr = userIdObj.toString();
+
+    // Check if user already reacted
+    const hasReacted = reactionArray.some(
+      (id: any) => (id.toString ? id.toString() : String(id)) === userIdStr
+    );
+
+    let liked: boolean;
+
+    if (hasReacted) {
+      // Remove reaction (unlike)
+      const filtered = reactionArray.filter(
+        (id: any) => (id.toString ? id.toString() : String(id)) !== userIdStr
+      );
+      reactions.set(reactionType, filtered);
+      liked = false;
+    } else {
+      // Add reaction (like)
+      reactionArray.push(userIdObj);
+      reactions.set(reactionType, reactionArray);
+      liked = true;
+    }
+
+    // Update comment with new reactions
+    comment.reactions = reactions;
+    await comment.save();
+
+    // Calculate total likes (sum of all reaction types, or just "like" if it exists)
+    const likeReactions = reactions.get("like") || [];
+    const reactionTotal = reactions.get(reactionType) || [];
+    const totalLikes = reactionType === "like" 
+      ? likeReactions.length 
+      : (reactions.get("like") || []).length;
+
+    logger.info("Comment reaction toggled", {
+      commentId,
+      userId,
+      reactionType,
+      liked,
+      totalLikes,
+    });
+
+    return { liked, totalLikes };
   }
 
   /**

@@ -368,7 +368,11 @@ class ContentInteractionService {
                 // Populate user info for response
                 const populatedComment = yield mediaInteraction_model_1.MediaInteraction.findById(comment._id)
                     .populate("user", "firstName lastName avatar")
-                    .populate("parentCommentId", "content user");
+                    .populate("parentCommentId", "content user")
+                    .lean();
+                // Format comment for frontend compatibility
+                const formattedComment = this.formatCommentWithReplies(populatedComment, false);
+                formattedComment.replies = []; // New comments don't have replies yet
                 // Emit real-time new comment
                 try {
                     const io = require("../socket/socketManager").getIO();
@@ -376,21 +380,14 @@ class ContentInteractionService {
                         const payload = {
                             contentId,
                             contentType,
-                            comment: {
-                                _id: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment._id,
-                                content: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.content,
-                                user: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.user,
-                                parentCommentId: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.parentCommentId,
-                                replyCount: (populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.replyCount) || 0,
-                                createdAt: populatedComment === null || populatedComment === void 0 ? void 0 : populatedComment.createdAt,
-                            },
+                            comment: formattedComment,
                         };
                         io.emit("content-comment", payload);
-                        io.to(`content:${contentId}`).emit("new-comment", payload.comment);
+                        io.to(`content:${contentId}`).emit("new-comment", formattedComment);
                     }
                 }
                 catch (_a) { }
-                return populatedComment;
+                return formattedComment;
             }
             finally {
                 session.endSession();
@@ -400,6 +397,69 @@ class ContentInteractionService {
     /**
      * Get comments for content
      */
+    /**
+     * Helper function to format comment with nested replies and frontend-compatible fields
+     */
+    formatCommentWithReplies(comment, includeReplies = true) {
+        var _a, _b, _c, _d, _e, _f;
+        // Calculate reactions count
+        const reactionsCount = comment.reactions
+            ? Object.values(comment.reactions).reduce((sum, arr) => sum + arr.length, 0)
+            : 0;
+        const formatted = {
+            _id: comment._id,
+            id: comment._id.toString(), // Alias for frontend compatibility
+            content: comment.content,
+            authorId: ((_b = (_a = comment.user) === null || _a === void 0 ? void 0 : _a._id) === null || _b === void 0 ? void 0 : _b.toString()) || ((_c = comment.user) === null || _c === void 0 ? void 0 : _c.toString()),
+            userId: ((_e = (_d = comment.user) === null || _d === void 0 ? void 0 : _d._id) === null || _e === void 0 ? void 0 : _e.toString()) || ((_f = comment.user) === null || _f === void 0 ? void 0 : _f.toString()), // Alias
+            // Provide both 'user' and 'author' for frontend compatibility
+            user: comment.user
+                ? {
+                    _id: comment.user._id || comment.user,
+                    firstName: comment.user.firstName || "",
+                    lastName: comment.user.lastName || "",
+                    avatar: comment.user.avatar || null,
+                }
+                : null,
+            author: comment.user
+                ? {
+                    _id: comment.user._id || comment.user,
+                    firstName: comment.user.firstName || "",
+                    lastName: comment.user.lastName || "",
+                    avatar: comment.user.avatar || null,
+                }
+                : null,
+            createdAt: comment.createdAt,
+            timestamp: comment.createdAt, // Alias
+            reactionsCount,
+            likes: reactionsCount, // Alias for frontend
+            replyCount: comment.replyCount || 0,
+            replies: [], // Will be populated if includeReplies is true
+        };
+        // Add nested replies if requested (limit to first 50 replies per comment)
+        if (includeReplies && comment._id) {
+            // This will be populated by the calling function
+        }
+        return formatted;
+    }
+    /**
+     * Helper function to fetch and format replies for a comment
+     */
+    fetchCommentReplies(commentId_1) {
+        return __awaiter(this, arguments, void 0, function* (commentId, limit = 50) {
+            const replies = yield mediaInteraction_model_1.MediaInteraction.find({
+                parentCommentId: commentId,
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+                isHidden: { $ne: true },
+            })
+                .populate("user", "firstName lastName avatar")
+                .sort("createdAt")
+                .limit(limit)
+                .lean();
+            return replies.map((reply) => this.formatCommentWithReplies(reply, false));
+        });
+    }
     getContentComments(contentId_1, contentType_1) {
         return __awaiter(this, arguments, void 0, function* (contentId, contentType, page = 1, limit = 20, sortBy = "newest") {
             if (!mongoose_1.Types.ObjectId.isValid(contentId)) {
@@ -411,7 +471,7 @@ class ContentInteractionService {
             const skip = (page - 1) * limit;
             // For now, we'll use MediaInteraction for both media and devotional
             // TODO: Create a more generic ContentInteraction model in the future
-            // Return only top-level comments with replyCount and basic fields
+            // Return top-level comments with nested replies array
             if (sortBy === "top") {
                 // Aggregate to compute a rough score: replyCount + total reactions
                 const pipeline = [
@@ -459,6 +519,13 @@ class ContentInteractionService {
                     .lean();
                 const map = new Map(withUsers.map((c) => [c._id.toString(), c]));
                 const ordered = comments.map((c) => (Object.assign(Object.assign({}, map.get(c._id.toString())), { score: c.score })));
+                // Fetch nested replies for each comment
+                const commentsWithReplies = yield Promise.all(ordered.map((comment) => __awaiter(this, void 0, void 0, function* () {
+                    const formatted = this.formatCommentWithReplies(comment, true);
+                    const replies = yield this.fetchCommentReplies(comment._id);
+                    formatted.replies = replies;
+                    return formatted;
+                })));
                 const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
                     media: new mongoose_1.Types.ObjectId(contentId),
                     interactionType: "comment",
@@ -466,8 +533,11 @@ class ContentInteractionService {
                     isHidden: { $ne: true },
                     parentCommentId: { $exists: false },
                 });
+                const hasMore = (page * limit) < total;
                 return {
-                    comments: ordered,
+                    comments: commentsWithReplies,
+                    totalComments: total,
+                    hasMore,
                     pagination: {
                         page,
                         limit,
@@ -489,6 +559,13 @@ class ContentInteractionService {
                 .skip(skip)
                 .limit(limit)
                 .lean();
+            // Fetch nested replies for each comment
+            const commentsWithReplies = yield Promise.all(comments.map((comment) => __awaiter(this, void 0, void 0, function* () {
+                const formatted = this.formatCommentWithReplies(comment, true);
+                const replies = yield this.fetchCommentReplies(comment._id);
+                formatted.replies = replies;
+                return formatted;
+            })));
             const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
                 media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "comment",
@@ -496,8 +573,11 @@ class ContentInteractionService {
                 isHidden: { $ne: true },
                 parentCommentId: { $exists: false },
             });
+            const hasMore = (page * limit) < total;
             return {
-                comments,
+                comments: commentsWithReplies,
+                totalComments: total,
+                hasMore,
                 pagination: {
                     page,
                     limit,
@@ -505,6 +585,66 @@ class ContentInteractionService {
                     pages: Math.ceil(total / limit),
                 },
             };
+        });
+    }
+    /**
+     * Toggle reaction (like) on a comment
+     */
+    toggleCommentReaction(commentId_1, userId_1) {
+        return __awaiter(this, arguments, void 0, function* (commentId, userId, reactionType = "like") {
+            if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+                throw new Error("Invalid comment or user ID");
+            }
+            const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                _id: new mongoose_1.Types.ObjectId(commentId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            });
+            if (!comment) {
+                throw new Error("Comment not found");
+            }
+            // Handle reactions - Mongoose Maps can be Map or plain object when loaded
+            let reactions = comment.reactions;
+            // Convert to Map if it's a plain object
+            if (!(reactions instanceof Map)) {
+                reactions = new Map(Object.entries(reactions || {}));
+            }
+            // Get reaction array for the specified type
+            const reactionArray = reactions.get(reactionType) || [];
+            const userIdObj = new mongoose_1.Types.ObjectId(userId);
+            const userIdStr = userIdObj.toString();
+            // Check if user already reacted
+            const hasReacted = reactionArray.some((id) => (id.toString ? id.toString() : String(id)) === userIdStr);
+            let liked;
+            if (hasReacted) {
+                // Remove reaction (unlike)
+                const filtered = reactionArray.filter((id) => (id.toString ? id.toString() : String(id)) !== userIdStr);
+                reactions.set(reactionType, filtered);
+                liked = false;
+            }
+            else {
+                // Add reaction (like)
+                reactionArray.push(userIdObj);
+                reactions.set(reactionType, reactionArray);
+                liked = true;
+            }
+            // Update comment with new reactions
+            comment.reactions = reactions;
+            yield comment.save();
+            // Calculate total likes (sum of all reaction types, or just "like" if it exists)
+            const likeReactions = reactions.get("like") || [];
+            const reactionTotal = reactions.get(reactionType) || [];
+            const totalLikes = reactionType === "like"
+                ? likeReactions.length
+                : (reactions.get("like") || []).length;
+            logger_1.default.info("Comment reaction toggled", {
+                commentId,
+                userId,
+                reactionType,
+                liked,
+                totalLikes,
+            });
+            return { liked, totalLikes };
         });
     }
     /**

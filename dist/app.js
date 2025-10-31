@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -118,12 +127,29 @@ app.use((0, cors_1.default)({
 }));
 // Compression middleware
 app.use((0, compression_1.default)());
+// Keep-Alive headers for better connection reuse
+app.use((req, res, next) => {
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Keep-Alive", "timeout=5, max=100");
+    next();
+});
 // Body parsing middleware
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
 // Request logging middleware
+let firstRequestLogged = false;
 app.use((req, res, next) => {
     const startTime = Date.now();
+    // Log marker for the very first request after (re)start
+    if (!firstRequestLogged) {
+        firstRequestLogged = true;
+        logger_1.default.info("FIRST REQUEST AFTER STARTUP", {
+            url: req.originalUrl,
+            method: req.method,
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+        });
+    }
     // Log request
     logger_1.default.info("Incoming request", {
         method: req.method,
@@ -273,6 +299,42 @@ app.use((error, req, res, next) => {
     const isDevelopment = process.env.NODE_ENV === "development";
     res.status(error.status || 500).json(Object.assign({ success: false, message: isDevelopment ? error.message : "Internal server error" }, (isDevelopment && { stack: error.stack })));
 });
+// Lightweight self-ping to mitigate cold starts (configurable)
+(() => {
+    const enabled = (process.env.SELF_PING_ENABLED || "true").toLowerCase() !== "false";
+    const intervalMinutes = parseInt(process.env.SELF_PING_INTERVAL_MIN || "10", 10);
+    const baseUrl = process.env.SELF_PING_URL ||
+        process.env.RENDER_EXTERNAL_URL ||
+        process.env.BACKEND_BASE_URL ||
+        "http://localhost:4000";
+    if (enabled && intervalMinutes > 0) {
+        const ping = () => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                const url = `${baseUrl.replace(/\/$/, "")}/health`;
+                const response = yield fetch(url, { method: "GET" });
+                if (response.ok) {
+                    logger_1.default.info("Self-ping successful", { url, timestamp: new Date().toISOString() });
+                }
+                else {
+                    logger_1.default.warn("Self-ping non-200", { status: response.status, url });
+                }
+            }
+            catch (error) {
+                logger_1.default.warn("Self-ping failed", { error: error === null || error === void 0 ? void 0 : error.message });
+            }
+        });
+        // Initial ping shortly after boot, then on interval
+        setTimeout(ping, 5000);
+        setInterval(ping, intervalMinutes * 60 * 1000);
+        logger_1.default.info("Self-ping enabled", {
+            baseUrl,
+            intervalMinutes,
+        });
+    }
+    else {
+        logger_1.default.info("Self-ping disabled", { enabled, intervalMinutes });
+    }
+})();
 // Graceful shutdown handling
 process.on("SIGTERM", () => {
     logger_1.default.info("SIGTERM received, shutting down gracefully");

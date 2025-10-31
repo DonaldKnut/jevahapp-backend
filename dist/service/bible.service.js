@@ -499,7 +499,7 @@ class BibleService {
                     NASB: "New American Standard Bible",
                     NLT: "New Living Translation",
                 };
-                return translations.map((t) => ({
+                return translations.map(t => ({
                     code: t._id,
                     name: translationNames[t._id] || t._id,
                     count: t.count,
