@@ -21,3 +21,14 @@ dist/.DS_Store
 node_modules/.DS_Store
 node_modules/react-native/.DS_Store
 node_modules
+
+# Logs
+logs/
+*.log
+*-seeding.log
+*-progress.json
+-*.json
+translation-*.log
+translation-*.json
+enhanced-*.log
+test-*.log
