@@ -13,13 +13,62 @@ This guide provides everything the frontend team needs to integrate with the com
 ✅ **Field Aliases** - Supports both `user`/`author`, `userId`/`authorId`, etc.  
 ✅ **hasMore Flag** - Pagination indicator for frontend  
 ✅ **reactionsCount** - Total reaction count on all comments  
-✅ **Real-time Updates** - Socket.IO events for new comments  
+✅ **Real-time Updates** - Socket.IO events for new comments
+
+---
+
+## 📦 **Supported Content Types**
+
+The comment system works with these content types:
+
+| Content Type   | Examples                                | API `contentType` Value |
+| -------------- | --------------------------------------- | ----------------------- |
+| **Audio**      | Songs, Podcasts, Audio books            | `"media"`               |
+| **Video**      | Music videos, Sermons, Livestreams      | `"media"`               |
+| **Devotional** | Bible studies, Prayers, Daily devotions | `"devotional"`          |
+
+**Important:** Both **Audio** and **Video** use `contentType: "media"`. The backend differentiates based on the content's `fileMimeType` field.
+
+---
+
+## 🚀 **Quick Start - Audio & Video Comments**
+
+**For Videos and Audio, always use `contentType: "media"`:**
+
+```typescript
+// Get comments for a video/audio
+GET /api/content/media/{contentId}/comments
+
+// Add comment to a video/audio
+POST /api/content/media/{contentId}/comment
+{
+  "content": "Your comment text here"
+}
+
+// Example fetch
+const response = await fetch(`${API_BASE_URL}/api/content/media/${videoId}/comments`);
+const { data } = await response.json();
+console.log(data.comments); // Array of comments with nested replies
+
+// Example post
+const response = await fetch(`${API_BASE_URL}/api/content/media/${videoId}/comment`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`
+  },
+  body: JSON.stringify({ content: "Great video!" })
+});
+const result = await response.json();
+console.log(result.data); // New comment object
+```
 
 ---
 
 ## 🔌 **API Endpoints**
 
 ### **Base URL**
+
 ```
 Development: http://localhost:4000
 Production: https://jevahapp-backend.onrender.com
@@ -34,6 +83,7 @@ GET /api/content/:contentType/:contentId/comments?page=1&limit=20&sortBy=newest
 ```
 
 **Parameters:**
+
 - `contentType`: `"media"` or `"devotional"`
 - `contentId`: MongoDB ObjectId of content
 - `page`: Page number (default: 1)
@@ -41,6 +91,7 @@ GET /api/content/:contentType/:contentId/comments?page=1&limit=20&sortBy=newest
 - `sortBy`: `"newest"` | `"oldest"` | `"top"` (default: "newest")
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -111,6 +162,7 @@ GET /api/content/:contentType/:contentId/comments?page=1&limit=20&sortBy=newest
 ```
 
 **Key Points:**
+
 - ✅ **Nested replies included** - Each comment has a `replies` array (up to 50 replies per comment)
 - ✅ **Field aliases** - Use `user` OR `author`, `userId` OR `authorId`, `id` OR `_id`
 - ✅ **hasMore flag** - Use `hasMore: true` to show "Load More" button
@@ -132,6 +184,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -165,6 +218,7 @@ Content-Type: application/json
 ```
 
 **Notes:**
+
 - If `parentCommentId` is provided, comment is saved as a reply
 - Response includes formatted comment ready for display
 - All field aliases included for compatibility
@@ -184,6 +238,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -195,6 +250,7 @@ Content-Type: application/json
 ```
 
 **Behavior:**
+
 - First call: Adds like, returns `liked: true`
 - Second call: Removes like, returns `liked: false`
 - Frontend should track `isLiked` state locally
@@ -209,6 +265,7 @@ Authorization: Bearer <token>
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -231,6 +288,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -253,39 +311,40 @@ Content-Type: application/json
 interface CommentData {
   // ID fields (multiple options for compatibility)
   _id: string;
-  id: string;  // Alias
-  
+  id: string; // Alias
+
   // Content
   content: string;
-  comment?: string;  // Alias
-  
+  comment?: string; // Alias
+
   // Author fields (multiple options for compatibility)
   authorId: string;
-  userId: string;  // Alias
+  userId: string; // Alias
   author: {
     _id: string;
     firstName: string;
     lastName: string;
     avatar?: string;
   };
-  user: {  // Alias
+  user: {
+    // Alias
     _id: string;
     firstName: string;
     lastName: string;
     avatar?: string;
   };
-  
+
   // Timestamps (multiple options for compatibility)
-  createdAt: string;  // ISO 8601
-  timestamp: string;  // Alias
-  
+  createdAt: string; // ISO 8601
+  timestamp: string; // Alias
+
   // Reactions (multiple options for compatibility)
   reactionsCount: number;
-  likes: number;  // Alias
-  
+  likes: number; // Alias
+
   // Replies
   replyCount: number;
-  replies: CommentData[];  // Nested replies (up to 50)
+  replies: CommentData[]; // Nested replies (up to 50)
 }
 ```
 
@@ -297,7 +356,7 @@ interface CommentListResponse {
   data: {
     comments: CommentData[];
     totalComments: number;
-    hasMore: boolean;  // Pagination flag
+    hasMore: boolean; // Pagination flag
     pagination: {
       page: number;
       limit: number;
@@ -315,7 +374,8 @@ interface CommentListResponse {
 ```typescript
 // api/commentService.ts
 
-const API_BASE_URL = process.env.API_BASE_URL || 'https://jevahapp-backend.onrender.com';
+const API_BASE_URL =
+  process.env.API_BASE_URL || "https://jevahapp-backend.onrender.com";
 
 export interface Comment {
   _id: string;
@@ -369,11 +429,11 @@ export async function getComments(
   const response = await fetch(
     `${API_BASE_URL}/api/content/${contentType}/${contentId}/comments?page=${page}&limit=${limit}&sortBy=${sortBy}`
   );
-  
+
   if (!response.ok) {
     throw new Error(`Failed to fetch comments: ${response.statusText}`);
   }
-  
+
   return response.json();
 }
 
@@ -388,11 +448,11 @@ export async function addComment(
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
-  
+
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  
+
   const response = await fetch(
     `${API_BASE_URL}/api/content/${contentType}/${contentId}/comment`,
     {
@@ -404,12 +464,12 @@ export async function addComment(
       }),
     }
   );
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || "Failed to add comment");
   }
-  
+
   return response.json();
 }
 
@@ -430,12 +490,12 @@ export async function toggleCommentReaction(
       body: JSON.stringify({ reactionType }),
     }
   );
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || "Failed to toggle reaction");
   }
-  
+
   return response.json();
 }
 
@@ -453,14 +513,113 @@ export async function deleteComment(
       },
     }
   );
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || "Failed to delete comment");
   }
-  
+
   return response.json();
 }
+```
+
+---
+
+## 🎬 **Usage Examples**
+
+### **Example 1: Comment on a Video**
+
+```typescript
+// Fetch comments for a video
+const videoComments = await getComments("media", "videoId123", 1, 20, "newest");
+
+// Add a comment to the video
+const newComment = await addComment(
+  "media", // contentType for videos
+  "videoId123", // Video's MongoDB ID
+  "Great video! Really inspiring!",
+  undefined, // No parent comment (top-level)
+  userToken // Auth token
+);
+```
+
+### **Example 2: Comment on an Audio Track**
+
+```typescript
+// Fetch comments for an audio track
+const audioComments = await getComments("media", "audioId456", 1, 20, "top");
+
+// Add a comment to the audio
+const newAudioComment = await addComment(
+  "media", // contentType for audio
+  "audioId456", // Audio track's MongoDB ID
+  "Love this song!",
+  undefined,
+  userToken
+);
+```
+
+### **Example 3: Reply to a Comment**
+
+```typescript
+// Reply to an existing comment
+const reply = await addComment(
+  "media", // contentType
+  "videoId123", // Parent content ID
+  "@John Thanks for the insight!",
+  "commentId789", // Parent comment ID
+  userToken
+);
+```
+
+### **Example 4: Comment on a Devotional**
+
+```typescript
+// Fetch comments for a devotional
+const devotionalComments = await getComments(
+  "devotional",
+  "devotionalId789",
+  1,
+  10
+);
+
+// Add a comment to the devotional
+const newDevotionalComment = await addComment(
+  "devotional", // contentType for devotionals
+  "devotionalId789", // Devotional's MongoDB ID
+  "This really touched my heart 🙏",
+  undefined,
+  userToken
+);
+```
+
+### **Example 5: Like a Comment**
+
+```typescript
+// Toggle like on a comment
+const likeResult = await toggleCommentReaction(
+  "commentId123", // Comment ID
+  "like", // Reaction type
+  userToken
+);
+
+if (likeResult.data.liked) {
+  console.log("Comment liked! Total likes:", likeResult.data.totalLikes);
+} else {
+  console.log("Comment unliked. Total likes:", likeResult.data.totalLikes);
+}
+```
+
+### **Example 6: Delete Your Own Comment**
+
+```typescript
+// Delete a comment you created
+const deleteResult = await deleteComment(
+  "commentId123", // Your comment ID
+  userToken
+);
+
+console.log(deleteResult.message); // "Comment deleted successfully"
 ```
 
 ---
@@ -482,14 +641,14 @@ function CommentItem({ comment }: { comment: Comment }) {
         <Text>{comment.reactionsCount} likes</Text>
         <Button onPress={() => handleLike(comment._id)}>Like</Button>
       </View>
-      
+
       {/* Nested replies */}
       {comment.replies.map((reply) => (
         <View style={{ marginLeft: 36 }}>
           <CommentItem comment={reply} />
         </View>
       ))}
-      
+
       {/* Reply button */}
       <Button onPress={() => handleReply(comment._id)}>Reply</Button>
     </View>
@@ -507,7 +666,7 @@ function CommentList({ comments, hasMore, onLoadMore }) {
       {comments.map(comment => (
         <CommentItem key={comment._id} comment={comment} />
       ))}
-      
+
       {hasMore && (
         <Button onPress={onLoadMore}>Load More Comments</Button>
       )}
@@ -522,14 +681,14 @@ function CommentList({ comments, hasMore, onLoadMore }) {
 // Add comment optimistically
 function addCommentOptimistic(newComment: Comment) {
   setComments(prev => [newComment, ...prev]);
-  
+
   // Call API in background
   addComment(contentType, contentId, content)
     .then(response => {
       // Replace optimistic comment with server response
-      setComments(prev => prev.map(c => 
-        c._id === newComment._id ? response.data : c
-      ));
+      setComments(prev =>
+        prev.map(c => (c._id === newComment._id ? response.data : c))
+      );
     })
     .catch(error => {
       // Remove optimistic comment on error
@@ -562,7 +721,7 @@ socket.on("content-comment", ({ contentId, contentType, comment }) => {
   }
 });
 
-socket.on("new-comment", (comment) => {
+socket.on("new-comment", comment => {
   // Same as above - new comment added
 });
 
@@ -572,9 +731,9 @@ socket.on("comment-removed", ({ commentId }) => {
 });
 
 // Join content room for targeted updates
-socket.emit("join-content", { 
-  contentId: "contentId123", 
-  contentType: "media" 
+socket.emit("join-content", {
+  contentId: "contentId123",
+  contentType: "media",
 });
 ```
 
@@ -584,14 +743,14 @@ socket.emit("join-content", {
 
 The backend provides **multiple field names** for maximum compatibility:
 
-| Frontend Expects | Backend Provides | Status |
-|------------------|------------------|--------|
-| `id` | ✅ `_id` AND `id` | Both provided |
-| `authorId` | ✅ `authorId` AND `userId` | Both provided |
-| `author` | ✅ `author` AND `user` | Both provided |
-| `timestamp` | ✅ `timestamp` AND `createdAt` | Both provided |
-| `likes` | ✅ `likes` AND `reactionsCount` | Both provided |
-| `comment` | ✅ `content` (use `content`) | Standardized |
+| Frontend Expects | Backend Provides                | Status        |
+| ---------------- | ------------------------------- | ------------- |
+| `id`             | ✅ `_id` AND `id`               | Both provided |
+| `authorId`       | ✅ `authorId` AND `userId`      | Both provided |
+| `author`         | ✅ `author` AND `user`          | Both provided |
+| `timestamp`      | ✅ `timestamp` AND `createdAt`  | Both provided |
+| `likes`          | ✅ `likes` AND `reactionsCount` | Both provided |
+| `comment`        | ✅ `content` (use `content`)    | Standardized  |
 
 **You can use ANY of these field names** - backend provides all for compatibility!
 
@@ -663,6 +822,7 @@ try {
 ## 📞 **Need Help?**
 
 If frontend team has questions:
+
 - Check this guide first
 - All endpoints are documented above
 - Field formats are provided
@@ -673,6 +833,7 @@ If frontend team has questions:
 ## ✅ **Summary**
 
 **Everything is ready!** The backend comment system:
+
 - ✅ Saves comments to database
 - ✅ Returns nested replies
 - ✅ Supports likes/reactions
