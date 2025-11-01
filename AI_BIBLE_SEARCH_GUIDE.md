@@ -376,3 +376,10 @@ If not set, search falls back to regular text search (still works, just no AI fe
 
 **Your Bible search is now super advanced with AI! 🚀🤖📖**
 
+
+
+
+
+
+
+

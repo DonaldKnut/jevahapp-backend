@@ -86,7 +86,7 @@ export class EbookService {
       // Must use Function constructor to create true dynamic import at runtime
       const pdfParseModule = await new Function('return import("pdf-parse")')();
       const { PDFParse } = pdfParseModule;
-      
+
       // Create PDFParse instance
       const pdfParser = new PDFParse({ data: pdfBuffer });
 

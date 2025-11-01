@@ -1,0 +1,1618 @@
+{
+  "timestamp": "2025-10-30T15:32:13.597Z",
+  "translations": {
+    "KJV": {
+      "count": 31029,
+      "expected": 31103,
+      "completeness": 1,
+      "status": "HEALTHY",
+      "sampleMissingVerses": []
+    },
+    "WEB": {
+      "count": 31029,
+      "expected": 31103,
+      "completeness": 1,
+      "status": "HEALTHY"
+    },
+    "ASV": {
+      "count": 5171,
+      "expected": 31103,
+      "completeness": 0.17,
+      "status": "INCOMPLETE",
+      "sampleMissingVerses": [
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 11,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 12,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 13,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 14,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 15,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 16,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 17,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 18,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 19,
+          "translation": "ASV"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 20,
+          "translation": "ASV"
+        }
+      ]
+    },
+    "DARBY": {
+      "count": 2100,
+      "expected": 31103,
+      "completeness": 0.07,
+      "status": "INCOMPLETE",
+      "sampleMissingVerses": [
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 1,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 2,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 3,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 4,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 5,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 6,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 7,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 8,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 9,
+          "translation": "DARBY"
+        },
+        {
+          "bookName": "John",
+          "chapterNumber": 1,
+          "verseNumber": 10,
+          "translation": "DARBY"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "totalTranslations": 4,
+    "averageCompleteness": 0.56,
+    "criticalIssues": [
+      "DARBY: Only 7% complete"
+    ],
+    "warnings": [
+      "ASV: 17% complete"
+    ]
+  },
+  "bookAnalysis": {
+    "Genesis": {
+      "KJV": {
+        "count": 1533,
+        "expected": 1533,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1533,
+        "expected": 1533,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 210,
+        "expected": 1533,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 90,
+        "expected": 1533,
+        "completeness": 0.06
+      }
+    },
+    "Exodus": {
+      "KJV": {
+        "count": 1213,
+        "expected": 1213,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1213,
+        "expected": 1213,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 150,
+        "expected": 1213,
+        "completeness": 0.12
+      },
+      "DARBY": {
+        "count": 75,
+        "expected": 1213,
+        "completeness": 0.06
+      }
+    },
+    "Leviticus": {
+      "KJV": {
+        "count": 859,
+        "expected": 859,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 859,
+        "expected": 859,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 108,
+        "expected": 859,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 859,
+        "completeness": 0.05
+      }
+    },
+    "Numbers": {
+      "KJV": {
+        "count": 1288,
+        "expected": 1288,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1288,
+        "expected": 1288,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 147,
+        "expected": 1288,
+        "completeness": 0.11
+      },
+      "DARBY": {
+        "count": 75,
+        "expected": 1288,
+        "completeness": 0.06
+      }
+    },
+    "Deuteronomy": {
+      "KJV": {
+        "count": 959,
+        "expected": 959,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 959,
+        "expected": 959,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 146,
+        "expected": 959,
+        "completeness": 0.15
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 959,
+        "completeness": 0.06
+      }
+    },
+    "Joshua": {
+      "KJV": {
+        "count": 658,
+        "expected": 658,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 658,
+        "expected": 658,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 94,
+        "expected": 658,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 658,
+        "completeness": 0.07
+      }
+    },
+    "Judges": {
+      "KJV": {
+        "count": 618,
+        "expected": 618,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 618,
+        "expected": 618,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 75,
+        "expected": 618,
+        "completeness": 0.12
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 618,
+        "completeness": 0.07
+      }
+    },
+    "Ruth": {
+      "KJV": {
+        "count": 85,
+        "expected": 85,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 85,
+        "expected": 85,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 85,
+        "completeness": 0.18
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 85,
+        "completeness": 0
+      }
+    },
+    "1 Samuel": {
+      "KJV": {
+        "count": 810,
+        "expected": 810,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 810,
+        "expected": 810,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 135,
+        "expected": 810,
+        "completeness": 0.17
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 810,
+        "completeness": 0.07
+      }
+    },
+    "2 Samuel": {
+      "KJV": {
+        "count": 695,
+        "expected": 695,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 695,
+        "expected": 695,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 90,
+        "expected": 695,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 695,
+        "completeness": 0.06
+      }
+    },
+    "1 Kings": {
+      "KJV": {
+        "count": 816,
+        "expected": 816,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 816,
+        "expected": 816,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 93,
+        "expected": 816,
+        "completeness": 0.11
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 816,
+        "completeness": 0.06
+      }
+    },
+    "2 Kings": {
+      "KJV": {
+        "count": 719,
+        "expected": 719,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 719,
+        "expected": 719,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 102,
+        "expected": 719,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 719,
+        "completeness": 0.06
+      }
+    },
+    "1 Chronicles": {
+      "KJV": {
+        "count": 942,
+        "expected": 942,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 942,
+        "expected": 942,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 120,
+        "expected": 942,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 942,
+        "completeness": 0.06
+      }
+    },
+    "2 Chronicles": {
+      "KJV": {
+        "count": 822,
+        "expected": 822,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 822,
+        "expected": 822,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 135,
+        "expected": 822,
+        "completeness": 0.16
+      },
+      "DARBY": {
+        "count": 75,
+        "expected": 822,
+        "completeness": 0.09
+      }
+    },
+    "Ezra": {
+      "KJV": {
+        "count": 280,
+        "expected": 280,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 280,
+        "expected": 280,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 45,
+        "expected": 280,
+        "completeness": 0.16
+      },
+      "DARBY": {
+        "count": 30,
+        "expected": 280,
+        "completeness": 0.11
+      }
+    },
+    "Nehemiah": {
+      "KJV": {
+        "count": 406,
+        "expected": 406,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 406,
+        "expected": 406,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 406,
+        "completeness": 0.07
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 406,
+        "completeness": 0.04
+      }
+    },
+    "Esther": {
+      "KJV": {
+        "count": 167,
+        "expected": 167,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 167,
+        "expected": 167,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 167,
+        "completeness": 0.18
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 167,
+        "completeness": 0.09
+      }
+    },
+    "Job": {
+      "KJV": {
+        "count": 1070,
+        "expected": 1070,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1070,
+        "expected": 1070,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 150,
+        "expected": 1070,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 90,
+        "expected": 1070,
+        "completeness": 0.08
+      }
+    },
+    "Psalms": {
+      "KJV": {
+        "count": 2461,
+        "expected": 2461,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 2461,
+        "expected": 2461,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 1141,
+        "expected": 2461,
+        "completeness": 0.46
+      },
+      "DARBY": {
+        "count": 270,
+        "expected": 2461,
+        "completeness": 0.11
+      }
+    },
+    "Proverbs": {
+      "KJV": {
+        "count": 915,
+        "expected": 915,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 915,
+        "expected": 915,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 444,
+        "expected": 915,
+        "completeness": 0.49
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 915,
+        "completeness": 0.07
+      }
+    },
+    "Ecclesiastes": {
+      "KJV": {
+        "count": 222,
+        "expected": 222,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 222,
+        "expected": 222,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 45,
+        "expected": 222,
+        "completeness": 0.2
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 222,
+        "completeness": 0.07
+      }
+    },
+    "Song of Solomon": {
+      "KJV": {
+        "count": 117,
+        "expected": 117,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 117,
+        "expected": 117,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 29,
+        "expected": 117,
+        "completeness": 0.25
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 117,
+        "completeness": 0.13
+      }
+    },
+    "Isaiah": {
+      "KJV": {
+        "count": 1292,
+        "expected": 1292,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1292,
+        "expected": 1292,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 241,
+        "expected": 1292,
+        "completeness": 0.19
+      },
+      "DARBY": {
+        "count": 120,
+        "expected": 1292,
+        "completeness": 0.09
+      }
+    },
+    "Jeremiah": {
+      "KJV": {
+        "count": 1364,
+        "expected": 1364,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1364,
+        "expected": 1364,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 210,
+        "expected": 1364,
+        "completeness": 0.15
+      },
+      "DARBY": {
+        "count": 105,
+        "expected": 1364,
+        "completeness": 0.08
+      }
+    },
+    "Lamentations": {
+      "KJV": {
+        "count": 154,
+        "expected": 154,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 154,
+        "expected": 154,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 154,
+        "completeness": 0.1
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 154,
+        "completeness": 0
+      }
+    },
+    "Ezekiel": {
+      "KJV": {
+        "count": 1273,
+        "expected": 1273,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1273,
+        "expected": 1273,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 195,
+        "expected": 1273,
+        "completeness": 0.15
+      },
+      "DARBY": {
+        "count": 90,
+        "expected": 1273,
+        "completeness": 0.07
+      }
+    },
+    "Daniel": {
+      "KJV": {
+        "count": 357,
+        "expected": 357,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 357,
+        "expected": 357,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 45,
+        "expected": 357,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 357,
+        "completeness": 0.04
+      }
+    },
+    "Hosea": {
+      "KJV": {
+        "count": 197,
+        "expected": 197,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 197,
+        "expected": 197,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 197,
+        "completeness": 0.15
+      },
+      "DARBY": {
+        "count": 30,
+        "expected": 197,
+        "completeness": 0.15
+      }
+    },
+    "Joel": {
+      "KJV": {
+        "count": 73,
+        "expected": 73,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 73,
+        "expected": 73,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 28,
+        "expected": 73,
+        "completeness": 0.38
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 73,
+        "completeness": 0
+      }
+    },
+    "Amos": {
+      "KJV": {
+        "count": 146,
+        "expected": 146,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 146,
+        "expected": 146,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 32,
+        "expected": 146,
+        "completeness": 0.22
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 146,
+        "completeness": 0.1
+      }
+    },
+    "Obadiah": {
+      "KJV": {
+        "count": 1,
+        "expected": 21,
+        "completeness": 0.05
+      },
+      "WEB": {
+        "count": 1,
+        "expected": 21,
+        "completeness": 0.05
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 21,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 21,
+        "completeness": 0
+      }
+    },
+    "Jonah": {
+      "KJV": {
+        "count": 48,
+        "expected": 48,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 48,
+        "expected": 48,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 48,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 11,
+        "expected": 48,
+        "completeness": 0.23
+      }
+    },
+    "Micah": {
+      "KJV": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 105,
+        "completeness": 0.29
+      },
+      "DARBY": {
+        "count": 4,
+        "expected": 105,
+        "completeness": 0.04
+      }
+    },
+    "Nahum": {
+      "KJV": {
+        "count": 47,
+        "expected": 47,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 47,
+        "expected": 47,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 47,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 47,
+        "completeness": 0.32
+      }
+    },
+    "Habakkuk": {
+      "KJV": {
+        "count": 56,
+        "expected": 56,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 56,
+        "expected": 56,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 56,
+        "completeness": 0.27
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 56,
+        "completeness": 0
+      }
+    },
+    "Zephaniah": {
+      "KJV": {
+        "count": 53,
+        "expected": 53,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 53,
+        "expected": 53,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 53,
+        "completeness": 0.28
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 53,
+        "completeness": 0.28
+      }
+    },
+    "Haggai": {
+      "KJV": {
+        "count": 38,
+        "expected": 38,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 38,
+        "expected": 38,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 38,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 38,
+        "completeness": 0
+      }
+    },
+    "Zechariah": {
+      "KJV": {
+        "count": 211,
+        "expected": 211,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 211,
+        "expected": 211,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 211,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 211,
+        "completeness": 0.07
+      }
+    },
+    "Malachi": {
+      "KJV": {
+        "count": 55,
+        "expected": 55,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 55,
+        "expected": 55,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 55,
+        "completeness": 0.55
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 55,
+        "completeness": 0.27
+      }
+    },
+    "Matthew": {
+      "KJV": {
+        "count": 1071,
+        "expected": 1071,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1071,
+        "expected": 1071,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 120,
+        "expected": 1071,
+        "completeness": 0.11
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 1071,
+        "completeness": 0.06
+      }
+    },
+    "Mark": {
+      "KJV": {
+        "count": 678,
+        "expected": 678,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 678,
+        "expected": 678,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 60,
+        "expected": 678,
+        "completeness": 0.09
+      },
+      "DARBY": {
+        "count": 30,
+        "expected": 678,
+        "completeness": 0.04
+      }
+    },
+    "Luke": {
+      "KJV": {
+        "count": 1149,
+        "expected": 1151,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1149,
+        "expected": 1151,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 123,
+        "expected": 1151,
+        "completeness": 0.11
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 1151,
+        "completeness": 0.05
+      }
+    },
+    "John": {
+      "KJV": {
+        "count": 879,
+        "expected": 879,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 879,
+        "expected": 879,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 118,
+        "expected": 879,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 45,
+        "expected": 879,
+        "completeness": 0.05
+      }
+    },
+    "Acts": {
+      "KJV": {
+        "count": 1004,
+        "expected": 1007,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 1004,
+        "expected": 1007,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 60,
+        "expected": 1007,
+        "completeness": 0.06
+      },
+      "DARBY": {
+        "count": 60,
+        "expected": 1007,
+        "completeness": 0.06
+      }
+    },
+    "Romans": {
+      "KJV": {
+        "count": 434,
+        "expected": 433,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 434,
+        "expected": 433,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 433,
+        "completeness": 0.07
+      },
+      "DARBY": {
+        "count": 30,
+        "expected": 433,
+        "completeness": 0.07
+      }
+    },
+    "1 Corinthians": {
+      "KJV": {
+        "count": 437,
+        "expected": 437,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 437,
+        "expected": 437,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 30,
+        "expected": 437,
+        "completeness": 0.07
+      },
+      "DARBY": {
+        "count": 39,
+        "expected": 437,
+        "completeness": 0.09
+      }
+    },
+    "2 Corinthians": {
+      "KJV": {
+        "count": 257,
+        "expected": 257,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 257,
+        "expected": 257,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 257,
+        "completeness": 0.06
+      },
+      "DARBY": {
+        "count": 21,
+        "expected": 257,
+        "completeness": 0.08
+      }
+    },
+    "Galatians": {
+      "KJV": {
+        "count": 149,
+        "expected": 149,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 149,
+        "expected": 149,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 149,
+        "completeness": 0.1
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 149,
+        "completeness": 0.1
+      }
+    },
+    "Ephesians": {
+      "KJV": {
+        "count": 155,
+        "expected": 155,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 155,
+        "expected": 155,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 155,
+        "completeness": 0.1
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 155,
+        "completeness": 0
+      }
+    },
+    "Philippians": {
+      "KJV": {
+        "count": 104,
+        "expected": 104,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 104,
+        "expected": 104,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 104,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 15,
+        "expected": 104,
+        "completeness": 0.14
+      }
+    },
+    "Colossians": {
+      "KJV": {
+        "count": 95,
+        "expected": 95,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 95,
+        "expected": 95,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 95,
+        "completeness": 0.16
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 95,
+        "completeness": 0
+      }
+    },
+    "1 Thessalonians": {
+      "KJV": {
+        "count": 89,
+        "expected": 89,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 89,
+        "expected": 89,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 89,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 89,
+        "completeness": 0
+      }
+    },
+    "2 Thessalonians": {
+      "KJV": {
+        "count": 47,
+        "expected": 47,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 47,
+        "expected": 47,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 47,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 47,
+        "completeness": 0
+      }
+    },
+    "1 Timothy": {
+      "KJV": {
+        "count": 113,
+        "expected": 113,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 113,
+        "expected": 113,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 113,
+        "completeness": 0.13
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 113,
+        "completeness": 0
+      }
+    },
+    "2 Timothy": {
+      "KJV": {
+        "count": 83,
+        "expected": 83,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 83,
+        "expected": 83,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 83,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 83,
+        "completeness": 0
+      }
+    },
+    "Titus": {
+      "KJV": {
+        "count": 46,
+        "expected": 46,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 46,
+        "expected": 46,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 46,
+        "completeness": 0.33
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 46,
+        "completeness": 0
+      }
+    },
+    "Philemon": {
+      "KJV": {
+        "count": 1,
+        "expected": 25,
+        "completeness": 0.04
+      },
+      "WEB": {
+        "count": 1,
+        "expected": 25,
+        "completeness": 0.04
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 25,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 25,
+        "completeness": 0
+      }
+    },
+    "Hebrews": {
+      "KJV": {
+        "count": 303,
+        "expected": 303,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 303,
+        "expected": 303,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 303,
+        "completeness": 0.05
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 303,
+        "completeness": 0
+      }
+    },
+    "James": {
+      "KJV": {
+        "count": 108,
+        "expected": 108,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 108,
+        "expected": 108,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 108,
+        "completeness": 0.14
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 108,
+        "completeness": 0
+      }
+    },
+    "1 Peter": {
+      "KJV": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 105,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 105,
+        "completeness": 0
+      }
+    },
+    "2 Peter": {
+      "KJV": {
+        "count": 61,
+        "expected": 61,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 61,
+        "expected": 61,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 15,
+        "expected": 61,
+        "completeness": 0.25
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 61,
+        "completeness": 0
+      }
+    },
+    "1 John": {
+      "KJV": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 105,
+        "expected": 105,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 105,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 105,
+        "completeness": 0
+      }
+    },
+    "2 John": {
+      "KJV": {
+        "count": 1,
+        "expected": 13,
+        "completeness": 0.08
+      },
+      "WEB": {
+        "count": 1,
+        "expected": 13,
+        "completeness": 0.08
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 13,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 13,
+        "completeness": 0
+      }
+    },
+    "3 John": {
+      "KJV": {
+        "count": 1,
+        "expected": 15,
+        "completeness": 0.07
+      },
+      "WEB": {
+        "count": 1,
+        "expected": 15,
+        "completeness": 0.07
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 15,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 15,
+        "completeness": 0
+      }
+    },
+    "Jude": {
+      "KJV": {
+        "count": 25,
+        "expected": 25,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 25,
+        "expected": 25,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 0,
+        "expected": 25,
+        "completeness": 0
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 25,
+        "completeness": 0
+      }
+    },
+    "Revelation": {
+      "KJV": {
+        "count": 404,
+        "expected": 404,
+        "completeness": 1
+      },
+      "WEB": {
+        "count": 404,
+        "expected": 404,
+        "completeness": 1
+      },
+      "ASV": {
+        "count": 45,
+        "expected": 404,
+        "completeness": 0.11
+      },
+      "DARBY": {
+        "count": 0,
+        "expected": 404,
+        "completeness": 0
+      }
+    }
+  }
+}

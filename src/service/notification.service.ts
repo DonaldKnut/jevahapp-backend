@@ -111,7 +111,7 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       } else if (contentType === "devotional") {
         content = await Devotional.findById(contentId);
-        contentOwner = await User.findById(content.uploadedBy);
+        contentOwner = await User.findById(content.submittedBy);
       }
 
       // Prevent self-notifications
@@ -169,7 +169,7 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       } else if (contentType === "devotional") {
         content = await Devotional.findById(contentId);
-        contentOwner = await User.findById(content.uploadedBy);
+        contentOwner = await User.findById(content.submittedBy);
       }
 
       // Prevent self-notifications
@@ -228,7 +228,7 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       } else if (contentType === "devotional") {
         content = await Devotional.findById(contentId);
-        contentOwner = await User.findById(content.uploadedBy);
+        contentOwner = await User.findById(content.submittedBy);
       }
 
       // Prevent self-notifications
@@ -346,7 +346,7 @@ export class NotificationService {
         contentOwner = await User.findById(content.uploadedBy);
       } else if (contentType === "devotional") {
         content = await Devotional.findById(contentId);
-        contentOwner = await User.findById(content.uploadedBy);
+        contentOwner = await User.findById(content.submittedBy);
       }
 
       if (!content || !contentOwner) return;

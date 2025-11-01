@@ -1,0 +1,54 @@
+{
+  "startTime": "2025-10-29T23:44:31.669Z",
+  "translations": {
+    "KJV": {
+      "startTime": "2025-10-29T23:44:32.065Z",
+      "booksProcessed": 132,
+      "totalBooks": 66,
+      "added": 0,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "endTime": "2025-10-29T23:45:25.497Z",
+      "duration": null
+    },
+    "ASV": {
+      "startTime": "2025-10-29T23:44:42.677Z",
+      "booksProcessed": 132,
+      "totalBooks": 66,
+      "added": 0,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "endTime": "2025-10-29T23:45:34.546Z",
+      "duration": null
+    },
+    "DARBY": {
+      "startTime": "2025-10-29T23:44:52.009Z",
+      "booksProcessed": 84,
+      "totalBooks": 66,
+      "added": 0,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0,
+      "endTime": "2025-10-29T23:45:03.965Z",
+      "duration": 11956
+    },
+    "NIV": {
+      "startTime": "2025-10-29T23:45:03.969Z",
+      "booksProcessed": 24,
+      "totalBooks": 66,
+      "added": 0,
+      "updated": 0,
+      "skipped": 0,
+      "errors": 0
+    }
+  },
+  "currentBook": "Psalms",
+  "currentChapter": 89,
+  "totalProcessed": 0,
+  "totalAdded": 0,
+  "totalUpdated": 0,
+  "totalSkipped": 0,
+  "errors": []
+}

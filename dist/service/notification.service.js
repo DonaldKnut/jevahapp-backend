@@ -101,7 +101,7 @@ class NotificationService {
                 }
                 else if (contentType === "devotional") {
                     content = yield devotional_model_1.Devotional.findById(contentId);
-                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                    contentOwner = yield user_model_1.User.findById(content.submittedBy);
                 }
                 // Prevent self-notifications
                 if (!liker ||
@@ -152,7 +152,7 @@ class NotificationService {
                 }
                 else if (contentType === "devotional") {
                     content = yield devotional_model_1.Devotional.findById(contentId);
-                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                    contentOwner = yield user_model_1.User.findById(content.submittedBy);
                 }
                 // Prevent self-notifications
                 if (!commenter ||
@@ -204,7 +204,7 @@ class NotificationService {
                 }
                 else if (contentType === "devotional") {
                     content = yield devotional_model_1.Devotional.findById(contentId);
-                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                    contentOwner = yield user_model_1.User.findById(content.submittedBy);
                 }
                 // Prevent self-notifications
                 if (!sharer ||
@@ -306,7 +306,7 @@ class NotificationService {
                 }
                 else if (contentType === "devotional") {
                     content = yield devotional_model_1.Devotional.findById(contentId);
-                    contentOwner = yield user_model_1.User.findById(content.uploadedBy);
+                    contentOwner = yield user_model_1.User.findById(content.submittedBy);
                 }
                 if (!content || !contentOwner)
                     return;

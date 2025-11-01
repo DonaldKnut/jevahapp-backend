@@ -19,11 +19,13 @@ Your Bible API now supports multiple translations (KJV, NIV, ASV, AMP, etc.) jus
 ## 📡 **API Endpoints**
 
 ### **1. Get Available Translations**
+
 ```
 GET /api/bible/translations
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -49,26 +51,31 @@ GET /api/bible/translations
 ```
 
 ### **2. Get Verses with Translation**
+
 ```
 GET /api/bible/books/:bookName/chapters/:chapterNumber/verses?translation=KJV
 ```
 
 **Query Parameters:**
+
 - `translation` (optional) - Translation code (KJV, NIV, ASV, AMP, etc.)
 - Defaults to `WEB` if not specified
 
 **Example:**
+
 ```
 GET /api/bible/books/John/chapters/3/verses?translation=KJV
 GET /api/bible/books/John/chapters/3/verses?translation=NIV
 ```
 
 ### **3. Get Single Verse with Translation**
+
 ```
 GET /api/bible/books/:bookName/chapters/:chapterNumber/verses/:verseNumber?translation=KJV
 ```
 
 **Example:**
+
 ```
 GET /api/bible/books/John/chapters/3/verses/16?translation=KJV
 ```
@@ -85,6 +92,7 @@ node scripts/seed-multiple-translations.js
 ```
 
 **What it does:**
+
 1. Uses `bible-api.com` to fetch translations (free API)
 2. Seeds verses for each translation
 3. Skips verses that already exist
@@ -92,6 +100,7 @@ node scripts/seed-multiple-translations.js
 5. Reports statistics for each translation
 
 **Supported Translations:**
+
 - ✅ **WEB** - World English Bible (already have)
 - ✅ **KJV** - King James Version
 - ✅ **ASV** - American Standard Version
@@ -127,7 +136,7 @@ export const TranslationSwitcher = ({ onTranslationChange }) => {
     try {
       const response = await fetch("/api/bible/translations");
       const data = await response.json();
-      
+
       if (data.success) {
         setTranslations(data.data);
       }
@@ -200,7 +209,7 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
         `/api/bible/books/${bookName}/chapters/${chapter}/verses/${verse}?translation=${translation}`
       );
       const data = await response.json();
-      
+
       if (data.success) {
         setVerseData(data.data);
       }
@@ -212,7 +221,7 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
   return (
     <View style={styles.container}>
       <TranslationSwitcher onTranslationChange={setTranslation} />
-      
+
       {verseData && (
         <View style={styles.verseContainer}>
           <Text style={styles.reference}>
@@ -232,12 +241,14 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
 ## 🌐 **Supported Translation Sources**
 
 ### **1. bible-api.com** (Primary)
+
 - ✅ Free API
 - ✅ Multiple translations
 - ✅ No API key required
 - ✅ Rate limit: ~1 req/second
 
 **Supported translations:**
+
 - `kjv` - King James Version
 - `asv` - American Standard Version
 - `darby` - Darby Translation
@@ -245,6 +256,7 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
 - `web` - World English Bible (default)
 
 ### **2. Bible Gateway** (Optional - Scraping)
+
 - ⚠️ Requires careful ToS compliance
 - Can get NIV, AMP, ESV, etc.
 - More translations available
@@ -255,6 +267,7 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
 ## 🚀 **Implementation Status**
 
 ### **✅ Completed:**
+
 - [x] Database model supports translation field
 - [x] API endpoints accept translation parameter
 - [x] Service layer filters by translation
@@ -263,12 +276,15 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
 - [x] Default translation (WEB) maintained
 
 ### **📋 Next Steps:**
+
 1. **Run seeding script** to populate translations:
+
    ```bash
    node scripts/seed-multiple-translations.js
    ```
 
 2. **Frontend Implementation**:
+
    - Add translation switcher UI
    - Store user preference
    - Update verse displays when translation changes
@@ -283,16 +299,19 @@ export const VerseDisplay = ({ bookName, chapter, verse }) => {
 ## 💡 **Example Requests**
 
 ### **Get John 3:16 in KJV:**
+
 ```bash
 GET /api/bible/books/John/chapters/3/verses/16?translation=KJV
 ```
 
 ### **Get John 3 in ASV:**
+
 ```bash
 GET /api/bible/books/John/chapters/3/verses?translation=ASV
 ```
 
 ### **Get available translations:**
+
 ```bash
 GET /api/bible/translations
 ```
@@ -312,6 +331,7 @@ Each verse can have multiple records - one per translation:
 ```
 
 **Benefits:**
+
 - ✅ Easy to switch translations
 - ✅ Fast queries (indexed by translation)
 - ✅ Can add more translations without schema changes
@@ -326,4 +346,10 @@ Each verse can have multiple records - one per translation:
 3. **Users**: Can switch between translations seamlessly!
 
 **Just like YouVersion!** 📖✨
+
+
+
+
+
+
 

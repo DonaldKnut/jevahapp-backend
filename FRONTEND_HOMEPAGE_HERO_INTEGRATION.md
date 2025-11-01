@@ -236,3 +236,4 @@ HomepageHeroComponent
 
 The component matches the design exactly and is ready to be integrated into your homepage! 🚀
 
+

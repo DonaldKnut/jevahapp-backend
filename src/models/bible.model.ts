@@ -187,11 +187,11 @@ const bibleVerseSchema = new Schema<IBibleVerse>(
 // Create compound indexes for efficient queries
 bibleChapterSchema.index({ bookId: 1, chapterNumber: 1 }, { unique: true });
 bibleVerseSchema.index(
-  { bookId: 1, chapterNumber: 1, verseNumber: 1 },
+  { bookId: 1, chapterNumber: 1, verseNumber: 1, translation: 1 },
   { unique: true }
 );
 bibleVerseSchema.index(
-  { bookName: 1, chapterNumber: 1, verseNumber: 1 },
+  { bookName: 1, chapterNumber: 1, verseNumber: 1, translation: 1 },
   { unique: true }
 );
 

@@ -1,0 +1,62 @@
+[2025-10-29T23:43:57.362Z] [INFO] 🔍 Starting translation monitoring...
+[2025-10-29T23:43:59.016Z] [INFO] ✅ Connected to database
+[2025-10-29T23:43:59.016Z] [INFO] 📋 Generating detailed translation report...
+[2025-10-29T23:43:59.017Z] [INFO] 📊 Analyzing translation completeness...
+[2025-10-29T23:44:26.134Z] [INFO] 📄 Report saved to translation-completeness-report.json
+[2025-10-29T23:44:26.135Z] [INFO] 
+📊 TRANSLATION COMPLETENESS SUMMARY:
+[2025-10-29T23:44:26.135Z] [INFO] =====================================
+[2025-10-29T23:44:26.293Z] [INFO] ✅ WEB: 31,029/31,103 (100%)
+[2025-10-29T23:44:26.295Z] [INFO] ⚠️ KJV: 3,200/31,103 (10%)
+[2025-10-29T23:44:26.296Z] [INFO] ⚠️ ASV: 1,013/31,103 (3%)
+[2025-10-29T23:44:26.296Z] [INFO] 
+📈 Average Completeness: 38%
+[2025-10-29T23:44:26.297Z] [ALERT] 🚨 ALERT [CRITICAL]: Critical translation issues detected:
+ASV: Only 3% complete
+[2025-10-29T23:44:26.297Z] [ALERT] 🚨 ALERT [WARNING]: Translation warnings:
+KJV: 10% complete
+[2025-10-29T23:44:26.298Z] [INFO] 
+✅ Monitoring completed successfully!
+[2025-10-29T23:44:26.325Z] [INFO] ✅ Database connection closed
+[2025-10-29T23:49:02.935Z] [INFO] 🔍 Starting translation monitoring...
+[2025-10-29T23:49:04.349Z] [INFO] ✅ Connected to database
+[2025-10-29T23:49:04.350Z] [INFO] 📋 Generating detailed translation report...
+[2025-10-29T23:49:04.351Z] [INFO] 📊 Analyzing translation completeness...
+[2025-10-29T23:49:32.249Z] [INFO] 📄 Report saved to translation-completeness-report.json
+[2025-10-29T23:49:32.249Z] [INFO] 
+📊 TRANSLATION COMPLETENESS SUMMARY:
+[2025-10-29T23:49:32.249Z] [INFO] =====================================
+[2025-10-29T23:49:32.293Z] [INFO] ✅ WEB: 31,029/31,103 (100%)
+[2025-10-29T23:49:32.294Z] [INFO] ⚠️ KJV: 3,939/31,103 (13%)
+[2025-10-29T23:49:32.294Z] [INFO] ⚠️ ASV: 1,013/31,103 (3%)
+[2025-10-29T23:49:32.294Z] [INFO] 
+📈 Average Completeness: 39%
+[2025-10-29T23:49:32.295Z] [ALERT] 🚨 ALERT [CRITICAL]: Critical translation issues detected:
+ASV: Only 3% complete
+[2025-10-29T23:49:32.295Z] [ALERT] 🚨 ALERT [WARNING]: Translation warnings:
+KJV: 13% complete
+[2025-10-29T23:49:32.297Z] [INFO] 
+✅ Monitoring completed successfully!
+[2025-10-29T23:49:32.314Z] [INFO] ✅ Database connection closed
+[2025-10-30T15:32:07.276Z] [INFO] 🔍 Starting translation monitoring...
+[2025-10-30T15:32:12.965Z] [INFO] ✅ Connected to database
+[2025-10-30T15:32:12.967Z] [INFO] 📋 Generating detailed translation report...
+[2025-10-30T15:32:12.976Z] [INFO] 📊 Analyzing translation completeness...
+[2025-10-30T15:32:47.468Z] [INFO] 📄 Report saved to translation-completeness-report.json
+[2025-10-30T15:32:47.470Z] [INFO] 
+📊 TRANSLATION COMPLETENESS SUMMARY:
+[2025-10-30T15:32:47.470Z] [INFO] =====================================
+[2025-10-30T15:32:47.542Z] [INFO] ✅ KJV: 31,029/31,103 (100%)
+[2025-10-30T15:32:47.543Z] [INFO] ✅ WEB: 31,029/31,103 (100%)
+[2025-10-30T15:32:47.543Z] [INFO] ⚠️ ASV: 5,171/31,103 (17%)
+[2025-10-30T15:32:47.544Z] [INFO] ⚠️ DARBY: 2,100/31,103 (7%)
+[2025-10-30T15:32:47.544Z] [INFO] 
+📈 Average Completeness: 56%
+[2025-10-30T15:32:47.545Z] [ALERT] 🚨 ALERT [CRITICAL]: Critical translation issues detected:
+DARBY: Only 7% complete
+[2025-10-30T15:32:47.546Z] [ALERT] 🚨 ALERT [WARNING]: Translation warnings:
+ASV: 17% complete
+[2025-10-30T15:32:48.611Z] [ALERT] 🚨 ALERT [WARNING]: Recent seeding errors detected: 76488 errors in last 24h
+[2025-10-30T15:32:48.612Z] [INFO] 
+✅ Monitoring completed successfully!
+[2025-10-30T15:32:48.687Z] [INFO] ✅ Database connection closed

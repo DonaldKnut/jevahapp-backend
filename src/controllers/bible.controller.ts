@@ -191,12 +191,12 @@ export const getVerses = async (
       translation as string
     );
 
-      response.status(200).json({
-        success: true,
-        data: verses,
-        count: verses.length,
-        translation: (translation as string).toUpperCase(),
-      });
+    response.status(200).json({
+      success: true,
+      data: verses,
+      count: verses.length,
+      translation: (translation as string).toUpperCase(),
+    });
   } catch (error) {
     logger.error("Get verses error:", error);
     response.status(500).json({
@@ -373,7 +373,9 @@ export const advancedSearchBible = async (
     }
 
     // Import AI search service
-    const aiBibleSearchService = (await import("../service/aiBibleSearch.service")).default;
+    const aiBibleSearchService = (
+      await import("../service/aiBibleSearch.service")
+    ).default;
 
     const searchOptions = {
       limit: parseInt(limit as string) || 20,
@@ -381,10 +383,13 @@ export const advancedSearchBible = async (
       testament: testament as "old" | "new",
     };
 
-    const aiResults = await aiBibleSearchService.advancedSearch(q, searchOptions);
+    const aiResults = await aiBibleSearchService.advancedSearch(
+      q,
+      searchOptions
+    );
 
     // Transform results for frontend
-    const transformedResults = aiResults.results.map((result) => ({
+    const transformedResults = aiResults.results.map(result => ({
       _id: result.verse._id,
       bookName: result.verse.bookName,
       chapterNumber: result.verse.chapterNumber,

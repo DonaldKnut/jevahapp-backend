@@ -244,8 +244,8 @@ cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-})
+  allowedHeaders: ["Content-Type", "Authorization"],
+});
 ```
 
 ### ⚠️ **FRONTEND REQUIREMENTS**
@@ -263,10 +263,10 @@ Frontend needs CORS for:
 origin: [
   process.env.FRONTEND_URL || "http://localhost:3000",
   "http://localhost:19006", // Expo local
-  "http://10.0.2.2:4000",   // Android emulator
+  "http://10.0.2.2:4000", // Android emulator
   /^http:\/\/192\.168\.\d+\.\d+:19006$/, // Network Expo
-  /^http:\/\/10\.\d+\.\d+\.\d+:4000$/     // Network backend
-]
+  /^http:\/\/10\.\d+\.\d+\.\d+:4000$/, // Network backend
+];
 ```
 
 **TODO**: Update CORS configuration to include all frontend origins.
@@ -345,6 +345,7 @@ For list endpoints with pagination:
 **Issue**: Frontend getting "route not found" on `/api/bible/books`
 
 **Root Cause**: Route is correctly registered. Possible issues:
+
 - Server not running
 - CORS blocking request
 - Incorrect base URL configuration
@@ -363,7 +364,8 @@ curl http://localhost:4000/api/bible/books
 }
 ```
 
-**Solution**: 
+**Solution**:
+
 - ✅ Endpoint exists at `/api/bible/books`
 - ✅ Route registered in `src/app.ts:223`
 - ✅ No authentication required (public endpoint)
@@ -374,6 +376,7 @@ curl http://localhost:4000/api/bible/books
 **Status**: All Bible endpoints return `{ success, data, message }` format ✅
 
 **Verification**:
+
 - ✅ `getAllBooks` - Returns `{ success: true, data: [...], count: 66 }`
 - ✅ `getBooksByTestament` - Returns `{ success: true, data: [...], count: X }`
 - ✅ `getVerse` - Returns `{ success: true, data: {...} }`
@@ -395,19 +398,32 @@ Backend mirrors frontend service pattern:
 
 ```typescript
 class BibleService {
-  async getAllBooks(): Promise<BibleBook[]>
-  async getBooksByTestament(testament: "old" | "new"): Promise<BibleBook[]>
-  async getBookByName(bookName: string): Promise<BibleBook | null>
-  async getChapters(bookName: string): Promise<BibleChapter[]>
-  async getChapter(bookName: string, chapterNumber: number): Promise<BibleChapter | null>
-  async getVerses(bookName: string, chapterNumber: number): Promise<BibleVerse[]>
-  async getVerse(bookName: string, chapterNumber: number, verseNumber: number): Promise<BibleVerse | null>
-  async getVerseRange(reference: string): Promise<BibleVerse[]>
-  async searchBible(query: string, filters?: SearchFilters): Promise<SearchResult[]>
-  async getRandomVerse(): Promise<BibleVerse>
-  async getVerseOfTheDay(): Promise<BibleVerse>
-  async getPopularVerses(limit?: number): Promise<BibleVerse[]>
-  async getBibleStats(): Promise<BibleStats>
+  async getAllBooks(): Promise<BibleBook[]>;
+  async getBooksByTestament(testament: "old" | "new"): Promise<BibleBook[]>;
+  async getBookByName(bookName: string): Promise<BibleBook | null>;
+  async getChapters(bookName: string): Promise<BibleChapter[]>;
+  async getChapter(
+    bookName: string,
+    chapterNumber: number
+  ): Promise<BibleChapter | null>;
+  async getVerses(
+    bookName: string,
+    chapterNumber: number
+  ): Promise<BibleVerse[]>;
+  async getVerse(
+    bookName: string,
+    chapterNumber: number,
+    verseNumber: number
+  ): Promise<BibleVerse | null>;
+  async getVerseRange(reference: string): Promise<BibleVerse[]>;
+  async searchBible(
+    query: string,
+    filters?: SearchFilters
+  ): Promise<SearchResult[]>;
+  async getRandomVerse(): Promise<BibleVerse>;
+  async getVerseOfTheDay(): Promise<BibleVerse>;
+  async getPopularVerses(limit?: number): Promise<BibleVerse[]>;
+  async getBibleStats(): Promise<BibleStats>;
 }
 ```
 
@@ -495,41 +511,41 @@ class BibleService {
 
 ### **Bible Endpoints** (All Public)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/bible/books` | All 66 books |
-| GET | `/api/bible/books/testament/:testament` | Books by testament |
-| GET | `/api/bible/books/:bookName` | Specific book |
-| GET | `/api/bible/books/:bookName/chapters` | Chapters for book |
-| GET | `/api/bible/books/:bookName/chapters/:chapterNumber` | Specific chapter |
-| GET | `/api/bible/books/:bookName/chapters/:chapterNumber/verses` | All verses in chapter |
-| GET | `/api/bible/books/:bookName/chapters/:chapterNumber/verses/:verseNumber` | Specific verse |
-| GET | `/api/bible/verses/range/:reference` | Verse range |
-| GET | `/api/bible/search?q=query&limit=50&offset=0` | Search Bible text |
-| GET | `/api/bible/verses/random` | Random verse |
-| GET | `/api/bible/verses/daily` | Verse of the day |
-| GET | `/api/bible/verses/popular?limit=10` | Popular verses |
-| GET | `/api/bible/stats` | Bible statistics |
-| GET | `/api/bible/reading-plans` | Reading plans |
+| Method | Endpoint                                                                 | Description           |
+| ------ | ------------------------------------------------------------------------ | --------------------- |
+| GET    | `/api/bible/books`                                                       | All 66 books          |
+| GET    | `/api/bible/books/testament/:testament`                                  | Books by testament    |
+| GET    | `/api/bible/books/:bookName`                                             | Specific book         |
+| GET    | `/api/bible/books/:bookName/chapters`                                    | Chapters for book     |
+| GET    | `/api/bible/books/:bookName/chapters/:chapterNumber`                     | Specific chapter      |
+| GET    | `/api/bible/books/:bookName/chapters/:chapterNumber/verses`              | All verses in chapter |
+| GET    | `/api/bible/books/:bookName/chapters/:chapterNumber/verses/:verseNumber` | Specific verse        |
+| GET    | `/api/bible/verses/range/:reference`                                     | Verse range           |
+| GET    | `/api/bible/search?q=query&limit=50&offset=0`                            | Search Bible text     |
+| GET    | `/api/bible/verses/random`                                               | Random verse          |
+| GET    | `/api/bible/verses/daily`                                                | Verse of the day      |
+| GET    | `/api/bible/verses/popular?limit=10`                                     | Popular verses        |
+| GET    | `/api/bible/stats`                                                       | Bible statistics      |
+| GET    | `/api/bible/reading-plans`                                               | Reading plans         |
 
 ### **Auth Endpoints**
 
-| Method | Endpoint | Auth Required | Description |
-|--------|----------|---------------|-------------|
-| POST | `/api/auth/signup` | ❌ | User registration |
-| POST | `/api/auth/login` | ❌ | User login |
-| POST | `/api/auth/logout` | ✅ | User logout |
-| GET | `/api/auth/me` | ✅ | Get current user |
+| Method | Endpoint           | Auth Required | Description       |
+| ------ | ------------------ | ------------- | ----------------- |
+| POST   | `/api/auth/signup` | ❌            | User registration |
+| POST   | `/api/auth/login`  | ❌            | User login        |
+| POST   | `/api/auth/logout` | ✅            | User logout       |
+| GET    | `/api/auth/me`     | ✅            | Get current user  |
 
 ### **Media Endpoints**
 
-| Method | Endpoint | Auth Required | Description |
-|--------|----------|---------------|-------------|
-| GET | `/api/media/public/default-content` | ❌ | Default content |
-| GET | `/api/media/public/:id` | ❌ | Public media by ID |
-| GET | `/api/media/:id` | ✅ | Media by ID |
-| POST | `/api/media/upload` | ✅ | Upload media |
-| GET | `/api/media/refresh-url/:mediaId` | ✅ | Refresh video URL |
+| Method | Endpoint                            | Auth Required | Description        |
+| ------ | ----------------------------------- | ------------- | ------------------ |
+| GET    | `/api/media/public/default-content` | ❌            | Default content    |
+| GET    | `/api/media/public/:id`             | ❌            | Public media by ID |
+| GET    | `/api/media/:id`                    | ✅            | Media by ID        |
+| POST   | `/api/media/upload`                 | ✅            | Upload media       |
+| GET    | `/api/media/refresh-url/:mediaId`   | ✅            | Refresh video URL  |
 
 ---
 
@@ -572,6 +588,7 @@ GET http://localhost:4000/api/bible/books
 ```
 
 **Expected Response**:
+
 ```json
 {
   "success": true,
@@ -584,32 +601,32 @@ GET http://localhost:4000/api/bible/books
 
 ```typescript
 // bibleApiService.ts
-import { getApiBaseUrl } from '../utils/api';
+import { getApiBaseUrl } from "../utils/api";
 
 export const bibleApiService = {
   async getAllBooks() {
     const response = await fetch(`${getApiBaseUrl()}/api/bible/books`);
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.message);
     }
-    
+
     return data.data;
   },
-  
+
   async getVerse(bookName: string, chapter: number, verse: number) {
     const response = await fetch(
       `${getApiBaseUrl()}/api/bible/books/${bookName}/chapters/${chapter}/verses/${verse}`
     );
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.message);
     }
-    
+
     return data.data;
-  }
+  },
 };
 ```
 
@@ -645,3 +662,10 @@ export const bibleApiService = {
 **Last Updated**: 2024-10-25
 **Backend Version**: 2.0.0
 **Documentation Status**: Complete ✅
+
+
+
+
+
+
+

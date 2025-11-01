@@ -50,7 +50,7 @@ export const bibleApiService = {
       // URL encode the reference (spaces become %20, etc.)
       const encodedReference = encodeURIComponent(reference);
       const url = `${getApiBaseUrl()}/api/bible/verses/range/${encodedReference}`;
-      
+
       const response = await fetch(url);
       const data = await response.json();
 
@@ -71,11 +71,11 @@ export const bibleApiService = {
   async getAllBooks() {
     const response = await fetch(`${getApiBaseUrl()}/api/bible/books`);
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.message);
     }
-    
+
     return data.data;
   },
 
@@ -87,11 +87,11 @@ export const bibleApiService = {
       `${getApiBaseUrl()}/api/bible/books/${bookName}/chapters/${chapter}/verses/${verse}`
     );
     const data = await response.json();
-    
+
     if (!data.success) {
       throw new Error(data.message);
     }
-    
+
     return data.data;
   },
 };
@@ -124,7 +124,7 @@ export const VerseRangeComponent: React.FC<VerseRangeProps> = ({ reference }) =>
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await bibleApiService.getVerseRange(reference);
       setVerses(response.data);
     } catch (err) {
@@ -287,10 +287,10 @@ const { verses, loading, error } = useVerseRange("John 3:16-18");
 const fetchVerseRange = async (reference: string) => {
   const encodedRef = encodeURIComponent(reference); // "Romans 8:28-31" -> "Romans%208%3A28-31"
   const url = `https://jevahapp-backend.onrender.com/api/bible/verses/range/${encodedRef}`;
-  
+
   const response = await fetch(url);
   const data = await response.json();
-  
+
   if (data.success) {
     return data.data; // Array of verses
   } else {
@@ -380,10 +380,10 @@ export const getApiBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  
+
   // Production
   return "https://jevahapp-backend.onrender.com";
-  
+
   // Local development
   // return "http://localhost:4000";
   // return "http://10.156.136.168:4000"; // Network IP
@@ -406,6 +406,7 @@ export const getApiBaseUrl = () => {
 ## 📚 **More Bible Endpoints**
 
 See `BACKEND_FRONTEND_INTEGRATION_GUIDE.md` for complete API documentation including:
+
 - All books endpoint
 - Search functionality
 - Random verses
@@ -415,4 +416,10 @@ See `BACKEND_FRONTEND_INTEGRATION_GUIDE.md` for complete API documentation inclu
 ---
 
 **Frontend Team**: Copy-paste the service code and component above to get started! 🚀
+
+
+
+
+
+
 

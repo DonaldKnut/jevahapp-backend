@@ -419,3 +419,10 @@ Separate multiple verses with commas.`;
 }
 
 export default new AIBibleSearchService();
+
+
+
+
+
+
+

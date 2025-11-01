@@ -1,0 +1,14 @@
+[2025-10-29T23:44:28.791Z] ⚠️  MONGODB_URI not set, using default localhost
+[2025-10-29T23:44:28.811Z] 🚀 Starting enhanced multi-translation seeding...
+[2025-10-29T23:44:28.811Z]    Script: /Users/user/Desktop/jevah-app_backend/scripts/enhanced-multi-translation-seeder.js
+[2025-10-29T23:44:28.811Z]    Log file: enhanced-seeding.log
+[2025-10-29T23:44:28.812Z]    Max runtime: 1440 minutes
+[2025-10-29T23:45:10.067Z] ❌ Seeding failed with exit code null after 41s
+[2025-10-29T23:45:10.068Z] ❌ Fatal error: Seeding process exited with code null
+[2025-10-29T23:45:14.398Z] ⚠️  MONGODB_URI not set, using default localhost
+[2025-10-29T23:45:14.414Z] 🚀 Starting enhanced multi-translation seeding...
+[2025-10-29T23:45:14.415Z]    Script: /Users/user/Desktop/jevah-app_backend/scripts/enhanced-multi-translation-seeder.js
+[2025-10-29T23:45:14.415Z]    Log file: enhanced-seeding.log
+[2025-10-29T23:45:14.415Z]    Max runtime: 1440 minutes
+[2025-10-29T23:45:38.478Z] ❌ Seeding failed with exit code null after 24s
+[2025-10-29T23:45:38.479Z] ❌ Fatal error: Seeding process exited with code null
