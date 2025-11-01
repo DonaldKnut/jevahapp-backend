@@ -9,6 +9,7 @@ export interface IDevotional extends Document {
   submittedBy: mongoose.Types.ObjectId;
   tags?: string[];
   likeCount: number;
+  commentCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +44,10 @@ const devotionalSchema = new Schema<IDevotional>(
       default: [],
     },
     likeCount: {
+      type: Number,
+      default: 0,
+    },
+    commentCount: {
       type: Number,
       default: 0,
     },

@@ -429,6 +429,12 @@ export class ContentInteractionService {
             { $inc: { commentCount: 1 } },
             { session }
           );
+        } else if (contentType === "devotional") {
+          await Devotional.findByIdAndUpdate(
+            contentId,
+            { $inc: { commentCount: 1 } },
+            { session }
+          );
         }
 
         // If this is a reply, increment parent's replyCount

@@ -301,6 +301,9 @@ class ContentInteractionService {
                     if (contentType === "media") {
                         yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { commentCount: 1 } }, { session });
                     }
+                    else if (contentType === "devotional") {
+                        yield devotional_model_1.Devotional.findByIdAndUpdate(contentId, { $inc: { commentCount: 1 } }, { session });
+                    }
                     // If this is a reply, increment parent's replyCount
                     if (commentData.parentCommentId) {
                         yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentData.parentCommentId, { $inc: { replyCount: 1 } }, { session });
