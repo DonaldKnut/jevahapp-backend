@@ -31,7 +31,9 @@ export interface IMedia extends Document {
   category?: string;
   fileUrl: string;
   fileMimeType?: string;
+  fileObjectKey?: string; // Cloudflare R2 object key for the main file (needed to delete from storage)
   thumbnailUrl?: string; // Thumbnail for media
+  thumbnailObjectKey?: string; // Cloudflare R2 object key for the thumbnail (needed to delete from storage)
   previewUrl?: string; // Preview/teaser video
   coverImageUrl?: string; // Cover image for ebooks/merch
   topics?: string[];

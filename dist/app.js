@@ -54,6 +54,7 @@ const churches_admin_routes_1 = __importDefault(require("./routes/churches.admin
 const userContent_routes_1 = __importDefault(require("./routes/userContent.routes"));
 const ebook_routes_1 = __importDefault(require("./routes/ebook.routes"));
 const bible_routes_1 = __importDefault(require("./routes/bible.routes"));
+const community_routes_1 = __importDefault(require("./routes/community.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -192,6 +193,7 @@ app.get("/", (req, res) => {
             ebooks: "/api/ebooks",
             tts: "/api/tts",
             bible: "/api/bible",
+            community: "/api/community/modules",
         },
         features: [
             "User Authentication & Authorization",
@@ -266,6 +268,7 @@ app.use("/api", userContent_routes_1.default);
 app.use("/api/ebooks", ebook_routes_1.default);
 app.use("/api/tts", ebook_routes_1.default);
 app.use("/api/bible", bible_routes_1.default);
+app.use("/api/community", community_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

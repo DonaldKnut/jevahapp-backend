@@ -7,13 +7,15 @@ import { User } from "../models/user.model";
 import logger from "../utils/logger";
 
 // ===== Prayer Wall =====
-export const createPrayerPost = async (req: Request, res: Response) => {
+export const createPrayerPost = async (req: Request, res: Response): Promise<void> => {
   const { content, anonymous, media } = req.body || {};
   if (!content || typeof content !== "string") {
-    return res.status(400).json({ success: false, message: "Validation error: content is required" });
+    res.status(400).json({ success: false, message: "Validation error: content is required" });
+    return;
   }
   if (media && !Array.isArray(media)) {
-    return res.status(400).json({ success: false, message: "Validation error: media must be an array of strings" });
+    res.status(400).json({ success: false, message: "Validation error: media must be an array of strings" });
+    return;
   }
   const doc = await PrayerPost.create({
     content,
@@ -22,10 +24,10 @@ export const createPrayerPost = async (req: Request, res: Response) => {
     authorId: req.userId,
   });
   logger.info("Prayer post created", { postId: doc._id, authorId: req.userId });
-  return res.status(201).json({ success: true, post: serialize(doc) });
+  res.status(201).json({ success: true, post: serialize(doc) });
 };
 
-export const listPrayerPosts = async (req: Request, res: Response) => {
+export const listPrayerPosts = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const sortParam = String(req.query.sort || "recent");
@@ -34,57 +36,72 @@ export const listPrayerPosts = async (req: Request, res: Response) => {
     PrayerPost.find().populate("authorId", "firstName lastName avatar").sort(sort).skip((page - 1) * limit).limit(limit),
     PrayerPost.countDocuments(),
   ]);
-  return res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+  res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
 };
 
-export const getPrayerPost = async (req: Request, res: Response) => {
+export const getPrayerPost = async (req: Request, res: Response): Promise<void> => {
   const doc = await PrayerPost.findById(req.params.id).populate("authorId", "firstName lastName avatar");
-  if (!doc) return res.status(404).json({ success: false, message: "Not Found" });
-  return res.status(200).json({ success: true, post: serialize(doc) });
+  if (!doc) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
+  res.status(200).json({ success: true, post: serialize(doc) });
 };
 
-export const updatePrayerPost = async (req: Request, res: Response) => {
+export const updatePrayerPost = async (req: Request, res: Response): Promise<void> => {
   const post = await PrayerPost.findById(req.params.id);
-  if (!post) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!post) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(post.authorId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only author can edit" });
+    res.status(403).json({ success: false, message: "Forbidden: Only author can edit" });
+    return;
   }
   const { content, anonymous, media } = req.body || {};
   if (content !== undefined) post.content = content;
   if (anonymous !== undefined) post.anonymous = Boolean(anonymous);
   if (media !== undefined) {
     if (!Array.isArray(media)) {
-      return res.status(400).json({ success: false, message: "Validation error: media must be an array" });
+      res.status(400).json({ success: false, message: "Validation error: media must be an array" });
+      return;
     }
     post.media = media;
   }
   await post.save();
   logger.info("Prayer post updated", { postId: post._id, authorId: req.userId });
-  return res.status(200).json({ success: true, post: serialize(post) });
+  res.status(200).json({ success: true, post: serialize(post) });
 };
 
-export const deletePrayerPost = async (req: Request, res: Response) => {
+export const deletePrayerPost = async (req: Request, res: Response): Promise<void> => {
   const post = await PrayerPost.findById(req.params.id);
-  if (!post) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!post) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(post.authorId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only author can delete" });
+    res.status(403).json({ success: false, message: "Forbidden: Only author can delete" });
+    return;
   }
   await PrayerPost.findByIdAndDelete(req.params.id);
   logger.info("Prayer post deleted", { postId: req.params.id, authorId: req.userId });
-  return res.status(200).json({ success: true, message: "Post deleted" });
+  res.status(200).json({ success: true, message: "Post deleted" });
 };
 
 // ===== Forum =====
-export const createForumThread = async (req: Request, res: Response) => {
+export const createForumThread = async (req: Request, res: Response): Promise<void> => {
   const { title, body, tags } = req.body || {};
   if (!title || typeof title !== "string") {
-    return res.status(400).json({ success: false, message: "Validation error: title is required" });
+    res.status(400).json({ success: false, message: "Validation error: title is required" });
+    return;
   }
   if (!body || typeof body !== "string") {
-    return res.status(400).json({ success: false, message: "Validation error: body is required" });
+    res.status(400).json({ success: false, message: "Validation error: body is required" });
+    return;
   }
   if (tags && !Array.isArray(tags)) {
-    return res.status(400).json({ success: false, message: "Validation error: tags must be an array of strings" });
+    res.status(400).json({ success: false, message: "Validation error: tags must be an array of strings" });
+    return;
   }
   const doc = await ForumThread.create({
     title,
@@ -93,10 +110,10 @@ export const createForumThread = async (req: Request, res: Response) => {
     authorId: req.userId,
   });
   logger.info("Forum thread created", { threadId: doc._id, authorId: req.userId });
-  return res.status(201).json({ success: true, thread: serialize(doc) });
+  res.status(201).json({ success: true, thread: serialize(doc) });
 };
 
-export const listForumThreads = async (req: Request, res: Response) => {
+export const listForumThreads = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const sortParam = String(req.query.sort || "recent");
@@ -105,54 +122,68 @@ export const listForumThreads = async (req: Request, res: Response) => {
     ForumThread.find().populate("authorId", "firstName lastName avatar").sort(sort).skip((page - 1) * limit).limit(limit),
     ForumThread.countDocuments(),
   ]);
-  return res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+  res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
 };
 
-export const getForumThread = async (req: Request, res: Response) => {
+export const getForumThread = async (req: Request, res: Response): Promise<void> => {
   const doc = await ForumThread.findById(req.params.id).populate("authorId", "firstName lastName avatar");
-  if (!doc) return res.status(404).json({ success: false, message: "Not Found" });
-  return res.status(200).json({ success: true, thread: serialize(doc) });
+  if (!doc) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
+  res.status(200).json({ success: true, thread: serialize(doc) });
 };
 
-export const updateForumThread = async (req: Request, res: Response) => {
+export const updateForumThread = async (req: Request, res: Response): Promise<void> => {
   const thread = await ForumThread.findById(req.params.id);
-  if (!thread) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!thread) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(thread.authorId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only author can edit" });
+    res.status(403).json({ success: false, message: "Forbidden: Only author can edit" });
+    return;
   }
   const { title, body, tags } = req.body || {};
   if (title !== undefined) thread.title = title;
   if (body !== undefined) thread.body = body;
   if (tags !== undefined) {
     if (!Array.isArray(tags)) {
-      return res.status(400).json({ success: false, message: "Validation error: tags must be an array" });
+      res.status(400).json({ success: false, message: "Validation error: tags must be an array" });
+      return;
     }
     thread.tags = tags;
   }
   await thread.save();
   logger.info("Forum thread updated", { threadId: thread._id, authorId: req.userId });
-  return res.status(200).json({ success: true, thread: serialize(thread) });
+  res.status(200).json({ success: true, thread: serialize(thread) });
 };
 
-export const deleteForumThread = async (req: Request, res: Response) => {
+export const deleteForumThread = async (req: Request, res: Response): Promise<void> => {
   const thread = await ForumThread.findById(req.params.id);
-  if (!thread) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!thread) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(thread.authorId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only author can delete" });
+    res.status(403).json({ success: false, message: "Forbidden: Only author can delete" });
+    return;
   }
   await ForumThread.findByIdAndDelete(req.params.id);
   logger.info("Forum thread deleted", { threadId: req.params.id, authorId: req.userId });
-  return res.status(200).json({ success: true, message: "Thread deleted" });
+  res.status(200).json({ success: true, message: "Thread deleted" });
 };
 
 // ===== Polls =====
-export const createPoll = async (req: Request, res: Response) => {
+export const createPoll = async (req: Request, res: Response): Promise<void> => {
   const { question, options, multiSelect, closesAt } = req.body || {};
   if (!question || typeof question !== "string") {
-    return res.status(400).json({ success: false, message: "Validation error: question is required" });
+    res.status(400).json({ success: false, message: "Validation error: question is required" });
+    return;
   }
   if (!Array.isArray(options) || options.length < 2) {
-    return res.status(400).json({ success: false, message: "Validation error: options must be an array with at least 2 items" });
+    res.status(400).json({ success: false, message: "Validation error: options must be an array with at least 2 items" });
+    return;
   }
   const doc = await Poll.create({
     question,
@@ -163,10 +194,10 @@ export const createPoll = async (req: Request, res: Response) => {
     votes: [],
   });
   logger.info("Poll created", { pollId: doc._id, authorId: req.userId });
-  return res.status(201).json({ success: true, poll: serialize(doc) });
+  res.status(201).json({ success: true, poll: serialize(doc) });
 };
 
-export const listPolls = async (req: Request, res: Response) => {
+export const listPolls = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const status = String(req.query.status || "all");
@@ -178,39 +209,48 @@ export const listPolls = async (req: Request, res: Response) => {
     Poll.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Poll.countDocuments(query),
   ]);
-  return res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+  res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
 };
 
-export const getPoll = async (req: Request, res: Response) => {
+export const getPoll = async (req: Request, res: Response): Promise<void> => {
   const doc = await Poll.findById(req.params.id);
-  if (!doc) return res.status(404).json({ success: false, message: "Not Found" });
-  return res.status(200).json({ success: true, poll: serialize(doc) });
+  if (!doc) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
+  res.status(200).json({ success: true, poll: serialize(doc) });
 };
 
-export const voteOnPoll = async (req: Request, res: Response) => {
+export const voteOnPoll = async (req: Request, res: Response): Promise<void> => {
   const { optionIndex } = req.body || {};
   if (optionIndex === undefined) {
-    return res.status(400).json({ success: false, message: "Validation error: optionIndex is required" });
+    res.status(400).json({ success: false, message: "Validation error: optionIndex is required" });
+    return;
   }
   const poll = await Poll.findById(req.params.id);
-  if (!poll) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!poll) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   const optionIndexes = Array.isArray(optionIndex) ? optionIndex : [optionIndex];
   if (!poll.multiSelect && optionIndexes.length !== 1) {
-    return res.status(400).json({ success: false, message: "Validation error: multiSelect disabled; provide single optionIndex" });
+    res.status(400).json({ success: false, message: "Validation error: multiSelect disabled; provide single optionIndex" });
+    return;
   }
   // Remove previous vote by user, then add
-  poll.votes = poll.votes.filter(v => String(v.userId) !== String(req.userId));
+  poll.votes = poll.votes.filter((v: any) => String(v.userId) !== String(req.userId));
   poll.votes.push({ userId: req.userId as any, optionIndexes, votedAt: new Date() });
   await poll.save();
   logger.info("Poll voted", { pollId: poll._id, userId: req.userId });
-  return res.status(200).json({ success: true, poll: serialize(poll) });
+  res.status(200).json({ success: true, poll: serialize(poll) });
 };
 
 // ===== Groups =====
-export const createGroup = async (req: Request, res: Response) => {
+export const createGroup = async (req: Request, res: Response): Promise<void> => {
   const { name, description, visibility } = req.body || {};
   if (!name || typeof name !== "string") {
-    return res.status(400).json({ success: false, message: "Validation error: name is required" });
+    res.status(400).json({ success: false, message: "Validation error: name is required" });
+    return;
   }
   const doc = await Group.create({
     name,
@@ -220,10 +260,10 @@ export const createGroup = async (req: Request, res: Response) => {
     members: [{ userId: req.userId as any, joinedAt: new Date() }],
   });
   logger.info("Group created", { groupId: doc._id, ownerId: req.userId });
-  return res.status(201).json({ success: true, group: serialize(doc) });
+  res.status(201).json({ success: true, group: serialize(doc) });
 };
 
-export const listGroups = async (req: Request, res: Response) => {
+export const listGroups = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const mine = String(req.query.mine || "false") === "true";
@@ -232,69 +272,88 @@ export const listGroups = async (req: Request, res: Response) => {
     Group.find(query).populate("ownerId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Group.countDocuments(query),
   ]);
-  return res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+  res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
 };
 
-export const getGroup = async (req: Request, res: Response) => {
+export const getGroup = async (req: Request, res: Response): Promise<void> => {
   const group = await Group.findById(req.params.id).populate("ownerId", "firstName lastName avatar");
-  if (!group) return res.status(404).json({ success: false, message: "Not Found" });
-  const isMember = group.members.some(m => String(m.userId) === String(req.userId));
-  if (group.visibility === "private" && !isMember && String(group.ownerId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden" });
+  if (!group) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
   }
-  return res.status(200).json({ success: true, group: serialize(group) });
+  const isMember = group.members.some((m: any) => String(m.userId) === String(req.userId));
+  if (group.visibility === "private" && !isMember && String(group.ownerId) !== String(req.userId)) {
+    res.status(403).json({ success: false, message: "Forbidden" });
+    return;
+  }
+  res.status(200).json({ success: true, group: serialize(group) });
 };
 
-export const joinGroup = async (req: Request, res: Response) => {
+export const joinGroup = async (req: Request, res: Response): Promise<void> => {
   const group = await Group.findById(req.params.id);
-  if (!group) return res.status(404).json({ success: false, message: "Not Found" });
-  const already = group.members.some(m => String(m.userId) === String(req.userId));
+  if (!group) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
+  const already = group.members.some((m: any) => String(m.userId) === String(req.userId));
   if (!already) {
     group.members.push({ userId: req.userId as any, joinedAt: new Date() });
     await group.save();
     logger.info("Group joined", { groupId: group._id, userId: req.userId });
   }
-  return res.status(200).json({ success: true, membership: { groupId: group._id, userId: req.userId } });
+  res.status(200).json({ success: true, membership: { groupId: group._id, userId: req.userId } });
 };
 
-export const leaveGroup = async (req: Request, res: Response) => {
+export const leaveGroup = async (req: Request, res: Response): Promise<void> => {
   const group = await Group.findById(req.params.id);
-  if (!group) return res.status(404).json({ success: false, message: "Not Found" });
-  group.members = group.members.filter(m => String(m.userId) !== String(req.userId));
+  if (!group) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
+  group.members = group.members.filter((m: any) => String(m.userId) !== String(req.userId));
   await group.save();
   logger.info("Group left", { groupId: group._id, userId: req.userId });
-  return res.status(200).json({ success: true });
+  res.status(200).json({ success: true });
 };
 
-export const updateGroup = async (req: Request, res: Response) => {
+export const updateGroup = async (req: Request, res: Response): Promise<void> => {
   const group = await Group.findById(req.params.id);
-  if (!group) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!group) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(group.ownerId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only owner can edit" });
+    res.status(403).json({ success: false, message: "Forbidden: Only owner can edit" });
+    return;
   }
   const { name, description, visibility } = req.body || {};
   if (name !== undefined) group.name = name;
   if (description !== undefined) group.description = description;
   if (visibility !== undefined) {
     if (!["public", "private"].includes(visibility)) {
-      return res.status(400).json({ success: false, message: "Validation error: visibility must be 'public' or 'private'" });
+      res.status(400).json({ success: false, message: "Validation error: visibility must be 'public' or 'private'" });
+      return;
     }
     group.visibility = visibility;
   }
   await group.save();
   logger.info("Group updated", { groupId: group._id, ownerId: req.userId });
-  return res.status(200).json({ success: true, group: serialize(group) });
+  res.status(200).json({ success: true, group: serialize(group) });
 };
 
-export const deleteGroupPermanently = async (req: Request, res: Response) => {
+export const deleteGroupPermanently = async (req: Request, res: Response): Promise<void> => {
   const group = await Group.findById(req.params.id);
-  if (!group) return res.status(404).json({ success: false, message: "Not Found" });
+  if (!group) {
+    res.status(404).json({ success: false, message: "Not Found" });
+    return;
+  }
   if (String(group.ownerId) !== String(req.userId)) {
-    return res.status(403).json({ success: false, message: "Forbidden: Only owner can delete" });
+    res.status(403).json({ success: false, message: "Forbidden: Only owner can delete" });
+    return;
   }
   await Group.findByIdAndDelete(req.params.id);
   logger.info("Group deleted", { groupId: req.params.id, ownerId: req.userId });
-  return res.status(200).json({ success: true, message: "Group deleted" });
+  res.status(200).json({ success: true, message: "Group deleted" });
 };
 
 export default {

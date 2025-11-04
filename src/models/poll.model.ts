@@ -22,7 +22,7 @@ export interface IPollDocument extends IPoll, Document {}
 const pollSchema = new Schema<IPollDocument>(
   {
     question: { type: String, required: true },
-    options: { type: [String], required: true, validate: v => Array.isArray(v) && v.length >= 2 },
+    options: { type: [String], required: true, validate: (v: any) => Array.isArray(v) && v.length >= 2 },
     multiSelect: { type: Boolean, default: false },
     closesAt: { type: Date },
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
