@@ -692,6 +692,10 @@ const swaggerOptions = {
         name: "Admin",
         description: "Administrative operations and management",
       },
+      {
+        name: "Community",
+        description: "Community features: Prayer Wall, Forum, Polls, Groups",
+      },
     ],
   },
   apis: ["./src/routes/*.ts", "./src/controllers/*.ts", "./src/models/*.ts"],

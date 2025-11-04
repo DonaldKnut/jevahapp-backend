@@ -41,6 +41,7 @@ import churchesAdminRoutes from "./routes/churches.admin.routes";
 import userContentRoutes from "./routes/userContent.routes";
 import ebookRoutes from "./routes/ebook.routes";
 import bibleRoutes from "./routes/bible.routes";
+import communityRoutes from "./routes/community.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -203,6 +204,7 @@ app.get("/", (req, res) => {
       ebooks: "/api/ebooks",
       tts: "/api/tts",
       bible: "/api/bible",
+      community: "/api/community/modules",
     },
     features: [
       "User Authentication & Authorization",
@@ -285,6 +287,7 @@ app.use("/api", userContentRoutes);
 app.use("/api/ebooks", ebookRoutes);
 app.use("/api/tts", ebookRoutes);
 app.use("/api/bible", bibleRoutes);
+app.use("/api/community", communityRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

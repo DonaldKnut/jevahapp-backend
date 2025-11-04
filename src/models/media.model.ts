@@ -144,6 +144,10 @@ const mediaSchema = new Schema<IMedia>(
         return this.contentType !== "live";
       },
     },
+    // Cloudflare R2 object key for the main file (needed to delete from storage)
+    fileObjectKey: {
+      type: String,
+    },
     fileMimeType: {
       type: String,
     },
@@ -152,6 +156,10 @@ const mediaSchema = new Schema<IMedia>(
       required: function () {
         return this.contentType !== "live"; // Thumbnail required for music, videos, books
       },
+    },
+    // Cloudflare R2 object key for the thumbnail (needed to delete from storage)
+    thumbnailObjectKey: {
+      type: String,
     },
     topics: {
       type: [String],
