@@ -27,13 +27,15 @@ The forum system has **TWO separate structures** - this guide explains both clea
 ### System 1: Forum Categories (Main System) ✅ **RECOMMENDED**
 
 **Structure:**
+
 ```
-Forum Category (Admin-created) 
+Forum Category (Admin-created)
   └── Posts (Users create posts within categories)
       └── Comments (Users comment on posts)
 ```
 
 **Example:**
+
 - Forum Category: "Bible Study & Teaching"
   - Post 1: "How to study the Bible effectively"
     - Comment 1: "Great tips!"
@@ -43,12 +45,14 @@ Forum Category (Admin-created)
 ### System 2: Forum Threads (Legacy/Simple)
 
 **Structure:**
+
 ```
 Forum Thread (User-created standalone thread)
   └── (No nested structure, simpler)
 ```
 
 **Example:**
+
 - Thread 1: "Prayer Request - Need healing"
 - Thread 2: "Testimony - God provided!"
 
@@ -59,11 +63,13 @@ Forum Thread (User-created standalone thread)
 ### Forum Categories (Recommended)
 
 **Who Creates What:**
-- ✅ **Admin creates Forum Categories** (e.g., "Bible Study & Teaching")
+
+- ✅ **Users create Forum Categories** (e.g., "Bible Study & Teaching", "Youth Ministry")
 - ✅ **Users create Posts** within those categories
 - ✅ **Users comment** on posts
 
 **Use Cases:**
+
 - Organized discussions by topic
 - Better content discovery
 - Community structure
@@ -71,11 +77,13 @@ Forum Thread (User-created standalone thread)
 ### Forum Threads (Legacy)
 
 **Who Creates What:**
+
 - ✅ **Users create standalone threads**
 - ✅ No categories needed
 - ✅ Simpler structure
 
 **Use Cases:**
+
 - Quick discussions
 - Simple Q&A
 - General topics
@@ -87,7 +95,7 @@ Forum Thread (User-created standalone thread)
 ### Forum Categories Endpoints (Recommended)
 
 ```typescript
-// Forums (Admin only)
+// Forums (Authenticated users)
 POST   /api/community/forum/create          // Create forum category
 GET    /api/community/forum                 // List all forum categories
 
@@ -146,11 +154,13 @@ Headers: {
 | `limit` | number | 20 | Items per page (max 100) |
 
 **Example Request:**
+
 ```typescript
 GET /api/community/forum?page=1&limit=20
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -185,21 +195,23 @@ GET /api/community/forum?page=1&limit=20
 
 ---
 
-#### 2. Create Forum Category (Admin Only)
+#### 2. Create Forum Category (Authenticated Users)
 
 **Endpoint:** `POST /api/community/forum/create`  
-**Access:** Admin only  
+**Access:** Authenticated users  
 **Rate Limit:** 10 requests per hour
 
 **Request Body:**
+
 ```typescript
 {
-  title: string;        // Required - 3-100 characters
-  description: string;  // Required - 10-500 characters
+  title: string; // Required - 3-100 characters
+  description: string; // Required - 10-500 characters
 }
 ```
 
 **Example Request:**
+
 ```typescript
 POST /api/community/forum/create
 {
@@ -209,6 +221,7 @@ POST /api/community/forum/create
 ```
 
 **Success Response (201):**
+
 ```typescript
 {
   success: true,
@@ -223,11 +236,12 @@ POST /api/community/forum/create
 }
 ```
 
-**Error Response (403):**
+**Error Response (401):**
+
 ```typescript
 {
   success: false,
-  error: "Forbidden: Admin access required"
+  error: "Unauthorized: Authentication required"
 }
 ```
 
@@ -247,11 +261,13 @@ POST /api/community/forum/create
 | `sortOrder` | string | "desc" | Order: "asc" or "desc" |
 
 **Example Request:**
+
 ```typescript
 GET /api/community/forum/123/posts?page=1&limit=20&sortBy=likesCount&sortOrder=desc
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -307,6 +323,7 @@ GET /api/community/forum/123/posts?page=1&limit=20&sortBy=likesCount&sortOrder=d
 **Rate Limit:** 20 requests per 15 minutes
 
 **Request Body:**
+
 ```typescript
 {
   content: string;                    // Required - 1-5000 characters
@@ -322,6 +339,7 @@ GET /api/community/forum/123/posts?page=1&limit=20&sortBy=likesCount&sortOrder=d
 ```
 
 **Example Request:**
+
 ```typescript
 POST /api/community/forum/123/posts
 {
@@ -339,6 +357,7 @@ POST /api/community/forum/123/posts
 ```
 
 **Success Response (201):**
+
 ```typescript
 {
   success: true,
@@ -365,6 +384,7 @@ POST /api/community/forum/123/posts
 **Rate Limit:** 20 requests per 15 minutes
 
 **Request Body:**
+
 ```typescript
 {
   content?: string;                    // Optional - Update content
@@ -374,6 +394,7 @@ POST /api/community/forum/123/posts
 ```
 
 **Example Request:**
+
 ```typescript
 PUT /api/community/forum/posts/123
 {
@@ -383,6 +404,7 @@ PUT /api/community/forum/posts/123
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -393,6 +415,7 @@ PUT /api/community/forum/posts/123
 ```
 
 **Error Response (403):**
+
 ```typescript
 {
   success: false,
@@ -409,11 +432,13 @@ PUT /api/community/forum/posts/123
 **Rate Limit:** 20 requests per 15 minutes
 
 **Example Request:**
+
 ```typescript
-DELETE /api/community/forum/posts/123
+DELETE / api / community / forum / posts / 123;
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -430,11 +455,13 @@ DELETE /api/community/forum/posts/123
 **Rate Limit:** 60 requests per 5 minutes
 
 **Example Request:**
+
 ```typescript
-POST /api/community/forum/posts/123/like
+POST / api / community / forum / posts / 123 / like;
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -462,11 +489,13 @@ POST /api/community/forum/posts/123/like
 | `includeReplies` | boolean | true | Include nested replies |
 
 **Example Request:**
+
 ```typescript
 GET /api/community/forum/posts/123/comments?page=1&limit=20&includeReplies=true
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -516,6 +545,7 @@ GET /api/community/forum/posts/123/comments?page=1&limit=20&includeReplies=true
 **Rate Limit:** 20 requests per minute
 
 **Request Body:**
+
 ```typescript
 {
   content: string;              // Required - 1-2000 characters
@@ -524,6 +554,7 @@ GET /api/community/forum/posts/123/comments?page=1&limit=20&includeReplies=true
 ```
 
 **Example Request (Top-level comment):**
+
 ```typescript
 POST /api/community/forum/posts/123/comments
 {
@@ -532,6 +563,7 @@ POST /api/community/forum/posts/123/comments
 ```
 
 **Example Request (Reply to comment):**
+
 ```typescript
 POST /api/community/forum/posts/123/comments
 {
@@ -541,6 +573,7 @@ POST /api/community/forum/posts/123/comments
 ```
 
 **Success Response (201):**
+
 ```typescript
 {
   success: true,
@@ -564,11 +597,13 @@ POST /api/community/forum/posts/123/comments
 **Rate Limit:** 60 requests per 5 minutes
 
 **Example Request:**
+
 ```typescript
-POST /api/community/forum/comments/123/like
+POST / api / community / forum / comments / 123 / like;
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -590,6 +625,7 @@ POST /api/community/forum/comments/123/like
 **Rate Limit:** 20 requests per 15 minutes
 
 **Request Body:**
+
 ```typescript
 {
   title: string;        // Required - Thread title
@@ -599,6 +635,7 @@ POST /api/community/forum/comments/123/like
 ```
 
 **Example Request:**
+
 ```typescript
 POST /api/community/forum/threads
 {
@@ -609,6 +646,7 @@ POST /api/community/forum/threads
 ```
 
 **Success Response (201):**
+
 ```typescript
 {
   success: true,
@@ -642,6 +680,7 @@ POST /api/community/forum/threads
 | `sort` | string | "recent" | Sort: "recent" or "active" |
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -660,6 +699,7 @@ POST /api/community/forum/threads
 **Access:** Public (no auth required)
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -681,6 +721,7 @@ POST /api/community/forum/threads
 **Access:** Thread creator only
 
 **Request Body:**
+
 ```typescript
 {
   title?: string;       // Optional
@@ -690,6 +731,7 @@ POST /api/community/forum/threads
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -707,6 +749,7 @@ POST /api/community/forum/threads
 **Access:** Thread creator only
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -826,6 +869,32 @@ export const getForums = async (params?: {
     forums: response.data.data.forums,
     pagination: response.data.data.pagination,
   };
+};
+
+/**
+ * Create forum category
+ */
+export const createForum = async (data: {
+  title: string;
+  description: string;
+}): Promise<Forum> => {
+  const token = await getAuthToken();
+
+  const response = await axios.post<{
+    success: boolean;
+    data: Forum;
+  }>(
+    `${API_BASE_URL}/create`,
+    data,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return response.data.data;
 };
 
 /**
@@ -1231,7 +1300,7 @@ export const ForumsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Forums</Text>
-      
+
       {error && (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -1374,16 +1443,16 @@ export const ForumPostsScreen: React.FC = ({ route }) => {
 
 ### Error Response Codes
 
-| Status Code | Meaning | User Message |
-|------------|---------|--------------|
-| `200` | Success | Operation completed |
-| `201` | Created | Post/comment created successfully |
-| `400` | Bad Request | Validation error - check your input |
-| `401` | Unauthorized | Please log in to continue |
-| `403` | Forbidden | You can only modify posts you created / Admin only |
-| `404` | Not Found | Forum/post not found |
-| `429` | Rate Limited | Too many requests - please slow down |
-| `500` | Server Error | Server error - please try again later |
+| Status Code | Meaning      | User Message                                       |
+| ----------- | ------------ | -------------------------------------------------- |
+| `200`       | Success      | Operation completed                                |
+| `201`       | Created      | Post/comment created successfully                  |
+| `400`       | Bad Request  | Validation error - check your input                |
+| `401`       | Unauthorized | Please log in to continue                          |
+| `403`       | Forbidden    | You can only modify posts you created / Admin only |
+| `404`       | Not Found    | Forum/post not found                               |
+| `429`       | Rate Limited | Too many requests - please slow down               |
+| `500`       | Server Error | Server error - please try again later              |
 
 ---
 
@@ -1443,7 +1512,7 @@ const renderComment = (comment: ForumComment, depth = 0) => {
     <View style={[styles.comment, { marginLeft: depth * 20 }]}>
       <Text>{comment.content}</Text>
       <Text>By {comment.user.username}</Text>
-      
+
       {comment.replies && comment.replies.length > 0 && (
         <View style={styles.replies}>
           {comment.replies.map((reply) => renderComment(reply, depth + 1))}
@@ -1461,6 +1530,7 @@ const renderComment = (comment: ForumComment, depth = 0) => {
 ### Quick Reference
 
 **Forum Categories (Recommended):**
+
 ```typescript
 GET    /api/community/forum                 // List categories
 GET    /api/community/forum/:forumId/posts  // Get posts
@@ -1474,6 +1544,7 @@ POST   /api/community/forum/comments/:commentId/like      // Like comment
 ```
 
 **Forum Threads (Legacy):**
+
 ```typescript
 POST   /api/community/forum/threads         // Create thread
 GET    /api/community/forum/threads         // List threads
@@ -1490,10 +1561,9 @@ DELETE /api/community/forum/threads/:id     // Delete thread (creator)
 ✅ **Comments** - Nested replies (max 3 levels)  
 ✅ **Likes** - Toggle like/unlike on posts and comments  
 ✅ **Ownership** - Only creators can update/delete their posts  
-✅ **Embedded Links** - Support for rich link previews  
+✅ **Embedded Links** - Support for rich link previews
 
 ---
 
 **Last Updated:** 2024-01-15  
 **Version:** 1.0
-

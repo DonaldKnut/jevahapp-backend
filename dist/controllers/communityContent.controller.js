@@ -210,7 +210,7 @@ const createPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         votes: [],
     });
     logger_1.default.info("Poll created", { pollId: doc._id, authorId: req.userId });
-    res.status(201).json({ success: true, poll: serialize(doc) });
+    res.status(201).json({ success: true, poll: serializePoll(doc, req.userId) });
 });
 exports.createPoll = createPoll;
 const listPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -224,19 +224,19 @@ const listPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (status === "closed")
         query.closesAt = { $lte: now };
     const [items, total] = yield Promise.all([
-        poll_model_1.Poll.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+        poll_model_1.Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
         poll_model_1.Poll.countDocuments(query),
     ]);
-    res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+    res.status(200).json({ success: true, items: items.map(poll => serializePoll(poll)), page, pageSize: items.length, total });
 });
 exports.listPolls = listPolls;
 const getPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const doc = yield poll_model_1.Poll.findById(req.params.id);
+    const doc = yield poll_model_1.Poll.findById(req.params.id).populate("authorId", "firstName lastName avatar");
     if (!doc) {
         res.status(404).json({ success: false, message: "Not Found" });
         return;
     }
-    res.status(200).json({ success: true, poll: serialize(doc) });
+    res.status(200).json({ success: true, poll: serializePoll(doc, req.userId) });
 });
 exports.getPoll = getPoll;
 const getMyPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -256,7 +256,7 @@ const getMyPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     ]);
     res.status(200).json({
         success: true,
-        items: items.map(serialize),
+        items: items.map(poll => serializePoll(poll, req.userId)),
         page,
         pageSize: items.length,
         total,
@@ -290,7 +290,7 @@ const voteOnPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     poll.votes.push({ userId: req.userId, optionIndexes, votedAt: new Date() });
     yield poll.save();
     logger_1.default.info("Poll voted", { pollId: poll._id, userId: req.userId });
-    res.status(200).json({ success: true, poll: serialize(poll) });
+    res.status(200).json({ success: true, poll: serializePoll(poll, req.userId) });
 });
 exports.voteOnPoll = voteOnPoll;
 // ===== Groups =====
@@ -429,6 +429,64 @@ exports.default = {
     updateGroup: exports.updateGroup,
     deleteGroupPermanently: exports.deleteGroupPermanently,
 };
+/**
+ * Serialize Poll with enriched options (votesCount, percentage, _id)
+ */
+function serializePoll(doc, userId) {
+    const obj = doc.toObject ? doc.toObject() : doc;
+    // Calculate votes per option
+    const totalVotes = obj.votes.length;
+    const optionsWithStats = obj.options.map((text, index) => {
+        const votesCount = obj.votes.filter((v) => v.optionIndexes && v.optionIndexes.includes(index)).length;
+        const percentage = totalVotes > 0
+            ? Math.round((votesCount / totalVotes) * 100)
+            : 0;
+        return {
+            _id: `${obj._id}_${index}`, // Generate option ID
+            text,
+            votesCount,
+            percentage,
+        };
+    });
+    // Check if user voted
+    const userVote = userId ? obj.votes.find((v) => String(v.userId) === String(userId)) : null;
+    const userVoted = !!userVote;
+    // Determine if poll is active
+    const now = new Date();
+    const isActive = !obj.closesAt || new Date(obj.closesAt) > now;
+    // Handle populated authorId
+    let author = undefined;
+    if (obj.authorId && typeof obj.authorId === "object" && obj.authorId._id) {
+        author = {
+            id: String(obj.authorId._id),
+            firstName: obj.authorId.firstName,
+            lastName: obj.authorId.lastName,
+            avatar: obj.authorId.avatar,
+        };
+    }
+    else if (obj.authorId) {
+        author = {
+            id: String(obj.authorId),
+        };
+    }
+    return {
+        _id: String(obj._id),
+        id: String(obj._id),
+        title: obj.question, // Use question as title for frontend compatibility
+        question: obj.question,
+        description: obj.description || undefined,
+        options: optionsWithStats, // Return options as objects with stats
+        multiSelect: obj.multiSelect || false,
+        totalVotes,
+        expiresAt: obj.closesAt || obj.expiresAt,
+        closesAt: obj.closesAt || obj.expiresAt,
+        createdAt: obj.createdAt,
+        updatedAt: obj.updatedAt,
+        isActive,
+        userVoted,
+        author,
+    };
+}
 function serialize(doc) {
     const obj = doc.toObject ? doc.toObject() : doc;
     obj.id = String(obj._id);

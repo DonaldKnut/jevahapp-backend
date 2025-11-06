@@ -91,6 +91,7 @@ Headers: {
 **Rate Limit:** 20 requests per 15 minutes
 
 **Request Body:**
+
 ```typescript
 {
   question: string;           // Required - The poll question (min 5 chars)
@@ -102,6 +103,7 @@ Headers: {
 ```
 
 **Example Request:**
+
 ```typescript
 POST /api/community/polls
 {
@@ -118,6 +120,7 @@ POST /api/community/polls
 ```
 
 **Success Response (201):**
+
 ```typescript
 {
   success: true,
@@ -146,18 +149,20 @@ POST /api/community/polls
 **Access:** Public (no auth required)  
 **Query Parameters:**
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | number | 1 | Page number |
-| `limit` | number | 20 | Items per page (max 100) |
-| `status` | string | "all" | Filter: "all", "open", "closed" |
+| Parameter | Type   | Default | Description                     |
+| --------- | ------ | ------- | ------------------------------- |
+| `page`    | number | 1       | Page number                     |
+| `limit`   | number | 20      | Items per page (max 100)        |
+| `status`  | string | "all"   | Filter: "all", "open", "closed" |
 
 **Example Request:**
+
 ```typescript
 GET /api/community/polls?page=1&limit=20&status=open
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -192,11 +197,13 @@ GET /api/community/polls?page=1&limit=20&status=open
 **Query Parameters:** Same as list polls
 
 **Example Request:**
+
 ```typescript
 GET /api/community/polls/my?page=1&limit=20
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -221,6 +228,7 @@ GET /api/community/polls/my?page=1&limit=20
 **Access:** Public (no auth required)
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -260,6 +268,7 @@ GET /api/community/polls/my?page=1&limit=20
 **Rate Limit:** 60 requests per 5 minutes
 
 **Request Body:**
+
 ```typescript
 {
   optionIndex: number | number[];  // Required - Single index or array of indices
@@ -267,6 +276,7 @@ GET /api/community/polls/my?page=1&limit=20
 ```
 
 **Example Request (Single Choice):**
+
 ```typescript
 POST /api/community/polls/123/vote
 {
@@ -275,6 +285,7 @@ POST /api/community/polls/123/vote
 ```
 
 **Example Request (Multi-Select):**
+
 ```typescript
 POST /api/community/polls/123/vote
 {
@@ -283,6 +294,7 @@ POST /api/community/polls/123/vote
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -309,6 +321,7 @@ POST /api/community/polls/123/vote
 **Rate Limit:** 10 requests per hour
 
 **Request Body:**
+
 ```typescript
 {
   question?: string;      // Optional - Update question (min 5 chars)
@@ -320,6 +333,7 @@ POST /api/community/polls/123/vote
 ```
 
 **Example Request:**
+
 ```typescript
 PUT /api/community/polls/123
 {
@@ -329,6 +343,7 @@ PUT /api/community/polls/123
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -347,11 +362,13 @@ PUT /api/community/polls/123
 **Rate Limit:** 10 requests per hour
 
 **Example Request:**
+
 ```typescript
-DELETE /api/community/polls/123
+DELETE / api / community / polls / 123;
 ```
 
 **Success Response (200):**
+
 ```typescript
 {
   success: true,
@@ -367,10 +384,10 @@ DELETE /api/community/polls/123
 
 ```typescript
 // services/pollService.ts
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import axios from "axios";
+import * as SecureStore from "expo-secure-store";
 
-const API_BASE_URL = 'https://your-api-domain.com/api/community/polls';
+const API_BASE_URL = "https://your-api-domain.com/api/community/polls";
 
 interface PollOption {
   _id: string;
@@ -413,8 +430,8 @@ interface VoteData {
  * Get authentication token
  */
 const getAuthToken = async (): Promise<string> => {
-  const token = await SecureStore.getItemAsync('authToken');
-  if (!token) throw new Error('Authentication required');
+  const token = await SecureStore.getItemAsync("authToken");
+  if (!token) throw new Error("Authentication required");
   return token;
 };
 
@@ -423,20 +440,20 @@ const getAuthToken = async (): Promise<string> => {
  */
 export const createPoll = async (data: CreatePollData): Promise<Poll> => {
   const token = await getAuthToken();
-  
+
   const response = await axios.post<{ success: boolean; poll: Poll }>(
     `${API_BASE_URL}`,
     data,
     {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     }
   );
 
   if (!response.data.success) {
-    throw new Error('Failed to create poll');
+    throw new Error("Failed to create poll");
   }
 
   return response.data.poll;
@@ -448,7 +465,7 @@ export const createPoll = async (data: CreatePollData): Promise<Poll> => {
 export const listPolls = async (params?: {
   page?: number;
   limit?: number;
-  status?: 'all' | 'open' | 'closed';
+  status?: "all" | "open" | "closed";
 }): Promise<{
   items: Poll[];
   page: number;
@@ -465,7 +482,7 @@ export const listPolls = async (params?: {
     params: {
       page: params?.page || 1,
       limit: params?.limit || 20,
-      status: params?.status || 'all',
+      status: params?.status || "all",
     },
   });
 
@@ -496,7 +513,7 @@ export const getMyPolls = async (params?: {
   };
 }> => {
   const token = await getAuthToken();
-  
+
   const response = await axios.get<{
     success: boolean;
     items: Poll[];
@@ -511,7 +528,7 @@ export const getMyPolls = async (params?: {
     };
   }>(`${API_BASE_URL}/my`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     params: {
       page: params?.page || 1,
@@ -531,7 +548,7 @@ export const getPoll = async (pollId: string): Promise<Poll> => {
   );
 
   if (!response.data.success) {
-    throw new Error('Poll not found');
+    throw new Error("Poll not found");
   }
 
   return response.data.poll;
@@ -545,20 +562,20 @@ export const voteOnPoll = async (
   optionIndex: number | number[]
 ): Promise<Poll> => {
   const token = await getAuthToken();
-  
+
   const response = await axios.post<{ success: boolean; poll: Poll }>(
     `${API_BASE_URL}/${pollId}/vote`,
     { optionIndex },
     {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     }
   );
 
   if (!response.data.success) {
-    throw new Error('Failed to vote');
+    throw new Error("Failed to vote");
   }
 
   return response.data.poll;
@@ -572,20 +589,20 @@ export const updatePoll = async (
   data: Partial<CreatePollData>
 ): Promise<Poll> => {
   const token = await getAuthToken();
-  
+
   const response = await axios.put<{ success: boolean; data: Poll }>(
     `${API_BASE_URL}/${pollId}`,
     data,
     {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     }
   );
 
   if (!response.data.success) {
-    throw new Error('Failed to update poll');
+    throw new Error("Failed to update poll");
   }
 
   return response.data.data;
@@ -596,18 +613,18 @@ export const updatePoll = async (
  */
 export const deletePoll = async (pollId: string): Promise<void> => {
   const token = await getAuthToken();
-  
+
   const response = await axios.delete<{ success: boolean; message: string }>(
     `${API_BASE_URL}/${pollId}`,
     {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
     }
   );
 
   if (!response.data.success) {
-    throw new Error(response.data.message || 'Failed to delete poll');
+    throw new Error(response.data.message || "Failed to delete poll");
   }
 };
 ```
@@ -618,10 +635,17 @@ export const deletePoll = async (pollId: string): Promise<void> => {
 
 ```typescript
 // hooks/usePolls.ts
-import { useState, useEffect } from 'react';
-import { listPolls, getPoll, voteOnPoll, createPoll, deletePoll, updatePoll } from '../services/pollService';
+import { useState, useEffect } from "react";
+import {
+  listPolls,
+  getPoll,
+  voteOnPoll,
+  createPoll,
+  deletePoll,
+  updatePoll,
+} from "../services/pollService";
 
-export const usePolls = (params?: { status?: 'all' | 'open' | 'closed' }) => {
+export const usePolls = (params?: { status?: "all" | "open" | "closed" }) => {
   const [polls, setPolls] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -640,7 +664,9 @@ export const usePolls = (params?: { status?: 'all' | 'open' | 'closed' }) => {
       setPagination({
         page,
         total: result.total,
-        hasMore: result.items.length === 20 && polls.length + result.items.length < result.total,
+        hasMore:
+          result.items.length === 20 &&
+          polls.length + result.items.length < result.total,
       });
     } catch (err: any) {
       setError(err.message);
@@ -653,7 +679,14 @@ export const usePolls = (params?: { status?: 'all' | 'open' | 'closed' }) => {
     fetchPolls(1);
   }, [params?.status]);
 
-  return { polls, loading, error, pagination, fetchPolls, refresh: () => fetchPolls(1) };
+  return {
+    polls,
+    loading,
+    error,
+    pagination,
+    fetchPolls,
+    refresh: () => fetchPolls(1),
+  };
 };
 
 export const usePoll = (pollId: string) => {
@@ -1402,16 +1435,16 @@ const styles = StyleSheet.create({
 
 ### Error Response Codes
 
-| Status Code | Meaning | User Message |
-|------------|---------|--------------|
-| `200` | Success | Operation completed |
-| `201` | Created | Poll created successfully |
-| `400` | Bad Request | Validation error - check your input |
-| `401` | Unauthorized | Please log in to continue |
-| `403` | Forbidden | You can only modify polls you created |
-| `404` | Not Found | Poll not found |
-| `429` | Rate Limited | Too many requests - please slow down |
-| `500` | Server Error | Server error - please try again later |
+| Status Code | Meaning      | User Message                          |
+| ----------- | ------------ | ------------------------------------- |
+| `200`       | Success      | Operation completed                   |
+| `201`       | Created      | Poll created successfully             |
+| `400`       | Bad Request  | Validation error - check your input   |
+| `401`       | Unauthorized | Please log in to continue             |
+| `403`       | Forbidden    | You can only modify polls you created |
+| `404`       | Not Found    | Poll not found                        |
+| `429`       | Rate Limited | Too many requests - please slow down  |
+| `500`       | Server Error | Server error - please try again later |
 
 ### Error Response Format
 
@@ -1434,26 +1467,29 @@ try {
   if (error.response) {
     const status = error.response.status;
     const message = error.response.data?.message || error.response.data?.error;
-    
+
     switch (status) {
       case 400:
-        Alert.alert('Validation Error', message || 'Please check your input');
+        Alert.alert("Validation Error", message || "Please check your input");
         break;
       case 401:
-        Alert.alert('Authentication Required', 'Please log in to create polls');
+        Alert.alert("Authentication Required", "Please log in to create polls");
         // Redirect to login
         break;
       case 403:
-        Alert.alert('Permission Denied', 'You can only modify polls you created');
+        Alert.alert(
+          "Permission Denied",
+          "You can only modify polls you created"
+        );
         break;
       case 429:
-        Alert.alert('Rate Limit', 'Too many requests. Please wait a moment.');
+        Alert.alert("Rate Limit", "Too many requests. Please wait a moment.");
         break;
       default:
-        Alert.alert('Error', message || 'Something went wrong');
+        Alert.alert("Error", message || "Something went wrong");
     }
   } else {
-    Alert.alert('Network Error', 'Please check your internet connection');
+    Alert.alert("Network Error", "Please check your internet connection");
   }
 }
 ```
@@ -1526,19 +1562,19 @@ const isOwner = poll.createdByUser?._id === currentUserId;
 ```typescript
 const handleDelete = (pollId: string) => {
   Alert.alert(
-    'Delete Poll',
-    'Are you sure you want to delete this poll? This action cannot be undone.',
+    "Delete Poll",
+    "Are you sure you want to delete this poll? This action cannot be undone.",
     [
-      { text: 'Cancel', style: 'cancel' },
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Delete',
-        style: 'destructive',
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
           try {
             await deletePoll(pollId);
             refresh();
           } catch (error) {
-            Alert.alert('Error', 'Failed to delete poll');
+            Alert.alert("Error", "Failed to delete poll");
           }
         },
       },
@@ -1564,6 +1600,7 @@ const handleDelete = (pollId: string) => {
 ### Test Cases
 
 1. **Create Poll**
+
    - ✅ Valid poll with 2+ options
    - ✅ Multi-select poll
    - ✅ Poll with expiration date
@@ -1572,6 +1609,7 @@ const handleDelete = (pollId: string) => {
    - ❌ Invalid: Question too short
 
 2. **Vote on Poll**
+
    - ✅ Single choice vote
    - ✅ Multi-select vote
    - ✅ Change vote (replace previous)
@@ -1579,12 +1617,14 @@ const handleDelete = (pollId: string) => {
    - ❌ Invalid: Invalid option index
 
 3. **Update Poll**
+
    - ✅ Creator can update their poll
    - ✅ Admin can update any poll
    - ❌ Other users cannot update
    - ❌ Invalid: Update closed poll
 
 4. **Delete Poll**
+
    - ✅ Creator can delete their poll
    - ✅ Admin can delete any poll
    - ❌ Other users cannot delete
@@ -1627,13 +1667,14 @@ DELETE /api/community/polls/:id
 ✅ **Multi-select supported** - Single or multiple choices  
 ✅ **Expiration dates** - Optional closing dates  
 ✅ **Real-time results** - Vote counts and percentages  
-✅ **Pagination** - Efficient list loading  
+✅ **Pagination** - Efficient list loading
 
 ---
 
 ## Support
 
 For issues or questions:
+
 - Check error messages in response
 - Verify authentication token is valid
 - Ensure poll ID format is correct (MongoDB ObjectId)
@@ -1643,4 +1684,3 @@ For issues or questions:
 
 **Last Updated:** 2024-01-15  
 **Version:** 1.0
-

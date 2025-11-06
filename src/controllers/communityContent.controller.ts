@@ -194,7 +194,7 @@ export const createPoll = async (req: Request, res: Response): Promise<void> => 
     votes: [],
   });
   logger.info("Poll created", { pollId: doc._id, authorId: req.userId });
-  res.status(201).json({ success: true, poll: serialize(doc) });
+  res.status(201).json({ success: true, poll: serializePoll(doc, req.userId) });
 };
 
 export const listPolls = async (req: Request, res: Response): Promise<void> => {
@@ -206,19 +206,19 @@ export const listPolls = async (req: Request, res: Response): Promise<void> => {
   if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
   if (status === "closed") query.closesAt = { $lte: now };
   const [items, total] = await Promise.all([
-    Poll.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+    Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
     Poll.countDocuments(query),
   ]);
-  res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+  res.status(200).json({ success: true, items: items.map(poll => serializePoll(poll)), page, pageSize: items.length, total });
 };
 
 export const getPoll = async (req: Request, res: Response): Promise<void> => {
-  const doc = await Poll.findById(req.params.id);
+  const doc = await Poll.findById(req.params.id).populate("authorId", "firstName lastName avatar");
   if (!doc) {
     res.status(404).json({ success: false, message: "Not Found" });
     return;
   }
-  res.status(200).json({ success: true, poll: serialize(doc) });
+  res.status(200).json({ success: true, poll: serializePoll(doc, req.userId) });
 };
 
 export const getMyPolls = async (req: Request, res: Response): Promise<void> => {
@@ -241,7 +241,7 @@ export const getMyPolls = async (req: Request, res: Response): Promise<void> => 
   
   res.status(200).json({ 
     success: true, 
-    items: items.map(serialize), 
+    items: items.map(poll => serializePoll(poll, req.userId)), 
     page, 
     pageSize: items.length, 
     total,
@@ -275,7 +275,7 @@ export const voteOnPoll = async (req: Request, res: Response): Promise<void> => 
   poll.votes.push({ userId: req.userId as any, optionIndexes, votedAt: new Date() });
   await poll.save();
   logger.info("Poll voted", { pollId: poll._id, userId: req.userId });
-  res.status(200).json({ success: true, poll: serialize(poll) });
+  res.status(200).json({ success: true, poll: serializePoll(poll, req.userId) });
 };
 
 // ===== Groups =====
@@ -412,6 +412,72 @@ export default {
   updateGroup,
   deleteGroupPermanently,
 };
+
+/**
+ * Serialize Poll with enriched options (votesCount, percentage, _id)
+ */
+function serializePoll(doc: any, userId?: string) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+  
+  // Calculate votes per option
+  const totalVotes = obj.votes.length;
+  const optionsWithStats = obj.options.map((text: string, index: number) => {
+    const votesCount = obj.votes.filter((v: any) => 
+      v.optionIndexes && v.optionIndexes.includes(index)
+    ).length;
+    const percentage = totalVotes > 0 
+      ? Math.round((votesCount / totalVotes) * 100) 
+      : 0;
+
+    return {
+      _id: `${obj._id}_${index}`, // Generate option ID
+      text,
+      votesCount,
+      percentage,
+    };
+  });
+
+  // Check if user voted
+  const userVote = userId ? obj.votes.find((v: any) => String(v.userId) === String(userId)) : null;
+  const userVoted = !!userVote;
+
+  // Determine if poll is active
+  const now = new Date();
+  const isActive = !obj.closesAt || new Date(obj.closesAt) > now;
+
+  // Handle populated authorId
+  let author = undefined;
+  if (obj.authorId && typeof obj.authorId === "object" && obj.authorId._id) {
+    author = {
+      id: String(obj.authorId._id),
+      firstName: obj.authorId.firstName,
+      lastName: obj.authorId.lastName,
+      avatar: obj.authorId.avatar,
+    };
+  } else if (obj.authorId) {
+    author = {
+      id: String(obj.authorId),
+    };
+  }
+
+  return {
+    _id: String(obj._id),
+    id: String(obj._id),
+    title: obj.question, // Use question as title for frontend compatibility
+    question: obj.question,
+    description: obj.description || undefined,
+    options: optionsWithStats, // Return options as objects with stats
+    multiSelect: obj.multiSelect || false,
+    totalVotes,
+    expiresAt: obj.closesAt || obj.expiresAt,
+    closesAt: obj.closesAt || obj.expiresAt,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+    isActive,
+    userVoted,
+    author,
+  };
+}
 
 function serialize(doc: any) {
   const obj = doc.toObject ? doc.toObject() : doc;

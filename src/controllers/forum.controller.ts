@@ -7,7 +7,7 @@ import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 
 /**
- * Create Forum (Admin Only)
+ * Create Forum (Authenticated Users)
  */
 export const createForum = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -33,10 +33,9 @@ export const createForum = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Check if user is admin (you may need to adjust this based on your auth middleware)
-    const user = await User.findById(req.userId);
-    if (!user || user.role !== "admin") {
-      res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+    // Verify user is authenticated (handled by verifyToken middleware)
+    if (!req.userId) {
+      res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
       return;
     }
 

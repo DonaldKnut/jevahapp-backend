@@ -20,7 +20,7 @@ const user_model_1 = require("../models/user.model");
 const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
 /**
- * Create Forum (Admin Only)
+ * Create Forum (Authenticated Users)
  */
 const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -41,10 +41,9 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
             return;
         }
-        // Check if user is admin (you may need to adjust this based on your auth middleware)
-        const user = yield user_model_1.User.findById(req.userId);
-        if (!user || user.role !== "admin") {
-            res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+        // Verify user is authenticated (handled by verifyToken middleware)
+        if (!req.userId) {
+            res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
             return;
         }
         const forum = yield forum_model_1.Forum.create({

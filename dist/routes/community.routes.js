@@ -63,7 +63,7 @@ router.post("/prayer-wall/:id/comments", auth_middleware_1.verifyToken, (0, rate
  *     summary: List forum threads
  */
 // Forum (New Structure)
-router.post("/forum/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), forum_controller_1.createForum); // Admin only
+router.post("/forum/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), forum_controller_1.createForum); // Authenticated users
 router.get("/forum", forum_controller_1.listForums);
 router.get("/forum/:forumId/posts", forum_controller_1.getForumPosts);
 router.post("/forum/:forumId/posts", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), forum_controller_1.createForumPost);

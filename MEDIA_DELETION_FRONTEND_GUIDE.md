@@ -49,14 +49,14 @@ Headers: {
 ### Token Retrieval
 
 ```typescript
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
 // Retrieve token
-const token = await SecureStore.getItemAsync('authToken');
+const token = await SecureStore.getItemAsync("authToken");
 
 if (!token) {
   // Handle unauthenticated state
-  throw new Error('User not authenticated');
+  throw new Error("User not authenticated");
 }
 ```
 
@@ -86,10 +86,10 @@ if (!token) {
 
 ```typescript
 // services/mediaService.ts
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import axios from "axios";
+import * as SecureStore from "expo-secure-store";
 
-const API_BASE_URL = 'https://your-api-domain.com/api/media';
+const API_BASE_URL = "https://your-api-domain.com/api/media";
 
 interface DeleteMediaResponse {
   success: boolean;
@@ -112,15 +112,15 @@ export const deleteMedia = async (
 ): Promise<DeleteMediaResponse> => {
   try {
     // 1. Get authentication token
-    const token = await SecureStore.getItemAsync('authToken');
-    
+    const token = await SecureStore.getItemAsync("authToken");
+
     if (!token) {
-      throw new Error('Authentication required. Please log in.');
+      throw new Error("Authentication required. Please log in.");
     }
 
     // 2. Validate mediaId
-    if (!mediaId || typeof mediaId !== 'string') {
-      throw new Error('Invalid media ID');
+    if (!mediaId || typeof mediaId !== "string") {
+      throw new Error("Invalid media ID");
     }
 
     // 3. Make DELETE request
@@ -128,8 +128,8 @@ export const deleteMedia = async (
       `${API_BASE_URL}/${mediaId}`,
       {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
         timeout: 30000, // 30 seconds
       }
@@ -139,7 +139,7 @@ export const deleteMedia = async (
     if (response.data.success) {
       return response.data;
     } else {
-      throw new Error(response.data.message || 'Failed to delete media');
+      throw new Error(response.data.message || "Failed to delete media");
     }
   } catch (error: any) {
     // Handle different error types
@@ -150,30 +150,30 @@ export const deleteMedia = async (
 
       switch (status) {
         case 401:
-          throw new Error('Authentication failed. Please log in again.');
+          throw new Error("Authentication failed. Please log in again.");
         case 403:
           throw new Error(
-            'You do not have permission to delete this media. Only the creator can delete it.'
+            "You do not have permission to delete this media. Only the creator can delete it."
           );
         case 404:
-          throw new Error('Media not found. It may have already been deleted.');
+          throw new Error("Media not found. It may have already been deleted.");
         case 400:
           throw new Error(
-            errorData.message || 'Invalid request. Please check the media ID.'
+            errorData.message || "Invalid request. Please check the media ID."
           );
         default:
           throw new Error(
-            errorData.message || 'Failed to delete media. Please try again.'
+            errorData.message || "Failed to delete media. Please try again."
           );
       }
     } else if (error.request) {
       // Request made but no response received
       throw new Error(
-        'Network error. Please check your internet connection and try again.'
+        "Network error. Please check your internet connection and try again."
       );
     } else {
       // Error in request setup
-      throw new Error(error.message || 'An unexpected error occurred.');
+      throw new Error(error.message || "An unexpected error occurred.");
     }
   }
 };
@@ -183,8 +183,8 @@ export const deleteMedia = async (
 
 ```typescript
 // hooks/useDeleteMedia.ts
-import { useState } from 'react';
-import { deleteMedia } from '../services/mediaService';
+import { useState } from "react";
+import { deleteMedia } from "../services/mediaService";
 
 interface UseDeleteMediaReturn {
   deleteMediaItem: (mediaId: string) => Promise<void>;
@@ -208,7 +208,7 @@ export const useDeleteMedia = (): UseDeleteMediaReturn => {
       await deleteMedia(mediaId);
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message || 'Failed to delete media');
+      setError(err.message || "Failed to delete media");
       throw err; // Re-throw to allow component-level handling
     } finally {
       setIsLoading(false);
@@ -284,11 +284,11 @@ export const DeleteMediaConfirmation: React.FC<DeleteMediaConfirmationProps> = (
       <View style={styles.overlay}>
         <View style={styles.container}>
           <Text style={styles.title}>Delete Media</Text>
-          
+
           <Text style={styles.message}>
             Are you sure you want to delete "{mediaTitle}"?
           </Text>
-          
+
           <Text style={styles.warning}>
             This action cannot be undone. The media will be permanently deleted
             from your account and all storage.
@@ -403,14 +403,14 @@ const styles = StyleSheet.create({
 
 ### Error Response Codes
 
-| Status Code | Meaning | User Message |
-|------------|---------|--------------|
-| `200` | Success | "Media deleted successfully" |
-| `400` | Bad Request | "Invalid media ID" |
-| `401` | Unauthorized | "Please log in to delete media" |
-| `403` | Forbidden | "You can only delete media you created" |
-| `404` | Not Found | "Media not found" |
-| `500` | Server Error | "Server error. Please try again later" |
+| Status Code | Meaning      | User Message                            |
+| ----------- | ------------ | --------------------------------------- |
+| `200`       | Success      | "Media deleted successfully"            |
+| `400`       | Bad Request  | "Invalid media ID"                      |
+| `401`       | Unauthorized | "Please log in to delete media"         |
+| `403`       | Forbidden    | "You can only delete media you created" |
+| `404`       | Not Found    | "Media not found"                       |
+| `500`       | Server Error | "Server error. Please try again later"  |
 
 ### Error Response Format
 
@@ -435,21 +435,21 @@ const styles = StyleSheet.create({
 const handleDelete = async () => {
   try {
     await deleteMedia(mediaId);
-    
+
     // Show success message
-    Alert.alert('Success', 'Media deleted successfully');
-    
+    Alert.alert("Success", "Media deleted successfully");
+
     // Refresh media list
     refreshMediaList();
-    
+
     // Navigate back if needed
     navigation.goBack();
   } catch (error: any) {
     // Show error alert
     Alert.alert(
-      'Delete Failed',
-      error.message || 'Failed to delete media. Please try again.',
-      [{ text: 'OK' }]
+      "Delete Failed",
+      error.message || "Failed to delete media. Please try again.",
+      [{ text: "OK" }]
     );
   }
 };
@@ -469,13 +469,13 @@ interface MediaItemProps {
 }
 
 const MediaItem: React.FC<MediaItemProps> = ({ media, currentUserId }) => {
-  const isOwner = media.uploadedBy === currentUserId || 
+  const isOwner = media.uploadedBy === currentUserId ||
                   media.uploadedBy._id === currentUserId;
 
   return (
     <View>
       {/* Media content */}
-      
+
       {isOwner && (
         <TouchableOpacity onPress={() => showDeleteConfirmation(media.id)}>
           <Icon name="trash" />
@@ -494,13 +494,13 @@ Always show a confirmation dialog before deleting:
 ```typescript
 const showDeleteConfirmation = () => {
   Alert.alert(
-    'Delete Media',
-    'Are you sure you want to delete this media? This action cannot be undone.',
+    "Delete Media",
+    "Are you sure you want to delete this media? This action cannot be undone.",
     [
-      { text: 'Cancel', style: 'cancel' },
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Delete',
-        style: 'destructive',
+        text: "Delete",
+        style: "destructive",
         onPress: handleDelete,
       },
     ]
@@ -538,7 +538,7 @@ const handleDelete = async () => {
   } catch (error) {
     // Revert on error
     setMediaList(mediaList);
-    Alert.alert('Error', 'Failed to delete media');
+    Alert.alert("Error", "Failed to delete media");
   }
 };
 ```
@@ -548,14 +548,14 @@ const handleDelete = async () => {
 Provide clear feedback after successful deletion:
 
 ```typescript
-import { Toast } from 'react-native-toast-message';
+import { Toast } from "react-native-toast-message";
 
 const handleDeleteSuccess = () => {
   Toast.show({
-    type: 'success',
-    text1: 'Media Deleted',
-    text2: 'The media has been permanently deleted',
-    position: 'bottom',
+    type: "success",
+    text1: "Media Deleted",
+    text2: "The media has been permanently deleted",
+    position: "bottom",
   });
 };
 ```
@@ -624,14 +624,14 @@ export const MyMediaScreen: React.FC = () => {
 
     try {
       await deleteMediaItem(selectedMedia._id);
-      
+
       // Remove from list
       setMediaList(prev => prev.filter(m => m._id !== selectedMedia._id));
-      
+
       // Close modal
       setShowDeleteModal(false);
       setSelectedMedia(null);
-      
+
       // Show success message
       Alert.alert('Success', 'Media deleted successfully');
     } catch (error: any) {
@@ -652,7 +652,7 @@ export const MyMediaScreen: React.FC = () => {
         <Text style={styles.mediaTitle}>{item.title}</Text>
         <Text style={styles.mediaType}>{item.contentType}</Text>
       </View>
-      
+
       <TouchableOpacity
         style={styles.deleteButton}
         onPress={() => handleDeletePress(item)}
@@ -751,7 +751,7 @@ While the backend enforces ownership, also validate on the frontend:
 
 ```typescript
 const canDeleteMedia = (media: Media, currentUserId: string): boolean => {
-  return media.uploadedBy === currentUserId || 
+  return media.uploadedBy === currentUserId ||
          media.uploadedBy._id === currentUserId;
 };
 
@@ -787,7 +787,7 @@ Be aware that the API may have rate limits. Handle 429 errors:
 
 ```typescript
 if (error.response?.status === 429) {
-  const retryAfter = error.response.headers['retry-after'];
+  const retryAfter = error.response.headers["retry-after"];
   throw new Error(
     `Too many requests. Please wait ${retryAfter} seconds before trying again.`
   );
@@ -801,21 +801,25 @@ if (error.response?.status === 429) {
 ### Test Cases
 
 1. **Successful Deletion**
+
    - User deletes their own media
    - Should receive success response
    - Media should be removed from UI
 
 2. **Unauthorized Deletion**
+
    - User tries to delete media they didn't create
    - Should receive 403 error
    - Should show appropriate error message
 
 3. **Unauthenticated Request**
+
    - User not logged in tries to delete
    - Should receive 401 error
    - Should redirect to login
 
 4. **Invalid Media ID**
+
    - User tries to delete with invalid ID
    - Should receive 400 error
    - Should show validation error
@@ -828,31 +832,29 @@ if (error.response?.status === 429) {
 ### Example Test (Jest)
 
 ```typescript
-import { deleteMedia } from '../services/mediaService';
+import { deleteMedia } from "../services/mediaService";
 
-describe('deleteMedia', () => {
-  it('should delete media successfully', async () => {
-    const mediaId = 'valid-media-id';
+describe("deleteMedia", () => {
+  it("should delete media successfully", async () => {
+    const mediaId = "valid-media-id";
     const result = await deleteMedia(mediaId);
-    
+
     expect(result.success).toBe(true);
-    expect(result.message).toBe('Media deleted successfully');
+    expect(result.message).toBe("Media deleted successfully");
   });
 
-  it('should throw error for unauthorized deletion', async () => {
-    const mediaId = 'other-user-media-id';
-    
+  it("should throw error for unauthorized deletion", async () => {
+    const mediaId = "other-user-media-id";
+
     await expect(deleteMedia(mediaId)).rejects.toThrow(
-      'You do not have permission to delete this media'
+      "You do not have permission to delete this media"
     );
   });
 
-  it('should throw error for invalid media ID', async () => {
-    const mediaId = 'invalid-id';
-    
-    await expect(deleteMedia(mediaId)).rejects.toThrow(
-      'Invalid media ID'
-    );
+  it("should throw error for invalid media ID", async () => {
+    const mediaId = "invalid-id";
+
+    await expect(deleteMedia(mediaId)).rejects.toThrow("Invalid media ID");
   });
 });
 ```
@@ -891,13 +893,14 @@ try {
 ✅ **Handle all error cases** gracefully  
 ✅ **Provide user feedback** for success/error states  
 ✅ **Remove from UI** after successful deletion  
-✅ **Refresh token** if authentication fails  
+✅ **Refresh token** if authentication fails
 
 ---
 
 ## Support
 
 For issues or questions:
+
 - Check error messages in response
 - Verify authentication token is valid
 - Ensure media ID format is correct (MongoDB ObjectId)
@@ -907,5 +910,3 @@ For issues or questions:
 
 **Last Updated:** 2024-01-15  
 **Version:** 1.0
-
-
