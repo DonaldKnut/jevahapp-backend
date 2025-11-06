@@ -36,18 +36,60 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Group = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const groupSchema = new mongoose_1.Schema({
-    name: { type: String, required: true },
-    description: { type: String, default: "" },
-    visibility: { type: String, enum: ["public", "private"], default: "public" },
-    ownerId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
+    name: {
+        type: String,
+        required: true,
+        minlength: 3,
+        maxlength: 100,
+    },
+    description: {
+        type: String,
+        default: "",
+        maxlength: 500,
+    },
+    profileImageUrl: { type: String },
+    visibility: {
+        type: String,
+        enum: ["public", "private"],
+        default: "public"
+    },
+    ownerId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    },
     members: [
         {
-            userId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-            joinedAt: { type: Date, default: Date.now },
+            userId: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: "User",
+                required: true
+            },
+            role: {
+                type: String,
+                enum: ["admin", "member"],
+                default: "member"
+            },
+            joinedAt: {
+                type: Date,
+                default: Date.now
+            },
         },
     ],
 }, { timestamps: true });
+// Set owner as admin when member is added
+groupSchema.pre("save", function (next) {
+    if (this.isNew || this.isModified("members")) {
+        this.members.forEach((member) => {
+            if (String(member.userId) === String(this.ownerId)) {
+                member.role = "admin";
+            }
+        });
+    }
+    next();
+});
 groupSchema.index({ name: 1 });
 groupSchema.index({ visibility: 1 });
 groupSchema.index({ ownerId: 1, createdAt: -1 });
+groupSchema.index({ "members.userId": 1 });
 exports.Group = mongoose_1.default.models.Group || mongoose_1.default.model("Group", groupSchema);

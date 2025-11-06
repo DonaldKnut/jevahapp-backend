@@ -33,55 +33,54 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Poll = void 0;
+exports.ForumPost = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const pollSchema = new mongoose_1.Schema({
-    question: {
+const forumPostSchema = new mongoose_1.Schema({
+    forumId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "Forum",
+        required: true
+    },
+    userId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+    },
+    content: {
         type: String,
         required: true,
-        minlength: 5,
-        maxlength: 200,
+        minlength: 1,
+        maxlength: 5000,
     },
-    title: { type: String }, // Alias, will sync with question
-    description: {
-        type: String,
-        maxlength: 500,
-    },
-    options: {
-        type: [String],
-        required: true,
-        validate: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 10,
-    },
-    multiSelect: { type: Boolean, default: false },
-    closesAt: { type: Date },
-    expiresAt: { type: Date }, // Alias, will sync with closesAt
-    authorId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-    votes: [
+    embeddedLinks: [
         {
-            userId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-            optionIndexes: { type: [Number], required: true },
-            votedAt: { type: Date, default: Date.now },
+            url: { type: String, required: true },
+            title: { type: String, maxlength: 200 },
+            description: { type: String, maxlength: 500 },
+            thumbnail: { type: String },
+            type: {
+                type: String,
+                enum: ["video", "article", "resource", "other"],
+                required: true,
+            },
         },
     ],
+    tags: {
+        type: [String],
+        default: []
+    },
+    likesCount: {
+        type: Number,
+        default: 0
+    },
+    commentsCount: {
+        type: Number,
+        default: 0
+    },
 }, { timestamps: true });
-// Sync title with question
-pollSchema.pre("save", function (next) {
-    if (this.title && !this.question) {
-        this.question = this.title;
-    }
-    else if (this.question && !this.title) {
-        this.title = this.question;
-    }
-    // Sync expiresAt with closesAt
-    if (this.expiresAt && !this.closesAt) {
-        this.closesAt = this.expiresAt;
-    }
-    else if (this.closesAt && !this.expiresAt) {
-        this.expiresAt = this.closesAt;
-    }
-    next();
-});
-pollSchema.index({ createdAt: -1 });
-pollSchema.index({ closesAt: 1 });
-pollSchema.index({ authorId: 1, createdAt: -1 });
-exports.Poll = mongoose_1.default.models.Poll || mongoose_1.default.model("Poll", pollSchema);
+forumPostSchema.index({ forumId: 1, createdAt: -1 });
+forumPostSchema.index({ userId: 1, createdAt: -1 });
+forumPostSchema.index({ createdAt: -1 });
+forumPostSchema.index({ tags: 1 });
+forumPostSchema.index({ content: "text" }); // Text search index
+exports.ForumPost = mongoose_1.default.models.ForumPost || mongoose_1.default.model("ForumPost", forumPostSchema);

@@ -1,0 +1,383 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.likeForumComment = exports.commentOnForumPost = exports.getForumPostComments = exports.likeForumPost = void 0;
+const forumPost_model_1 = require("../models/forumPost.model");
+const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
+const mongoose_1 = require("mongoose");
+const logger_1 = __importDefault(require("../utils/logger"));
+/**
+ * Like/Unlike Forum Post
+ */
+const likeForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const postId = req.params.postId;
+        const userId = req.userId;
+        if (!mongoose_1.Types.ObjectId.isValid(postId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+            res.status(400).json({ success: false, error: "Invalid post or user ID" });
+            return;
+        }
+        // Check if post exists
+        const post = yield forumPost_model_1.ForumPost.findById(postId);
+        if (!post) {
+            res.status(404).json({ success: false, error: "Post not found" });
+            return;
+        }
+        // Check if user already liked this post
+        const existingLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
+            user: userId,
+            media: new mongoose_1.Types.ObjectId(postId),
+            interactionType: "like",
+        });
+        let liked;
+        let likeCount;
+        if (existingLike) {
+            // Unlike - remove the interaction
+            yield mediaInteraction_model_1.MediaInteraction.findByIdAndDelete(existingLike._id);
+            liked = false;
+            post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
+            yield post.save();
+            likeCount = post.likesCount || 0;
+        }
+        else {
+            // Like - create new interaction
+            yield mediaInteraction_model_1.MediaInteraction.create({
+                user: userId,
+                media: new mongoose_1.Types.ObjectId(postId),
+                interactionType: "like",
+                lastInteraction: new Date(),
+                count: 1,
+            });
+            liked = true;
+            post.likesCount = (post.likesCount || 0) + 1;
+            yield post.save();
+            likeCount = post.likesCount || 0;
+        }
+        logger_1.default.info("Forum post like toggled", { postId, userId, liked, likeCount });
+        res.status(200).json({
+            success: true,
+            data: {
+                liked,
+                likesCount: likeCount,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error toggling forum post like", { error: error.message, postId: req.params.postId });
+        res.status(500).json({ success: false, error: "Failed to toggle like" });
+    }
+});
+exports.likeForumPost = likeForumPost;
+/**
+ * Get Comments on Forum Post
+ */
+const getForumPostComments = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const postId = req.params.postId;
+        const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+        const includeReplies = String(req.query.includeReplies || "true") === "true";
+        if (!mongoose_1.Types.ObjectId.isValid(postId)) {
+            res.status(400).json({ success: false, error: "Invalid post ID" });
+            return;
+        }
+        // Check if post exists
+        const post = yield forumPost_model_1.ForumPost.findById(postId);
+        if (!post) {
+            res.status(404).json({ success: false, error: "Post not found" });
+            return;
+        }
+        // Get top-level comments (no parentCommentId)
+        const comments = yield mediaInteraction_model_1.MediaInteraction.find({
+            media: new mongoose_1.Types.ObjectId(postId),
+            interactionType: "comment",
+            isRemoved: { $ne: true },
+            $or: [
+                { parentCommentId: { $exists: false } },
+                { parentCommentId: null },
+            ],
+        })
+            .populate("user", "firstName lastName username avatar")
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
+        const total = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+            media: new mongoose_1.Types.ObjectId(postId),
+            interactionType: "comment",
+            isRemoved: { $ne: true },
+            $or: [
+                { parentCommentId: { $exists: false } },
+                { parentCommentId: null },
+            ],
+        });
+        // Get replies if requested
+        let replies = [];
+        if (includeReplies) {
+            const commentIds = comments.map((c) => c._id);
+            replies = yield mediaInteraction_model_1.MediaInteraction.find({
+                parentCommentId: { $in: commentIds },
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            })
+                .populate("user", "firstName lastName username avatar")
+                .sort({ createdAt: 1 })
+                .lean();
+        }
+        // Group replies by parent comment
+        const repliesMap = new Map();
+        replies.forEach((reply) => {
+            const parentId = String(reply.parentCommentId);
+            if (!repliesMap.has(parentId)) {
+                repliesMap.set(parentId, []);
+            }
+            repliesMap.get(parentId).push(reply);
+        });
+        // Format comments with replies
+        const userId = req.userId;
+        const formattedComments = yield Promise.all(comments.map((comment) => __awaiter(void 0, void 0, void 0, function* () {
+            var _a;
+            // Get likes count for this comment
+            const likesCount = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+                media: comment._id,
+                interactionType: "like",
+            });
+            // Check if current user liked this comment
+            const userLiked = userId && mongoose_1.Types.ObjectId.isValid(userId)
+                ? !!(yield mediaInteraction_model_1.MediaInteraction.findOne({
+                    user: userId,
+                    media: comment._id,
+                    interactionType: "like",
+                }))
+                : false;
+            const commentData = {
+                _id: comment._id,
+                postId: String(comment.media),
+                userId: (_a = comment.user) === null || _a === void 0 ? void 0 : _a._id,
+                content: comment.content,
+                parentCommentId: comment.parentCommentId || null,
+                createdAt: comment.createdAt,
+                likesCount,
+                userLiked,
+                author: comment.user
+                    ? {
+                        _id: comment.user._id,
+                        username: comment.user.username,
+                        avatarUrl: comment.user.avatar,
+                    }
+                    : null,
+            };
+            if (includeReplies) {
+                commentData.replies = (repliesMap.get(String(comment._id)) || []).map((reply) => {
+                    var _a;
+                    return ({
+                        _id: reply._id,
+                        postId: String(reply.media),
+                        userId: (_a = reply.user) === null || _a === void 0 ? void 0 : _a._id,
+                        content: reply.content,
+                        parentCommentId: reply.parentCommentId,
+                        createdAt: reply.createdAt,
+                        likesCount: 0, // Could calculate if needed
+                        userLiked: false,
+                        author: reply.user
+                            ? {
+                                _id: reply.user._id,
+                                username: reply.user.username,
+                                avatarUrl: reply.user.avatar,
+                            }
+                            : null,
+                    });
+                });
+            }
+            else {
+                commentData.replies = [];
+            }
+            return commentData;
+        })));
+        res.status(200).json({
+            success: true,
+            data: {
+                comments: formattedComments,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.ceil(total / limit),
+                    hasMore: page * limit < total,
+                },
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error getting forum post comments", { error: error.message, postId: req.params.postId });
+        res.status(500).json({ success: false, error: "Failed to get comments" });
+    }
+});
+exports.getForumPostComments = getForumPostComments;
+/**
+ * Add Comment to Forum Post
+ */
+const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const postId = req.params.postId;
+        const userId = req.userId;
+        const { content, parentCommentId } = req.body || {};
+        if (!mongoose_1.Types.ObjectId.isValid(postId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+            res.status(400).json({ success: false, error: "Invalid post or user ID" });
+            return;
+        }
+        if (!content || typeof content !== "string" || content.trim().length === 0) {
+            res.status(400).json({ success: false, error: "Comment content is required" });
+            return;
+        }
+        if (content.length > 2000) {
+            res.status(400).json({ success: false, error: "Comment must be less than 2000 characters" });
+            return;
+        }
+        // Check if post exists
+        const post = yield forumPost_model_1.ForumPost.findById(postId);
+        if (!post) {
+            res.status(404).json({ success: false, error: "Post not found" });
+            return;
+        }
+        // Validate parent comment if provided
+        if (parentCommentId) {
+            if (!mongoose_1.Types.ObjectId.isValid(parentCommentId)) {
+                res.status(400).json({ success: false, error: "Invalid parent comment ID" });
+                return;
+            }
+            const parentComment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                _id: parentCommentId,
+                media: new mongoose_1.Types.ObjectId(postId),
+                interactionType: "comment",
+                isRemoved: { $ne: true },
+            });
+            if (!parentComment) {
+                res.status(404).json({ success: false, error: "Parent comment not found" });
+                return;
+            }
+        }
+        // Create comment
+        const comment = yield mediaInteraction_model_1.MediaInteraction.create({
+            user: userId,
+            media: new mongoose_1.Types.ObjectId(postId),
+            interactionType: "comment",
+            content: content.trim(),
+            parentCommentId: parentCommentId ? new mongoose_1.Types.ObjectId(parentCommentId) : undefined,
+            lastInteraction: new Date(),
+            count: 1,
+            isRemoved: false,
+        });
+        // Update post commentsCount
+        post.commentsCount = (post.commentsCount || 0) + 1;
+        yield post.save();
+        // Populate user info
+        yield comment.populate("user", "firstName lastName username avatar");
+        logger_1.default.info("Forum post comment created", { postId, userId, commentId: comment._id });
+        res.status(201).json({
+            success: true,
+            data: {
+                _id: comment._id,
+                postId: String(comment.media),
+                userId: (_a = comment.user) === null || _a === void 0 ? void 0 : _a._id,
+                content: comment.content,
+                parentCommentId: comment.parentCommentId || null,
+                createdAt: comment.createdAt,
+                likesCount: 0,
+                userLiked: false,
+                author: comment.user
+                    ? {
+                        _id: comment.user._id,
+                        username: comment.user.username,
+                        firstName: comment.user.firstName,
+                        lastName: comment.user.lastName,
+                        avatarUrl: comment.user.avatar,
+                    }
+                    : null,
+                replies: [],
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error creating forum post comment", { error: error.message, postId: req.params.postId });
+        res.status(500).json({ success: false, error: "Failed to create comment" });
+    }
+});
+exports.commentOnForumPost = commentOnForumPost;
+/**
+ * Like/Unlike Forum Comment
+ */
+const likeForumComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const commentId = req.params.commentId;
+        const userId = req.userId;
+        if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+            res.status(400).json({ success: false, error: "Invalid comment or user ID" });
+            return;
+        }
+        // Check if comment exists
+        const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+            _id: commentId,
+            interactionType: "comment",
+            isRemoved: { $ne: true },
+        });
+        if (!comment) {
+            res.status(404).json({ success: false, error: "Comment not found" });
+            return;
+        }
+        // Check if user already liked this comment
+        const existingLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
+            user: userId,
+            media: new mongoose_1.Types.ObjectId(commentId),
+            interactionType: "like",
+        });
+        let liked;
+        let likesCount;
+        if (existingLike) {
+            // Unlike - remove the interaction
+            yield mediaInteraction_model_1.MediaInteraction.findByIdAndDelete(existingLike._id);
+            liked = false;
+        }
+        else {
+            // Like - create new interaction
+            yield mediaInteraction_model_1.MediaInteraction.create({
+                user: userId,
+                media: new mongoose_1.Types.ObjectId(commentId),
+                interactionType: "like",
+                lastInteraction: new Date(),
+                count: 1,
+            });
+            liked = true;
+        }
+        // Get current likes count
+        likesCount = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+            media: new mongoose_1.Types.ObjectId(commentId),
+            interactionType: "like",
+        });
+        logger_1.default.info("Forum comment like toggled", { commentId, userId, liked, likesCount });
+        res.status(200).json({
+            success: true,
+            data: {
+                liked,
+                likesCount: likesCount,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error toggling forum comment like", { error: error.message, commentId: req.params.commentId });
+        res.status(500).json({ success: false, error: "Failed to toggle like" });
+    }
+});
+exports.likeForumComment = likeForumComment;

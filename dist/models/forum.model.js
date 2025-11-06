@@ -33,55 +33,40 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Poll = void 0;
+exports.Forum = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const pollSchema = new mongoose_1.Schema({
-    question: {
+const forumSchema = new mongoose_1.Schema({
+    title: {
         type: String,
         required: true,
-        minlength: 5,
-        maxlength: 200,
+        minlength: 3,
+        maxlength: 100,
     },
-    title: { type: String }, // Alias, will sync with question
     description: {
         type: String,
+        required: true,
+        minlength: 10,
         maxlength: 500,
     },
-    options: {
-        type: [String],
-        required: true,
-        validate: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 10,
+    createdBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
     },
-    multiSelect: { type: Boolean, default: false },
-    closesAt: { type: Date },
-    expiresAt: { type: Date }, // Alias, will sync with closesAt
-    authorId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-    votes: [
-        {
-            userId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-            optionIndexes: { type: [Number], required: true },
-            votedAt: { type: Date, default: Date.now },
-        },
-    ],
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    postsCount: {
+        type: Number,
+        default: 0
+    },
+    participantsCount: {
+        type: Number,
+        default: 0
+    },
 }, { timestamps: true });
-// Sync title with question
-pollSchema.pre("save", function (next) {
-    if (this.title && !this.question) {
-        this.question = this.title;
-    }
-    else if (this.question && !this.title) {
-        this.title = this.question;
-    }
-    // Sync expiresAt with closesAt
-    if (this.expiresAt && !this.closesAt) {
-        this.closesAt = this.expiresAt;
-    }
-    else if (this.closesAt && !this.expiresAt) {
-        this.expiresAt = this.closesAt;
-    }
-    next();
-});
-pollSchema.index({ createdAt: -1 });
-pollSchema.index({ closesAt: 1 });
-pollSchema.index({ authorId: 1, createdAt: -1 });
-exports.Poll = mongoose_1.default.models.Poll || mongoose_1.default.model("Poll", pollSchema);
+forumSchema.index({ createdAt: -1 });
+forumSchema.index({ isActive: 1, createdAt: -1 });
+forumSchema.index({ createdBy: 1 });
+exports.Forum = mongoose_1.default.models.Forum || mongoose_1.default.model("Forum", forumSchema);
