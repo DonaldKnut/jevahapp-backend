@@ -5,7 +5,7 @@ import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 
 /**
- * Update Poll (Admin Only)
+ * Update Poll (Creator or Admin Only)
  */
 export const updatePoll = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -23,10 +23,16 @@ export const updatePoll = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Check if user is admin
+    // Check if user is admin OR the poll creator
     const user = await User.findById(req.userId);
-    if (!user || user.role !== "admin") {
-      res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+    const isAdmin = user && user.role === "admin";
+    const isCreator = String(poll.authorId) === String(req.userId);
+    
+    if (!isAdmin && !isCreator) {
+      res.status(403).json({ 
+        success: false, 
+        error: "Forbidden: Only the poll creator or admin can update this poll" 
+      });
       return;
     }
 
@@ -108,7 +114,7 @@ export const updatePoll = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Delete Poll (Admin Only)
+ * Delete Poll (Creator or Admin Only)
  */
 export const deletePoll = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -125,10 +131,16 @@ export const deletePoll = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Check if user is admin
+    // Check if user is admin OR the poll creator
     const user = await User.findById(req.userId);
-    if (!user || user.role !== "admin") {
-      res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+    const isAdmin = user && user.role === "admin";
+    const isCreator = String(poll.authorId) === String(req.userId);
+    
+    if (!isAdmin && !isCreator) {
+      res.status(403).json({ 
+        success: false, 
+        error: "Forbidden: Only the poll creator or admin can delete this poll" 
+      });
       return;
     }
 

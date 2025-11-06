@@ -14,6 +14,7 @@ import {
   createPoll,
   listPolls,
   getPoll,
+  getMyPolls,
   voteOnPoll,
   createGroup,
   listGroups,
@@ -54,7 +55,7 @@ import {
   deletePoll,
 } from "../controllers/pollEnhancement.controller";
 import { verifyToken } from "../middleware/auth.middleware";
-import { rateLimiter } from "../middleware/rateLimiter";
+import { rateLimiter, apiRateLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
@@ -144,11 +145,12 @@ router.delete("/forum/threads/:id", verifyToken, deleteForumThread);
 router.post("/polls", verifyToken, rateLimiter(20, 15 * 60 * 1000), createPoll);
 router.post("/polls/create", verifyToken, rateLimiter(20, 15 * 60 * 1000), createPoll); // Alias for frontend compatibility
 router.get("/polls", listPolls);
+router.get("/polls/my", verifyToken, apiRateLimiter, getMyPolls); // Get current user's polls
 router.get("/polls/:id", getPoll);
 router.post("/polls/:id/vote", verifyToken, rateLimiter(60, 5 * 60 * 1000), voteOnPoll);
 router.post("/polls/:id/votes", verifyToken, rateLimiter(60, 5 * 60 * 1000), voteOnPoll); // Legacy alias
-router.put("/polls/:id", verifyToken, rateLimiter(10, 60 * 60 * 1000), updatePoll); // Admin only
-router.delete("/polls/:id", verifyToken, rateLimiter(10, 60 * 60 * 1000), deletePoll); // Admin only
+router.put("/polls/:id", verifyToken, rateLimiter(10, 60 * 60 * 1000), updatePoll); // Creator or Admin only
+router.delete("/polls/:id", verifyToken, rateLimiter(10, 60 * 60 * 1000), deletePoll); // Creator or Admin only
 
 /**
  * @openapi

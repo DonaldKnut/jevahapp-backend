@@ -95,11 +95,12 @@ router.delete("/forum/threads/:id", auth_middleware_1.verifyToken, communityCont
 router.post("/polls", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createPoll);
 router.post("/polls/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createPoll); // Alias for frontend compatibility
 router.get("/polls", communityContent_controller_1.listPolls);
+router.get("/polls/my", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, communityContent_controller_1.getMyPolls); // Get current user's polls
 router.get("/polls/:id", communityContent_controller_1.getPoll);
 router.post("/polls/:id/vote", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(60, 5 * 60 * 1000), communityContent_controller_1.voteOnPoll);
 router.post("/polls/:id/votes", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(60, 5 * 60 * 1000), communityContent_controller_1.voteOnPoll); // Legacy alias
-router.put("/polls/:id", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), pollEnhancement_controller_1.updatePoll); // Admin only
-router.delete("/polls/:id", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), pollEnhancement_controller_1.deletePoll); // Admin only
+router.put("/polls/:id", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), pollEnhancement_controller_1.updatePoll); // Creator or Admin only
+router.delete("/polls/:id", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), pollEnhancement_controller_1.deletePoll); // Creator or Admin only
 /**
  * @openapi
  * /api/community/groups:

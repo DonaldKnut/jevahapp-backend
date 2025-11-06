@@ -19,7 +19,7 @@ const user_model_1 = require("../models/user.model");
 const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
 /**
- * Update Poll (Admin Only)
+ * Update Poll (Creator or Admin Only)
  */
 const updatePoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -34,10 +34,15 @@ const updatePoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(404).json({ success: false, error: "Poll not found" });
             return;
         }
-        // Check if user is admin
+        // Check if user is admin OR the poll creator
         const user = yield user_model_1.User.findById(req.userId);
-        if (!user || user.role !== "admin") {
-            res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+        const isAdmin = user && user.role === "admin";
+        const isCreator = String(poll.authorId) === String(req.userId);
+        if (!isAdmin && !isCreator) {
+            res.status(403).json({
+                success: false,
+                error: "Forbidden: Only the poll creator or admin can update this poll"
+            });
             return;
         }
         // Update title/question
@@ -118,7 +123,7 @@ const updatePoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.updatePoll = updatePoll;
 /**
- * Delete Poll (Admin Only)
+ * Delete Poll (Creator or Admin Only)
  */
 const deletePoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -132,10 +137,15 @@ const deletePoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             res.status(404).json({ success: false, error: "Poll not found" });
             return;
         }
-        // Check if user is admin
+        // Check if user is admin OR the poll creator
         const user = yield user_model_1.User.findById(req.userId);
-        if (!user || user.role !== "admin") {
-            res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+        const isAdmin = user && user.role === "admin";
+        const isCreator = String(poll.authorId) === String(req.userId);
+        if (!isAdmin && !isCreator) {
+            res.status(403).json({
+                success: false,
+                error: "Forbidden: Only the poll creator or admin can delete this poll"
+            });
             return;
         }
         yield poll_model_1.Poll.findByIdAndDelete(id);
