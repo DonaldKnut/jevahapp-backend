@@ -49,7 +49,6 @@ import {
   refreshVideoUrl,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
-import { requireAdminOrCreator } from "../middleware/role.middleware";
 import {
   apiRateLimiter,
   mediaUploadRateLimiter,
@@ -189,12 +188,12 @@ router.get("/:id/stats", verifyToken, apiRateLimiter, getMediaStats);
 
 /**
  * @route   DELETE /api/media/:id
- * @desc    Delete a media item (restricted to admins or the creator)
- * @access  Protected & Role Restricted (Admin or Content Creator)
+ * @desc    Delete a media item (only the creator or admin can delete)
+ * @access  Protected (Authenticated users only - authorization checked in service)
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @returns { success: boolean, message: string }
  */
-router.delete("/:id", verifyToken, requireAdminOrCreator, deleteMedia);
+router.delete("/:id", verifyToken, deleteMedia);
 
 // REMOVED: Duplicate bookmark endpoints - use unified bookmark system instead
 // POST /api/bookmark/:mediaId/toggle - Unified bookmark toggle

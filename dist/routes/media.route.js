@@ -7,7 +7,6 @@ const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const media_controller_1 = require("../controllers/media.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
-const role_middleware_1 = require("../middleware/role.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 // Configure Multer for in-memory file uploads
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
@@ -115,12 +114,12 @@ router.get("/:id", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, 
 router.get("/:id/stats", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getMediaStats);
 /**
  * @route   DELETE /api/media/:id
- * @desc    Delete a media item (restricted to admins or the creator)
- * @access  Protected & Role Restricted (Admin or Content Creator)
+ * @desc    Delete a media item (only the creator or admin can delete)
+ * @access  Protected (Authenticated users only - authorization checked in service)
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @returns { success: boolean, message: string }
  */
-router.delete("/:id", auth_middleware_1.verifyToken, role_middleware_1.requireAdminOrCreator, media_controller_1.deleteMedia);
+router.delete("/:id", auth_middleware_1.verifyToken, media_controller_1.deleteMedia);
 // REMOVED: Duplicate bookmark endpoints - use unified bookmark system instead
 // POST /api/bookmark/:mediaId/toggle - Unified bookmark toggle
 // GET /api/bookmark/:mediaId/status - Check bookmark status
