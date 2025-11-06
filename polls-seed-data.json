@@ -1,0 +1,491 @@
+{
+  "description": "Complete poll seed data for JevahApp Community - Backend Seeding",
+  "version": "1.0.0",
+  "notes": [
+    "All polls include complete options array with proper structure",
+    "Dates are in ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)",
+    "isActive is calculated based on expiresAt vs current date",
+    "Backend should populate createdByUser from the admin user",
+    "votesCount and percentage should be initialized to 0 for new polls"
+  ],
+  "polls": [
+    {
+      "title": "What is your favorite time to pray?",
+      "question": "What is your favorite time to pray?",
+      "description": "Help us understand the community's prayer habits and when people feel most connected to God.",
+      "options": [
+        {
+          "text": "Early morning (5-7 AM)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Mid-morning (8-10 AM)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Afternoon (12-2 PM)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Evening (6-8 PM)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Late night (9-11 PM)",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": false,
+      "expiresAt": "2025-12-31T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "Which Bible study topics interest you most?",
+      "question": "Which Bible study topics interest you most?",
+      "description": "We're planning our next Bible study series and want to know what the community wants to explore.",
+      "options": [
+        {
+          "text": "Book studies (e.g., Romans, John, Psalms)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Character studies (Biblical figures)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Theological topics (Faith, Grace, Salvation)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Practical Christian living",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Prophecy and End Times",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-11-30T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "How often do you read your Bible?",
+      "question": "How often do you read your Bible?",
+      "description": "Understanding community engagement with Scripture helps us provide better resources.",
+      "options": [
+        {
+          "text": "Daily",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Several times a week",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Once a week",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "A few times a month",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Rarely or never",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": false,
+      "expiresAt": "2025-10-31T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "What type of worship music do you prefer?",
+      "question": "What type of worship music do you prefer?",
+      "description": "Help us curate better worship playlists and music recommendations for the community.",
+      "options": [
+        {
+          "text": "Contemporary Christian",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Gospel",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Hymns (Traditional)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Christian Hip-Hop/Rap",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Instrumental/Ambient",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "No preference - I like all types",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-09-30T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "What areas of spiritual growth do you want to focus on?",
+      "question": "What areas of spiritual growth do you want to focus on?",
+      "description": "We want to create content and resources that help you grow in your faith journey.",
+      "options": [
+        {
+          "text": "Prayer life",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Bible knowledge and understanding",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Evangelism and sharing faith",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Overcoming sin and temptation",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Building Christian community",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Serving others and ministry",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-08-31T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "How do you prefer to receive daily devotionals?",
+      "question": "How do you prefer to receive daily devotionals?",
+      "description": "We're planning to launch daily devotionals and want to know your preferred format.",
+      "options": [
+        {
+          "text": "In-app notifications",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Email",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Push notifications",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Within the app (no notifications)",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "I don't want daily devotionals",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": false,
+      "expiresAt": "2025-07-31T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "Which community events would you like to see?",
+      "question": "Which community events would you like to see?",
+      "description": "We're planning community events and want your input on what would be most valuable.",
+      "options": [
+        {
+          "text": "Virtual prayer meetings",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Bible study groups",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Worship nights",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Testimony sharing sessions",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Q&A sessions with pastors",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Community service projects",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-06-30T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "What challenges you most in your faith walk?",
+      "question": "What challenges you most in your faith walk?",
+      "description": "Understanding community struggles helps us create supportive content and resources.",
+      "options": [
+        {
+          "text": "Doubt and questions about faith",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Consistent prayer and Bible reading",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Dealing with sin and temptation",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Finding Christian community",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Suffering and hard times",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Balancing faith with daily life",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-05-31T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "How do you use the JevahApp community features?",
+      "question": "How do you use the JevahApp community features?",
+      "description": "Help us understand how you engage with community features to improve your experience.",
+      "options": [
+        {
+          "text": "Prayer wall - Posting and viewing prayers",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Forums - Reading and posting discussions",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Groups - Joining and participating in groups",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Polls - Voting and viewing results",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "I mostly browse and read",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-04-30T23:59:59.000Z",
+      "isActive": true
+    },
+    {
+      "title": "What motivates you to stay connected with the community?",
+      "question": "What motivates you to stay connected with the community?",
+      "description": "Understanding what keeps you engaged helps us build a stronger community.",
+      "options": [
+        {
+          "text": "Spiritual growth and learning",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Encouragement and support",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Fellowship with other believers",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Prayer support",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Accountability",
+          "votesCount": 0,
+          "percentage": 0
+        },
+        {
+          "text": "Serving and helping others",
+          "votesCount": 0,
+          "percentage": 0
+        }
+      ],
+      "multiSelect": true,
+      "expiresAt": "2025-03-31T23:59:59.000Z",
+      "isActive": true
+    }
+  ],
+  "expiredPolls": [
+    {
+      "title": "What brought you to JevahApp?",
+      "question": "What brought you to JevahApp?",
+      "description": "We're excited to learn what drew you to our community and how we can better serve you.",
+      "options": [
+        {
+          "text": "Looking for Christian community",
+          "votesCount": 45,
+          "percentage": 32
+        },
+        {
+          "text": "Need for daily devotionals",
+          "votesCount": 38,
+          "percentage": 27
+        },
+        {
+          "text": "Prayer support",
+          "votesCount": 32,
+          "percentage": 23
+        },
+        {
+          "text": "Bible study resources",
+          "votesCount": 25,
+          "percentage": 18
+        }
+      ],
+      "multiSelect": false,
+      "expiresAt": "2024-12-31T23:59:59.000Z",
+      "isActive": false,
+      "totalVotes": 140,
+      "createdAt": "2024-11-01T10:00:00.000Z"
+    },
+    {
+      "title": "Which Bible version do you prefer?",
+      "question": "Which Bible version do you prefer?",
+      "description": "Understanding Bible version preferences helps us provide better content recommendations.",
+      "options": [
+        {
+          "text": "NIV (New International Version)",
+          "votesCount": 52,
+          "percentage": 35
+        },
+        {
+          "text": "KJV (King James Version)",
+          "votesCount": 38,
+          "percentage": 26
+        },
+        {
+          "text": "ESV (English Standard Version)",
+          "votesCount": 31,
+          "percentage": 21
+        },
+        {
+          "text": "NLT (New Living Translation)",
+          "votesCount": 18,
+          "percentage": 12
+        },
+        {
+          "text": "Other",
+          "votesCount": 9,
+          "percentage": 6
+        }
+      ],
+      "multiSelect": false,
+      "expiresAt": "2024-11-30T23:59:59.000Z",
+      "isActive": false,
+      "totalVotes": 148,
+      "createdAt": "2024-10-15T09:00:00.000Z"
+    }
+  ],
+  "seedingInstructions": {
+    "steps": [
+      "1. Validate all polls have required fields: title, question, options (min 2, max 10)",
+      "2. For each poll, generate unique _id for the poll and each option",
+      "3. Set createdBy to the admin user ID",
+      "4. Populate createdByUser with admin user details",
+      "5. Calculate isActive based on expiresAt vs current date",
+      "6. Initialize votesCount and percentage to 0 for new polls (unless provided)",
+      "7. Set totalVotes to 0 for new polls (sum of all option votesCount)",
+      "8. Set createdAt to current date if not provided",
+      "9. Ensure options array has proper structure with _id, text, votesCount, percentage",
+      "10. Validate dates are in ISO 8601 format"
+    ],
+    "validationRules": {
+      "title": "Required, string, min 5 characters, max 200 characters",
+      "question": "Required, should match title (for backward compatibility)",
+      "description": "Optional, string, max 500 characters",
+      "options": "Required array, min 2 options, max 10 options. Each option must have text field.",
+      "expiresAt": "Optional, must be future date if provided (for active polls)",
+      "multiSelect": "Optional boolean, default false",
+      "isActive": "Calculated: expiresAt > current date (or expiresAt is null)"
+    },
+    "backendFieldsToPopulate": [
+      "_id - Generate unique ObjectId for each poll",
+      "options[]._id - Generate unique ObjectId for each option",
+      "createdBy - Set to admin user ID",
+      "createdByUser - Populate from admin user document",
+      "createdAt - Set to current date if not provided",
+      "isActive - Calculate from expiresAt vs current date",
+      "totalVotes - Calculate from sum of option votesCount"
+    ]
+  }
+}

@@ -37,6 +37,7 @@ exports.Poll = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const pollSchema = new mongoose_1.Schema({
     question: { type: String, required: true },
+    description: { type: String, maxlength: 500 },
     options: { type: [String], required: true, validate: (v) => Array.isArray(v) && v.length >= 2 },
     multiSelect: { type: Boolean, default: false },
     closesAt: { type: Date },

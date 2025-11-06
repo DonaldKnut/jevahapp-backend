@@ -13,34 +13,37 @@
 ## Request
 
 ### Headers
+
 ```
 Authorization: Bearer {token}
 Content-Type: application/json
 ```
 
 ### Body
+
 ```json
 {
-  "title": "Forum Title",        // Required - 3-100 characters
+  "title": "Forum Title", // Required - 3-100 characters
   "description": "Forum description" // Required - 10-500 characters
 }
 ```
 
 ### Example Request
+
 ```typescript
 const createForum = async (title: string, description: string) => {
-  const response = await fetch('/api/community/forum/create', {
-    method: 'POST',
+  const response = await fetch("/api/community/forum/create", {
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       title: title,
-      description: description
-    })
+      description: description,
+    }),
   });
-  
+
   return await response.json();
 };
 ```
@@ -50,6 +53,7 @@ const createForum = async (title: string, description: string) => {
 ## Response
 
 ### Success (201 Created)
+
 ```json
 {
   "success": true,
@@ -72,6 +76,7 @@ const createForum = async (title: string, description: string) => {
 ```
 
 ### Error (400 Bad Request)
+
 ```json
 {
   "success": false,
@@ -80,6 +85,7 @@ const createForum = async (title: string, description: string) => {
 ```
 
 ### Error (401 Unauthorized)
+
 ```json
 {
   "success": false,
@@ -88,6 +94,7 @@ const createForum = async (title: string, description: string) => {
 ```
 
 ### Error (429 Too Many Requests)
+
 ```json
 {
   "success": false,
@@ -114,7 +121,7 @@ const handleCreateForum = async () => {
       "Youth Ministry Discussions",
       "A space for youth ministry leaders to share ideas and resources"
     );
-    
+
     if (result.success) {
       console.log("Forum created:", result.data);
       // Navigate to the new forum or refresh list
@@ -130,5 +137,3 @@ const handleCreateForum = async () => {
 ---
 
 **That's it!** Just hit the endpoint with title and description, and you'll get back the created forum object.
-
-

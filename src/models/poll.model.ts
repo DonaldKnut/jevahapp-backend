@@ -8,6 +8,7 @@ export interface IPollVote {
 
 export interface IPoll {
   question: string;
+  description?: string;
   options: string[];
   multiSelect?: boolean;
   closesAt?: Date | null;
@@ -22,6 +23,7 @@ export interface IPollDocument extends IPoll, Document {}
 const pollSchema = new Schema<IPollDocument>(
   {
     question: { type: String, required: true },
+    description: { type: String, maxlength: 500 },
     options: { type: [String], required: true, validate: (v: any) => Array.isArray(v) && v.length >= 2 },
     multiSelect: { type: Boolean, default: false },
     closesAt: { type: Date },
