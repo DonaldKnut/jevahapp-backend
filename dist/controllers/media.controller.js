@@ -414,11 +414,21 @@ const getMediaStats = (request, response) => __awaiter(void 0, void 0, void 0, f
 });
 exports.getMediaStats = getMediaStats;
 const deleteMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const { id } = request.params;
         const userIdentifier = request.userId;
-        const userRole = request.userRole;
-        if (!userIdentifier || !userRole) {
+        const userRole = (_a = request.user) === null || _a === void 0 ? void 0 : _a.role;
+        // Debug logging
+        console.log("Delete Media Request:", {
+            mediaId: id,
+            userId: userIdentifier,
+            userRole: userRole,
+            hasUser: !!request.user,
+            authHeader: request.headers.authorization ? "present" : "missing",
+        });
+        if (!userIdentifier) {
+            console.error("Delete Media: No user identifier found");
             response.status(401).json({
                 success: false,
                 message: "Unauthorized: User not authenticated",
@@ -432,7 +442,7 @@ const deleteMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
-        yield media_service_1.mediaService.deleteMedia(id, userIdentifier, userRole);
+        yield media_service_1.mediaService.deleteMedia(id, userIdentifier, userRole || "");
         response.status(200).json({
             success: true,
             message: "Media deleted successfully",

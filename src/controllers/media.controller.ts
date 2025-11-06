@@ -490,9 +490,19 @@ export const deleteMedia = async (
   try {
     const { id } = request.params;
     const userIdentifier = request.userId;
-    const userRole = request.userRole;
+    const userRole = request.user?.role;
 
-    if (!userIdentifier || !userRole) {
+    // Debug logging
+    console.log("Delete Media Request:", {
+      mediaId: id,
+      userId: userIdentifier,
+      userRole: userRole,
+      hasUser: !!request.user,
+      authHeader: request.headers.authorization ? "present" : "missing",
+    });
+
+    if (!userIdentifier) {
+      console.error("Delete Media: No user identifier found");
       response.status(401).json({
         success: false,
         message: "Unauthorized: User not authenticated",
@@ -508,7 +518,7 @@ export const deleteMedia = async (
       return;
     }
 
-    await mediaService.deleteMedia(id, userIdentifier, userRole);
+    await mediaService.deleteMedia(id, userIdentifier, userRole || "");
 
     response.status(200).json({
       success: true,
