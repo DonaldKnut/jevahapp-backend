@@ -41,15 +41,37 @@ const createPrayerPost = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.createPrayerPost = createPrayerPost;
 const listPrayerPosts = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
-    const sortParam = String(req.query.sort || "recent");
-    const sort = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
-    const [items, total] = yield Promise.all([
-        prayerPost_model_1.PrayerPost.find().populate("authorId", "firstName lastName avatar").sort(sort).skip((page - 1) * limit).limit(limit),
-        prayerPost_model_1.PrayerPost.countDocuments(),
-    ]);
-    res.status(200).json({ success: true, items: items.map(serialize), page, pageSize: items.length, total });
+    try {
+        const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+        const sortParam = String(req.query.sort || "recent");
+        const sort = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
+        const [items, total] = yield Promise.all([
+            prayerPost_model_1.PrayerPost.find()
+                .select("content anonymous media authorId createdAt updatedAt")
+                .populate("authorId", "firstName lastName avatar")
+                .sort(sort)
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean(),
+            prayerPost_model_1.PrayerPost.countDocuments(),
+        ]);
+        res.status(200).json({
+            success: true,
+            items: items.map(serialize),
+            page,
+            pageSize: items.length,
+            total
+        });
+    }
+    catch (error) {
+        logger_1.default.error("List prayer posts error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch prayer posts",
+            error: process.env.NODE_ENV === "development" ? error.message : undefined
+        });
+    }
 });
 exports.listPrayerPosts = listPrayerPosts;
 const getPrayerPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
