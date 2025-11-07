@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { HymnsService } from "../service/hymns.service";
 import logger from "../utils/logger";
+import cacheService from "../service/cache.service";
 
 /**
  * Get hymns with pagination and filtering
@@ -39,16 +40,25 @@ export const getHymns = async (req: Request, res: Response): Promise<void> => {
       : "title";
     const sortDirection = sortOrder === "desc" ? "desc" : "asc";
 
-    const result = await HymnsService.getHymns({
-      page: pageNum,
-      limit: limitNum,
-      category: category as string,
-      search: search as string,
-      sortBy: sortField,
-      sortOrder: sortDirection,
-      source: source as string,
-      tags: tags ? (tags as string).split(",") : undefined,
-    });
+    const cacheKey = `hymns:list:${pageNum}:${limitNum}:${category || "all"}:${search || "none"}:${sortField}:${sortDirection}:${source || "all"}:${tags || "none"}`;
+    
+    // Cache for 10 minutes (600 seconds)
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        return await HymnsService.getHymns({
+          page: pageNum,
+          limit: limitNum,
+          category: category as string,
+          search: search as string,
+          sortBy: sortField,
+          sortOrder: sortDirection,
+          source: source as string,
+          tags: tags ? (tags as string).split(",") : undefined,
+        });
+      },
+      600 // 10 minutes cache
+    );
 
     res.status(200).json({
       success: true,
@@ -81,23 +91,34 @@ export const getHymnById = async (
       return;
     }
 
-    const hymn = await HymnsService.getHymnById(id);
-
-    if (!hymn) {
-      res.status(404).json({
-        success: false,
-        message: "Hymn not found",
-      });
+    const cacheKey = `hymn:${id}`;
+    
+    // Cache for 30 minutes (1800 seconds) - hymns don't change often
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const hymn = await HymnsService.getHymnById(id);
+        
+        if (!hymn) {
+          return { success: false, message: "Hymn not found" };
+        }
+        
+        return { success: true, data: hymn };
+      },
+      1800 // 30 minutes cache
+    );
+    
+    if (!result.success) {
+      res.status(404).json(result);
       return;
     }
 
-    // Increment view count
-    await HymnsService.incrementViewCount(id);
-
-    res.status(200).json({
-      success: true,
-      data: hymn,
+    // Increment view count (async, don't block response)
+    HymnsService.incrementViewCount(id).catch(err => {
+      logger.error("Failed to increment view count:", err);
     });
+
+    res.status(200).json(result);
   } catch (error: any) {
     logger.error("Get hymn by ID error:", error);
     res.status(500).json({
@@ -304,13 +325,24 @@ export const getHymnsByCategory = async (
       return;
     }
 
-    const result = await HymnsService.getHymns({
-      page: parseInt(page as string) || 1,
-      limit: parseInt(limit as string) || 20,
-      category,
-      sortBy: sortBy as any,
-      sortOrder: sortOrder as any,
-    });
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
+    const cacheKey = `hymns:category:${category}:${pageNum}:${limitNum}:${sortBy}:${sortOrder}`;
+    
+    // Cache for 10 minutes (600 seconds)
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        return await HymnsService.getHymns({
+          page: pageNum,
+          limit: limitNum,
+          category,
+          sortBy: sortBy as any,
+          sortOrder: sortOrder as any,
+        });
+      },
+      600 // 10 minutes cache
+    );
 
     res.status(200).json({
       success: true,

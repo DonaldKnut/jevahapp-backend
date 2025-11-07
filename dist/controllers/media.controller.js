@@ -53,6 +53,7 @@ const media_model_1 = require("../models/media.model");
 const contaboStreaming_service_1 = __importDefault(require("../service/contaboStreaming.service"));
 const liveRecording_service_1 = __importDefault(require("../service/liveRecording.service"));
 const notification_service_1 = require("../service/notification.service");
+const cache_service_1 = __importDefault(require("../service/cache.service"));
 const getAnalyticsDashboard = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userIdentifier = request.userId;
@@ -235,6 +236,9 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             topics: parsedTopics,
             duration,
         });
+        // Invalidate cache for media lists
+        yield cache_service_1.default.delPattern("media:public:*");
+        yield cache_service_1.default.delPattern("media:all:*");
         // Return success response
         response.status(201).json({
             success: true,
@@ -443,6 +447,11 @@ const deleteMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             return;
         }
         yield media_service_1.mediaService.deleteMedia(id, userIdentifier, userRole || "");
+        // Invalidate cache for this media and related caches
+        yield cache_service_1.default.del(`media:public:${id}`);
+        yield cache_service_1.default.del(`media:${id}`);
+        yield cache_service_1.default.delPattern("media:public:*");
+        yield cache_service_1.default.delPattern("media:all:*");
         response.status(200).json({
             success: true,
             message: "Media deleted successfully",
@@ -1418,12 +1427,18 @@ exports.goLive = goLive;
 const getPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const filters = request.query;
-        const mediaList = yield media_service_1.mediaService.getAllMedia(filters);
-        response.status(200).json({
-            success: true,
-            media: mediaList.media,
-            pagination: mediaList.pagination,
-        });
+        const cacheKey = `media:public:${JSON.stringify(filters)}`;
+        // Cache for 5 minutes (300 seconds)
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            const mediaList = yield media_service_1.mediaService.getAllMedia(filters);
+            return {
+                success: true,
+                media: mediaList.media,
+                pagination: mediaList.pagination,
+            };
+        }), 300 // 5 minutes cache
+        );
+        response.status(200).json(result);
     }
     catch (error) {
         console.error("Fetch public media error:", error);
@@ -1435,26 +1450,32 @@ const getPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, 
 });
 exports.getPublicMedia = getPublicMedia;
 const getPublicAllContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     try {
-        const result = yield media_service_1.mediaService.getAllContentForAllTab();
-        // Public endpoint can still include non-personalized recommendations
-        let recommendations = undefined;
-        try {
-            recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(undefined, {
-                limitPerSection: 12,
-                mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
-            });
-        }
-        catch (err) {
-            recommendations = undefined;
-        }
-        response.status(200).json({
-            success: true,
-            media: result.media,
-            total: result.total,
-            recommendations,
-        });
+        const cacheKey = `media:public:all-content:${request.query.mood || "default"}`;
+        // Cache for 5 minutes (300 seconds)
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            var _a;
+            const mediaResult = yield media_service_1.mediaService.getAllContentForAllTab();
+            // Public endpoint can still include non-personalized recommendations
+            let recommendations = undefined;
+            try {
+                recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(undefined, {
+                    limitPerSection: 12,
+                    mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
+                });
+            }
+            catch (err) {
+                recommendations = undefined;
+            }
+            return {
+                success: true,
+                media: mediaResult.media,
+                total: mediaResult.total,
+                recommendations,
+            };
+        }), 300 // 5 minutes cache
+        );
+        response.status(200).json(result);
     }
     catch (error) {
         console.error("Fetch public all content error:", error);
@@ -1475,18 +1496,27 @@ const getPublicMediaByIdentifier = (request, response) => __awaiter(void 0, void
             });
             return;
         }
-        const media = yield media_service_1.mediaService.getMediaByIdentifier(id);
-        if (!media) {
-            response.status(404).json({
-                success: false,
-                message: "Media not found",
-            });
+        const cacheKey = `media:public:${id}`;
+        // Cache for 10 minutes (600 seconds)
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            const media = yield media_service_1.mediaService.getMediaByIdentifier(id);
+            if (!media) {
+                return {
+                    success: false,
+                    message: "Media not found",
+                };
+            }
+            return {
+                success: true,
+                media: media.toObject(),
+            };
+        }), 600 // 10 minutes cache
+        );
+        if (!result.success) {
+            response.status(404).json(result);
             return;
         }
-        response.status(200).json({
-            success: true,
-            media,
-        });
+        response.status(200).json(result);
     }
     catch (error) {
         console.error("Fetch public media by ID error:", error);

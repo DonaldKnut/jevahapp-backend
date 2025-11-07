@@ -354,7 +354,12 @@ export class HymnsService {
     const skip = (page - 1) * limit;
 
     const [hymnsLean, total] = await Promise.all([
-      Hymn.find(query).sort(sort).skip(skip).limit(limit).lean(),
+      Hymn.find(query)
+        .select("title lyrics scriptureReferences category tags source isActive createdAt")
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Hymn.countDocuments(query),
     ]);
 

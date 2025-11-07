@@ -240,6 +240,7 @@ class MediaService {
             const limit = parseInt(filters.limit) || 10;
             const skip = (page - 1) * limit;
             const mediaList = yield media_model_1.Media.find(query)
+                .select("title description contentType category thumbnailUrl uploadedBy createdAt viewCount likeCount shareCount duration topics")
                 .sort(sort)
                 .skip(skip)
                 .limit(limit)

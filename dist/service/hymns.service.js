@@ -283,7 +283,12 @@ class HymnsService {
             sort[sortBy] = sortOrder === "asc" ? 1 : -1;
             const skip = (page - 1) * limit;
             const [hymnsLean, total] = yield Promise.all([
-                hymn_model_1.Hymn.find(query).sort(sort).skip(skip).limit(limit).lean(),
+                hymn_model_1.Hymn.find(query)
+                    .select("title lyrics scriptureReferences category tags source isActive createdAt")
+                    .sort(sort)
+                    .skip(skip)
+                    .limit(limit)
+                    .lean(),
                 hymn_model_1.Hymn.countDocuments(query),
             ]);
             const hymns = hymnsLean;

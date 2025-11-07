@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchHymnsByTags = exports.getHymnsByCategory = exports.updateHymnInteractions = exports.getHymnStats = exports.syncPopularHymns = exports.searchHymnsByScripture = exports.getHymnById = exports.getHymns = void 0;
 const hymns_service_1 = require("../service/hymns.service");
 const logger_1 = __importDefault(require("../utils/logger"));
+const cache_service_1 = __importDefault(require("../service/cache.service"));
 /**
  * Get hymns with pagination and filtering
  */
@@ -37,16 +38,21 @@ const getHymns = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             ? sortBy
             : "title";
         const sortDirection = sortOrder === "desc" ? "desc" : "asc";
-        const result = yield hymns_service_1.HymnsService.getHymns({
-            page: pageNum,
-            limit: limitNum,
-            category: category,
-            search: search,
-            sortBy: sortField,
-            sortOrder: sortDirection,
-            source: source,
-            tags: tags ? tags.split(",") : undefined,
-        });
+        const cacheKey = `hymns:list:${pageNum}:${limitNum}:${category || "all"}:${search || "none"}:${sortField}:${sortDirection}:${source || "all"}:${tags || "none"}`;
+        // Cache for 10 minutes (600 seconds)
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            return yield hymns_service_1.HymnsService.getHymns({
+                page: pageNum,
+                limit: limitNum,
+                category: category,
+                search: search,
+                sortBy: sortField,
+                sortOrder: sortDirection,
+                source: source,
+                tags: tags ? tags.split(",") : undefined,
+            });
+        }), 600 // 10 minutes cache
+        );
         res.status(200).json({
             success: true,
             data: result,
@@ -74,20 +80,25 @@ const getHymnById = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             });
             return;
         }
-        const hymn = yield hymns_service_1.HymnsService.getHymnById(id);
-        if (!hymn) {
-            res.status(404).json({
-                success: false,
-                message: "Hymn not found",
-            });
+        const cacheKey = `hymn:${id}`;
+        // Cache for 30 minutes (1800 seconds) - hymns don't change often
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            const hymn = yield hymns_service_1.HymnsService.getHymnById(id);
+            if (!hymn) {
+                return { success: false, message: "Hymn not found" };
+            }
+            return { success: true, data: hymn };
+        }), 1800 // 30 minutes cache
+        );
+        if (!result.success) {
+            res.status(404).json(result);
             return;
         }
-        // Increment view count
-        yield hymns_service_1.HymnsService.incrementViewCount(id);
-        res.status(200).json({
-            success: true,
-            data: hymn,
+        // Increment view count (async, don't block response)
+        hymns_service_1.HymnsService.incrementViewCount(id).catch(err => {
+            logger_1.default.error("Failed to increment view count:", err);
         });
+        res.status(200).json(result);
     }
     catch (error) {
         logger_1.default.error("Get hymn by ID error:", error);
@@ -265,13 +276,20 @@ const getHymnsByCategory = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        const result = yield hymns_service_1.HymnsService.getHymns({
-            page: parseInt(page) || 1,
-            limit: parseInt(limit) || 20,
-            category,
-            sortBy: sortBy,
-            sortOrder: sortOrder,
-        });
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 20;
+        const cacheKey = `hymns:category:${category}:${pageNum}:${limitNum}:${sortBy}:${sortOrder}`;
+        // Cache for 10 minutes (600 seconds)
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+            return yield hymns_service_1.HymnsService.getHymns({
+                page: pageNum,
+                limit: limitNum,
+                category,
+                sortBy: sortBy,
+                sortOrder: sortOrder,
+            });
+        }), 600 // 10 minutes cache
+        );
         res.status(200).json({
             success: true,
             data: result,

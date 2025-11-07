@@ -3,6 +3,7 @@
 import mongoose from "mongoose";
 import { server } from "./app";
 import logger from "./utils/logger";
+import { mongooseConfig } from "./config/database.config";
 
 // Environment variables are loaded in app.ts
 
@@ -20,11 +21,14 @@ if (missingVars.length > 0) {
 
 const PORT = process.env.PORT || 4000;
 
-// Connect to MongoDB and start server
+// Connect to MongoDB with optimized connection pooling
 mongoose
-  .connect(process.env.MONGODB_URI!)
+  .connect(process.env.MONGODB_URI!, mongooseConfig)
   .then(() => {
-    logger.info("✅ MongoDB connected successfully");
+    logger.info("✅ MongoDB connected with connection pooling", {
+      maxPoolSize: mongooseConfig.maxPoolSize,
+      minPoolSize: mongooseConfig.minPoolSize,
+    });
 
     server.listen(PORT, () => {
       logger.info(`✅ Server running at http://localhost:${PORT}`);

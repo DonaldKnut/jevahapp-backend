@@ -7,6 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importDefault(require("mongoose"));
 const app_1 = require("./app");
 const logger_1 = __importDefault(require("./utils/logger"));
+const database_config_1 = require("./config/database.config");
 // Environment variables are loaded in app.ts
 // Validate required environment variables
 const requiredEnvVars = ["MONGODB_URI", "PORT", "JWT_SECRET"];
@@ -16,11 +17,14 @@ if (missingVars.length > 0) {
     process.exit(1);
 }
 const PORT = process.env.PORT || 4000;
-// Connect to MongoDB and start server
+// Connect to MongoDB with optimized connection pooling
 mongoose_1.default
-    .connect(process.env.MONGODB_URI)
+    .connect(process.env.MONGODB_URI, database_config_1.mongooseConfig)
     .then(() => {
-    logger_1.default.info("✅ MongoDB connected successfully");
+    logger_1.default.info("✅ MongoDB connected with connection pooling", {
+        maxPoolSize: database_config_1.mongooseConfig.maxPoolSize,
+        minPoolSize: database_config_1.mongooseConfig.minPoolSize,
+    });
     app_1.server.listen(PORT, () => {
         logger_1.default.info(`✅ Server running at http://localhost:${PORT}`);
         logger_1.default.info(`🔌 Socket.IO server ready for real-time connections`);

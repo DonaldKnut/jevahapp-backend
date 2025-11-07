@@ -319,6 +319,7 @@ export class MediaService {
     const skip = (page - 1) * limit;
 
     const mediaList = await Media.find(query)
+      .select("title description contentType category thumbnailUrl uploadedBy createdAt viewCount likeCount shareCount duration topics")
       .sort(sort)
       .skip(skip)
       .limit(limit)

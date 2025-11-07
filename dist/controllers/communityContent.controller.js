@@ -18,6 +18,7 @@ const forumThread_model_1 = require("../models/forumThread.model");
 const poll_model_1 = require("../models/poll.model");
 const group_model_1 = require("../models/group.model");
 const logger_1 = __importDefault(require("../utils/logger"));
+const cache_service_1 = __importDefault(require("../service/cache.service"));
 // ===== Prayer Wall =====
 const createPrayerPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { content, anonymous, media } = req.body || {};
@@ -209,6 +210,8 @@ const createPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         authorId: req.userId,
         votes: [],
     });
+    // Invalidate poll list caches
+    yield cache_service_1.default.delPattern("polls:list:*");
     logger_1.default.info("Poll created", { pollId: doc._id, authorId: req.userId });
     res.status(201).json({ success: true, poll: serializePoll(doc, req.userId) });
 });
@@ -217,26 +220,51 @@ const listPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
     const status = String(req.query.status || "all");
-    const now = new Date();
-    const query = {};
-    if (status === "open")
-        query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
-    if (status === "closed")
-        query.closesAt = { $lte: now };
-    const [items, total] = yield Promise.all([
-        poll_model_1.Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-        poll_model_1.Poll.countDocuments(query),
-    ]);
-    res.status(200).json({ success: true, items: items.map(poll => serializePoll(poll)), page, pageSize: items.length, total });
+    const cacheKey = `polls:list:${status}:${page}:${limit}`;
+    // Cache for 5 minutes (300 seconds)
+    const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+        const now = new Date();
+        const query = {};
+        if (status === "open")
+            query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
+        if (status === "closed")
+            query.closesAt = { $lte: now };
+        const [items, total] = yield Promise.all([
+            poll_model_1.Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+            poll_model_1.Poll.countDocuments(query),
+        ]);
+        return {
+            success: true,
+            items: items.map(poll => serializePoll(poll)),
+            page,
+            pageSize: items.length,
+            total,
+        };
+    }), 300 // 5 minutes cache
+    );
+    res.status(200).json(result);
 });
 exports.listPolls = listPolls;
 const getPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const doc = yield poll_model_1.Poll.findById(req.params.id).populate("authorId", "firstName lastName avatar");
-    if (!doc) {
-        res.status(404).json({ success: false, message: "Not Found" });
+    const { id } = req.params;
+    const cacheKey = `poll:${id}:${req.userId || "anonymous"}`;
+    // Cache for 2 minutes (120 seconds) - shorter because votes change frequently
+    const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
+        const doc = yield poll_model_1.Poll.findById(id).populate("authorId", "firstName lastName avatar");
+        if (!doc) {
+            return { success: false, message: "Not Found" };
+        }
+        return {
+            success: true,
+            poll: serializePoll(doc, req.userId),
+        };
+    }), 120 // 2 minutes cache (shorter for polls with votes)
+    );
+    if (!result.success) {
+        res.status(404).json(result);
         return;
     }
-    res.status(200).json({ success: true, poll: serializePoll(doc, req.userId) });
+    res.status(200).json(result);
 });
 exports.getPoll = getPoll;
 const getMyPolls = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -289,6 +317,9 @@ const voteOnPoll = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     poll.votes = poll.votes.filter((v) => String(v.userId) !== String(req.userId));
     poll.votes.push({ userId: req.userId, optionIndexes, votedAt: new Date() });
     yield poll.save();
+    // Invalidate cache for this poll and poll lists
+    yield cache_service_1.default.delPattern(`poll:${req.params.id}:*`);
+    yield cache_service_1.default.delPattern("polls:list:*");
     logger_1.default.info("Poll voted", { pollId: poll._id, userId: req.userId });
     res.status(200).json({ success: true, poll: serializePoll(poll, req.userId) });
 });

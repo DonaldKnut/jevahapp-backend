@@ -5,6 +5,7 @@ import { Poll } from "../models/poll.model";
 import { Group } from "../models/group.model";
 import { User } from "../models/user.model";
 import logger from "../utils/logger";
+import cacheService from "../service/cache.service";
 
 // ===== Prayer Wall =====
 export const createPrayerPost = async (req: Request, res: Response): Promise<void> => {
@@ -193,6 +194,10 @@ export const createPoll = async (req: Request, res: Response): Promise<void> => 
     authorId: req.userId,
     votes: [],
   });
+  
+  // Invalidate poll list caches
+  await cacheService.delPattern("polls:list:*");
+  
   logger.info("Poll created", { pollId: doc._id, authorId: req.userId });
   res.status(201).json({ success: true, poll: serializePoll(doc, req.userId) });
 };
@@ -201,24 +206,61 @@ export const listPolls = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const status = String(req.query.status || "all");
-  const now = new Date();
-  const query: any = {};
-  if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
-  if (status === "closed") query.closesAt = { $lte: now };
-  const [items, total] = await Promise.all([
-    Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-    Poll.countDocuments(query),
-  ]);
-  res.status(200).json({ success: true, items: items.map(poll => serializePoll(poll)), page, pageSize: items.length, total });
+  
+  const cacheKey = `polls:list:${status}:${page}:${limit}`;
+  
+  // Cache for 5 minutes (300 seconds)
+  const result = await cacheService.getOrSet(
+    cacheKey,
+    async () => {
+      const now = new Date();
+      const query: any = {};
+      if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
+      if (status === "closed") query.closesAt = { $lte: now };
+      const [items, total] = await Promise.all([
+        Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+        Poll.countDocuments(query),
+      ]);
+      return {
+        success: true,
+        items: items.map(poll => serializePoll(poll)),
+        page,
+        pageSize: items.length,
+        total,
+      };
+    },
+    300 // 5 minutes cache
+  );
+  
+  res.status(200).json(result);
 };
 
 export const getPoll = async (req: Request, res: Response): Promise<void> => {
-  const doc = await Poll.findById(req.params.id).populate("authorId", "firstName lastName avatar");
-  if (!doc) {
-    res.status(404).json({ success: false, message: "Not Found" });
+  const { id } = req.params;
+  const cacheKey = `poll:${id}:${req.userId || "anonymous"}`;
+  
+  // Cache for 2 minutes (120 seconds) - shorter because votes change frequently
+  const result = await cacheService.getOrSet(
+    cacheKey,
+    async () => {
+      const doc = await Poll.findById(id).populate("authorId", "firstName lastName avatar");
+      if (!doc) {
+        return { success: false, message: "Not Found" };
+      }
+      return {
+        success: true,
+        poll: serializePoll(doc, req.userId),
+      };
+    },
+    120 // 2 minutes cache (shorter for polls with votes)
+  );
+  
+  if (!result.success) {
+    res.status(404).json(result);
     return;
   }
-  res.status(200).json({ success: true, poll: serializePoll(doc, req.userId) });
+  
+  res.status(200).json(result);
 };
 
 export const getMyPolls = async (req: Request, res: Response): Promise<void> => {
@@ -274,6 +316,11 @@ export const voteOnPoll = async (req: Request, res: Response): Promise<void> => 
   poll.votes = poll.votes.filter((v: any) => String(v.userId) !== String(req.userId));
   poll.votes.push({ userId: req.userId as any, optionIndexes, votedAt: new Date() });
   await poll.save();
+  
+  // Invalidate cache for this poll and poll lists
+  await cacheService.delPattern(`poll:${req.params.id}:*`);
+  await cacheService.delPattern("polls:list:*");
+  
   logger.info("Poll voted", { pollId: poll._id, userId: req.userId });
   res.status(200).json({ success: true, poll: serializePoll(poll, req.userId) });
 };

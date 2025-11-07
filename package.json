@@ -19,7 +19,8 @@
     "cleanup:users": "node scripts/cleanup-orphaned-users.js",
     "seed:forums": "node scripts/seed-forum-categories.js",
     "seed:polls": "node scripts/seed-polls.js",
-    "seed:polls:clear": "node scripts/seed-polls.js --clear"
+    "seed:polls:clear": "node scripts/seed-polls.js --clear",
+    "indexes:create": "node scripts/create-performance-indexes.js"
   },
   "keywords": [
     "gospel",
@@ -54,6 +55,7 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0",
     "mongoose": "^8.15.0",

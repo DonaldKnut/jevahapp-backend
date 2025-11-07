@@ -6,6 +6,7 @@ import { Media } from "../models/media.model";
 import contaboStreamingService from "../service/contaboStreaming.service";
 import liveRecordingService from "../service/liveRecording.service";
 import { NotificationService } from "../service/notification.service";
+import cacheService from "../service/cache.service";
 
 interface UploadMediaRequestBody {
   title: string;
@@ -276,6 +277,10 @@ export const uploadMedia = async (
       duration,
     });
 
+    // Invalidate cache for media lists
+    await cacheService.delPattern("media:public:*");
+    await cacheService.delPattern("media:all:*");
+
     // Return success response
     response.status(201).json({
       success: true,
@@ -519,6 +524,12 @@ export const deleteMedia = async (
     }
 
     await mediaService.deleteMedia(id, userIdentifier, userRole || "");
+
+    // Invalidate cache for this media and related caches
+    await cacheService.del(`media:public:${id}`);
+    await cacheService.del(`media:${id}`);
+    await cacheService.delPattern("media:public:*");
+    await cacheService.delPattern("media:all:*");
 
     response.status(200).json({
       success: true,
@@ -1693,13 +1704,23 @@ export const getPublicMedia = async (
 ): Promise<void> => {
   try {
     const filters = request.query;
-    const mediaList = await mediaService.getAllMedia(filters);
+    const cacheKey = `media:public:${JSON.stringify(filters)}`;
+    
+    // Cache for 5 minutes (300 seconds)
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const mediaList = await mediaService.getAllMedia(filters);
+        return {
+          success: true,
+          media: mediaList.media,
+          pagination: mediaList.pagination,
+        };
+      },
+      300 // 5 minutes cache
+    );
 
-    response.status(200).json({
-      success: true,
-      media: mediaList.media,
-      pagination: mediaList.pagination,
-    });
+    response.status(200).json(result);
   } catch (error: any) {
     console.error("Fetch public media error:", error);
     response.status(500).json({
@@ -1714,28 +1735,39 @@ export const getPublicAllContent = async (
   response: Response
 ): Promise<void> => {
   try {
-    const result = await mediaService.getAllContentForAllTab();
+    const cacheKey = `media:public:all-content:${request.query.mood || "default"}`;
+    
+    // Cache for 5 minutes (300 seconds)
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const mediaResult = await mediaService.getAllContentForAllTab();
 
-    // Public endpoint can still include non-personalized recommendations
-    let recommendations: any = undefined;
-    try {
-      recommendations = await mediaService.getRecommendationsForAllContent(
-        undefined,
-        {
-          limitPerSection: 12,
-          mood: (request.query?.mood as string) || undefined,
+        // Public endpoint can still include non-personalized recommendations
+        let recommendations: any = undefined;
+        try {
+          recommendations = await mediaService.getRecommendationsForAllContent(
+            undefined,
+            {
+              limitPerSection: 12,
+              mood: (request.query?.mood as string) || undefined,
+            }
+          );
+        } catch (err) {
+          recommendations = undefined;
         }
-      );
-    } catch (err) {
-      recommendations = undefined;
-    }
 
-    response.status(200).json({
-      success: true,
-      media: result.media,
-      total: result.total,
-      recommendations,
-    });
+        return {
+          success: true,
+          media: mediaResult.media,
+          total: mediaResult.total,
+          recommendations,
+        };
+      },
+      300 // 5 minutes cache
+    );
+
+    response.status(200).json(result);
   } catch (error: any) {
     console.error("Fetch public all content error:", error);
     response.status(500).json({
@@ -1760,20 +1792,35 @@ export const getPublicMediaByIdentifier = async (
       return;
     }
 
-    const media = await mediaService.getMediaByIdentifier(id);
+    const cacheKey = `media:public:${id}`;
+    
+    // Cache for 10 minutes (600 seconds)
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const media = await mediaService.getMediaByIdentifier(id);
+        
+        if (!media) {
+          return {
+            success: false,
+            message: "Media not found",
+          };
+        }
 
-    if (!media) {
-      response.status(404).json({
-        success: false,
-        message: "Media not found",
-      });
+        return {
+          success: true,
+          media: media.toObject(),
+        };
+      },
+      600 // 10 minutes cache
+    );
+
+    if (!result.success) {
+      response.status(404).json(result);
       return;
     }
 
-    response.status(200).json({
-      success: true,
-      media,
-    });
+    response.status(200).json(result);
   } catch (error: any) {
     console.error("Fetch public media by ID error:", error);
     response.status(500).json({
