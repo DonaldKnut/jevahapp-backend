@@ -9,8 +9,6 @@ exports.mongooseConfig = {
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
     family: 4, // Use IPv4, skip trying IPv6
-    bufferMaxEntries: 0, // Disable mongoose buffering
-    bufferCommands: false, // Disable mongoose buffering
     retryWrites: true,
     retryReads: true,
 };

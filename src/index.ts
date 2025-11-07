@@ -21,6 +21,9 @@ if (missingVars.length > 0) {
 
 const PORT = process.env.PORT || 4000;
 
+// Disable mongoose buffering globally (before connection)
+mongoose.set("bufferCommands", false);
+
 // Connect to MongoDB with optimized connection pooling
 mongoose
   .connect(process.env.MONGODB_URI!, mongooseConfig)
