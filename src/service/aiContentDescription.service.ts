@@ -185,10 +185,16 @@ ENHANCED_DESCRIPTION: [Create an alternative, more detailed description (3-4 sen
 - Make each description unique and engaging
 
 **Content Type Focus:**
-- Videos/Audio: Spiritual teachings, worship, inspiration, biblical insights
-- Books/eBooks: Spiritual growth, biblical wisdom, practical Christian living
-- Music: Worship, praise, spiritual encouragement, connection with God
-- Teachings: Biblical insights, spiritual development, faith building
+- Videos: Focus on visual content, spiritual teachings, worship experiences, inspiration, biblical insights. Use words like "watch", "experience", "visual journey", "see", "witness". Emphasize the visual and emotional impact.
+- Audio: Focus on listening experience, powerful messages, spiritual encouragement. Use words like "listen", "hear", "audio message", "sound", "voice". Emphasize the auditory and inspirational impact.
+- Music: Focus on worship, praise, spiritual encouragement, connection with God through music. Use words like "worship", "praise", "song", "melody", "harmony", "musical". Emphasize the worship and spiritual connection.
+- Books/eBooks: Focus on spiritual growth, biblical wisdom, practical Christian living, reading experience. Use words like "read", "learn", "discover", "book", "guide", "resource". Emphasize knowledge and spiritual growth.
+- Teachings: Focus on biblical insights, spiritual development, faith building, learning. Use words like "teach", "learn", "understand", "biblical wisdom", "spiritual growth". Emphasize education and understanding.
+- Sermon: Focus on preaching, biblical messages, spiritual guidance, church teachings. Use words like "sermon", "preach", "message", "biblical teaching", "spiritual guidance". Emphasize the preaching and teaching aspect.
+- Devotional: Focus on daily devotion, prayer, spiritual reflection, personal growth. Use words like "devotion", "prayer", "reflection", "daily", "spiritual growth". Emphasize personal spiritual development.
+- Podcast: Focus on audio discussions, conversations, spiritual topics, listening experience. Use words like "podcast", "conversation", "discussion", "listen", "episode". Emphasize the conversational and educational aspect.
+
+**IMPORTANT**: Tailor your description specifically to the content type provided. If it's a video, write about watching and visual experience. If it's music, write about worship and musical experience. If it's a book, write about reading and learning. Make it clear what type of content this is.
 
 Generate content that feels authentic and varied, not robotic or templated.`;
   }

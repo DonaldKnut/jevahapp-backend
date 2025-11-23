@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -17,14 +50,14 @@ const forum_model_1 = require("../models/forum.model");
 const forumPost_model_1 = require("../models/forumPost.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const user_model_1 = require("../models/user.model");
-const mongoose_1 = require("mongoose");
+const mongoose_1 = __importStar(require("mongoose"));
 const logger_1 = __importDefault(require("../utils/logger"));
 /**
  * Create Forum (Authenticated Users)
  */
 const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { title, description } = req.body || {};
+        const { title, description, categoryId } = req.body || {};
         if (!title || typeof title !== "string" || title.trim().length < 3) {
             res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
             return;
@@ -41,7 +74,20 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
             return;
         }
-        // Verify user is authenticated (handled by verifyToken middleware)
+        if (!categoryId || typeof categoryId !== "string" || !mongoose_1.Types.ObjectId.isValid(categoryId)) {
+            res.status(400).json({ success: false, error: "Validation error: categoryId is required" });
+            return;
+        }
+        // Verify category exists (legacy categories may not have isCategory flag yet)
+        const category = yield forum_model_1.Forum.findOne({
+            _id: new mongoose_1.Types.ObjectId(categoryId),
+            isActive: true,
+            $or: [{ isCategory: true }, { categoryId: { $exists: false } }],
+        }).select("title description isCategory");
+        if (!category) {
+            res.status(400).json({ success: false, error: "Validation error: category not found" });
+            return;
+        }
         if (!req.userId) {
             res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
             return;
@@ -51,11 +97,16 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             description: description.trim(),
             createdBy: req.userId,
             isActive: true,
+            isCategory: false,
+            categoryId: category._id,
             postsCount: 0,
             participantsCount: 0,
         });
-        yield forum.populate("createdBy", "firstName lastName username avatar");
-        logger_1.default.info("Forum created", { forumId: forum._id, createdBy: req.userId });
+        yield forum.populate([
+            { path: "createdBy", select: "firstName lastName username avatar" },
+            { path: "categoryId", select: "title description" },
+        ]);
+        logger_1.default.info("Forum created", { forumId: forum._id, createdBy: req.userId, categoryId: category._id });
         res.status(201).json({
             success: true,
             data: serializeForum(forum),
@@ -74,13 +125,31 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     try {
         const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
         const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+        const viewParam = String(req.query.view || req.query.type || "categories").toLowerCase();
+        const categoryFilter = req.query.categoryId;
+        const query = { isActive: true };
+        if (categoryFilter && typeof categoryFilter === "string" && mongoose_1.Types.ObjectId.isValid(categoryFilter)) {
+            query.categoryId = new mongoose_1.Types.ObjectId(categoryFilter);
+            query.isCategory = false;
+        }
+        else if (viewParam === "discussions") {
+            query.$or = [{ isCategory: false }, { categoryId: { $exists: true } }];
+        }
+        else if (viewParam === "all") {
+            // no additional filtering
+        }
+        else {
+            // default to categories
+            query.$or = [{ isCategory: true }, { categoryId: { $exists: false } }];
+        }
         const [forums, total] = yield Promise.all([
-            forum_model_1.Forum.find({ isActive: true })
+            forum_model_1.Forum.find(query)
                 .populate("createdBy", "firstName lastName username avatar")
+                .populate("categoryId", "title description")
                 .sort({ createdAt: -1 })
                 .skip((page - 1) * limit)
                 .limit(limit),
-            forum_model_1.Forum.countDocuments({ isActive: true }),
+            forum_model_1.Forum.countDocuments(query),
         ]);
         res.status(200).json({
             success: true,
@@ -117,6 +186,10 @@ const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
         const forum = yield forum_model_1.Forum.findById(forumId);
         if (!forum || !forum.isActive) {
             res.status(404).json({ success: false, error: "Forum not found or inactive" });
+            return;
+        }
+        if (forum.isCategory) {
+            res.status(400).json({ success: false, error: "Cannot post directly to a category" });
             return;
         }
         if (!content || typeof content !== "string" || content.trim().length === 0) {
@@ -161,7 +234,7 @@ const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
             }
         }
         const post = yield forumPost_model_1.ForumPost.create({
-            forumId: new mongoose_1.Types.ObjectId(forumId),
+            forumId: new mongoose_1.default.Types.ObjectId(forumId),
             userId: req.userId,
             content: content.trim(),
             embeddedLinks: Array.isArray(embeddedLinks) ? embeddedLinks : undefined,
@@ -180,11 +253,10 @@ const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
         }
         yield forum.save();
         yield post.populate("userId", "firstName lastName username avatar");
-        yield post.populate("forumId", "title");
-        logger_1.default.info("Forum post created", { postId: post._id, forumId, userId: req.userId });
+        logger_1.default.info("Forum post created", { postId: post._id, forumId: forum._id, userId: req.userId });
         res.status(201).json({
             success: true,
-            data: yield serializeForumPost(post, req.userId),
+            post: yield serializeForumPost(post, req.userId),
         });
     }
     catch (error) {
@@ -378,10 +450,23 @@ exports.deleteForumPost = deleteForumPost;
 function serializeForum(doc) {
     var _a;
     const obj = doc.toObject ? doc.toObject() : doc;
+    const category = obj.categoryId && typeof obj.categoryId === "object" && obj.categoryId._id
+        ? {
+            id: String(obj.categoryId._id),
+            title: obj.categoryId.title,
+            description: obj.categoryId.description,
+        }
+        : obj.categoryId
+            ? { id: String(obj.categoryId) }
+            : null;
     return {
+        id: String(obj._id),
         _id: String(obj._id),
         title: obj.title,
         description: obj.description,
+        isCategory: obj.isCategory || false,
+        categoryId: obj.categoryId ? String(obj.categoryId._id || obj.categoryId) : null,
+        category,
         createdBy: String(((_a = obj.createdBy) === null || _a === void 0 ? void 0 : _a._id) || obj.createdBy),
         createdAt: obj.createdAt,
         updatedAt: obj.updatedAt,
@@ -393,6 +478,8 @@ function serializeForum(doc) {
                 _id: String(obj.createdBy._id),
                 username: obj.createdBy.username,
                 avatarUrl: obj.createdBy.avatar,
+                firstName: obj.createdBy.firstName,
+                lastName: obj.createdBy.lastName,
             }
             : null,
     };

@@ -95,6 +95,19 @@ export interface IMedia extends Document {
   isDefaultContent?: boolean;
   isOnboardingContent?: boolean;
   
+  // Content moderation fields
+  moderationStatus?: "pending" | "approved" | "rejected" | "under_review";
+  moderationResult?: {
+    isApproved: boolean;
+    confidence: number;
+    reason?: string;
+    flags: string[];
+    requiresReview: boolean;
+    moderatedAt?: Date;
+  };
+  reportCount?: number;
+  isHidden?: boolean; // Hidden from public view due to reports/moderation
+  
   createdAt: Date;
   updatedAt: Date;
 }
@@ -391,6 +404,48 @@ const mediaSchema = new Schema<IMedia>(
   isOnboardingContent: {
     type: Boolean,
     default: false,
+  },
+  // Content moderation fields
+  moderationStatus: {
+    type: String,
+    enum: ["pending", "approved", "rejected", "under_review"],
+    default: "pending",
+    index: true,
+  },
+  moderationResult: {
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
+    confidence: {
+      type: Number,
+      min: 0,
+      max: 1,
+    },
+    reason: {
+      type: String,
+    },
+    flags: {
+      type: [String],
+      default: [],
+    },
+    requiresReview: {
+      type: Boolean,
+      default: false,
+    },
+    moderatedAt: {
+      type: Date,
+    },
+  },
+  reportCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  isHidden: {
+    type: Boolean,
+    default: false,
+    index: true,
   },
   },
   {

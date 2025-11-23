@@ -47,15 +47,15 @@ export const getHymns = async (req: Request, res: Response): Promise<void> => {
       cacheKey,
       async () => {
         return await HymnsService.getHymns({
-          page: pageNum,
-          limit: limitNum,
-          category: category as string,
-          search: search as string,
-          sortBy: sortField,
-          sortOrder: sortDirection,
-          source: source as string,
-          tags: tags ? (tags as string).split(",") : undefined,
-        });
+      page: pageNum,
+      limit: limitNum,
+      category: category as string,
+      search: search as string,
+      sortBy: sortField,
+      sortOrder: sortDirection,
+      source: source as string,
+      tags: tags ? (tags as string).split(",") : undefined,
+    });
       },
       600 // 10 minutes cache
     );
@@ -97,9 +97,9 @@ export const getHymnById = async (
     const result = await cacheService.getOrSet(
       cacheKey,
       async () => {
-        const hymn = await HymnsService.getHymnById(id);
-        
-        if (!hymn) {
+    const hymn = await HymnsService.getHymnById(id);
+
+    if (!hymn) {
           return { success: false, message: "Hymn not found" };
         }
         
@@ -336,10 +336,10 @@ export const getHymnsByCategory = async (
         return await HymnsService.getHymns({
           page: pageNum,
           limit: limitNum,
-          category,
-          sortBy: sortBy as any,
-          sortOrder: sortOrder as any,
-        });
+      category,
+      sortBy: sortBy as any,
+      sortOrder: sortOrder as any,
+    });
       },
       600 // 10 minutes cache
     );

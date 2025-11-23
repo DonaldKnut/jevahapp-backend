@@ -327,6 +327,48 @@ const mediaSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    // Content moderation fields
+    moderationStatus: {
+        type: String,
+        enum: ["pending", "approved", "rejected", "under_review"],
+        default: "pending",
+        index: true,
+    },
+    moderationResult: {
+        isApproved: {
+            type: Boolean,
+            default: false,
+        },
+        confidence: {
+            type: Number,
+            min: 0,
+            max: 1,
+        },
+        reason: {
+            type: String,
+        },
+        flags: {
+            type: [String],
+            default: [],
+        },
+        requiresReview: {
+            type: Boolean,
+            default: false,
+        },
+        moderatedAt: {
+            type: Date,
+        },
+    },
+    reportCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    isHidden: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
 }, {
     timestamps: true,
 });

@@ -64,8 +64,9 @@ Forum Thread (User-created standalone thread)
 
 **Who Creates What:**
 
-- ✅ **Users create Forum Categories** (e.g., "Bible Study & Teaching", "Youth Ministry")
-- ✅ **Users create Posts** within those categories
+- ✅ **Admins seed Forum Categories** (e.g., "Bible Study & Teaching", "Youth Ministry")
+- ✅ **Users create Discussion Forums** under a chosen category
+- ✅ **Users create Posts** within those forums
 - ✅ **Users comment** on posts
 
 **Use Cases:**
@@ -96,8 +97,8 @@ Forum Thread (User-created standalone thread)
 
 ```typescript
 // Forums (Authenticated users)
-POST   /api/community/forum/create          // Create forum category
-GET    /api/community/forum                 // List all forum categories
+POST   /api/community/forum/create          // Create forum discussion (requires categoryId)
+GET    /api/community/forum                 // List categories/discussions (see query params below)
 
 // Posts (Users)
 GET    /api/community/forum/:forumId/posts   // Get posts in forum
@@ -142,7 +143,7 @@ Headers: {
 
 ### FORUM CATEGORIES SYSTEM (Recommended)
 
-#### 1. Get All Forum Categories
+#### 1. Get Categories or Discussions
 
 **Endpoint:** `GET /api/community/forum`  
 **Access:** Public (no auth required)
@@ -152,11 +153,17 @@ Headers: {
 |-----------|------|---------|-------------|
 | `page` | number | 1 | Page number |
 | `limit` | number | 20 | Items per page (max 100) |
+| `view` | string | `categories` | `categories` \| `discussions` \| `all` |
+| `categoryId` | string | — | Filter discussions by parent category (requires `view=discussions` or `all`) |
 
-**Example Request:**
+**Example Requests:**
 
 ```typescript
-GET /api/community/forum?page=1&limit=20
+// Fetch seeded categories
+GET /api/community/forum?view=categories&page=1&limit=20
+
+// Fetch discussions under a specific category
+GET /api/community/forum?view=discussions&categoryId=64f1ff5f5f1a5b0012c4e101&page=1&limit=20
 ```
 
 **Success Response (200):**
@@ -195,7 +202,7 @@ GET /api/community/forum?page=1&limit=20
 
 ---
 
-#### 2. Create Forum Category (Authenticated Users)
+#### 2. Create Discussion Forum (Authenticated Users)
 
 **Endpoint:** `POST /api/community/forum/create`  
 **Access:** Authenticated users  
@@ -205,8 +212,9 @@ GET /api/community/forum?page=1&limit=20
 
 ```typescript
 {
-  title: string; // Required - 3-100 characters
-  description: string; // Required - 10-500 characters
+  categoryId: string; // Required – ObjectId of an existing category
+  title: string;      // Required – 3-100 characters
+  description: string;// Required – 10-500 characters
 }
 ```
 
@@ -215,8 +223,9 @@ GET /api/community/forum?page=1&limit=20
 ```typescript
 POST /api/community/forum/create
 {
-  "title": "Youth Ministry",
-  "description": "Discussions and resources for youth ministry leaders"
+  "categoryId": "64f1ff5f5f1a5b0012c4e101",
+  "title": "Youth Ministry Meetups",
+  "description": "Share ideas and coordinate monthly youth ministry gatherings"
 }
 ```
 
@@ -226,9 +235,17 @@ POST /api/community/forum/create
 {
   success: true,
   data: {
+    id: "forum-id",
     _id: "forum-id",
-    title: "Youth Ministry",
+    title: "Youth Ministry Meetups",
     description: "...",
+    isCategory: false,
+    categoryId: "64f1ff5f5f1a5b0012c4e101",
+    category: {
+      id: "64f1ff5f5f1a5b0012c4e101",
+      title: "Bible Study & Teaching",
+      description: "..."
+    },
     postsCount: 0,
     participantsCount: 0,
     isActive: true
@@ -236,12 +253,12 @@ POST /api/community/forum/create
 }
 ```
 
-**Error Response (401):**
+**Error Response (400):**
 
 ```typescript
 {
   success: false,
-  error: "Unauthorized: Authentication required"
+  error: "Validation error: categoryId is required"
 }
 ```
 

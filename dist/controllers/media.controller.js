@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.refreshVideoUrl = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMediaFile = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
+exports.generateMediaDescription = exports.removeFromOfflineDownloads = exports.getOfflineDownloads = exports.getOnboardingContent = exports.refreshVideoUrl = exports.getDefaultContent = exports.searchPublicMedia = exports.getPublicMediaByIdentifier = exports.getPublicAllContent = exports.getPublicMedia = exports.goLive = exports.getUserRecordings = exports.getRecordingStatus = exports.stopRecording = exports.startRecording = exports.getStreamStats = exports.scheduleLiveStream = exports.getStreamStatus = exports.getLiveStreams = exports.endMuxLiveStream = exports.startMuxLiveStream = exports.getViewedMedia = exports.addToViewedMedia = exports.getUserActionStatus = exports.recordUserAction = exports.shareMedia = exports.downloadMediaFile = exports.downloadMedia = exports.getMediaWithEngagement = exports.trackViewWithDuration = exports.recordMediaInteraction = exports.bookmarkMedia = exports.deleteMedia = exports.getMediaStats = exports.getMediaByIdentifier = exports.searchMedia = exports.getAllContentForAllTab = exports.getAllMedia = exports.uploadMedia = exports.getAnalyticsDashboard = void 0;
 const media_service_1 = require("../service/media.service");
 const bookmark_model_1 = require("../models/bookmark.model");
 const mongoose_1 = require("mongoose");
@@ -54,6 +54,14 @@ const contaboStreaming_service_1 = __importDefault(require("../service/contaboSt
 const liveRecording_service_1 = __importDefault(require("../service/liveRecording.service"));
 const notification_service_1 = require("../service/notification.service");
 const cache_service_1 = __importDefault(require("../service/cache.service"));
+const aiContentDescription_service_1 = require("../service/aiContentDescription.service");
+const user_model_1 = require("../models/user.model");
+const contentModeration_service_1 = require("../service/contentModeration.service");
+const mediaProcessing_service_1 = require("../service/mediaProcessing.service");
+const transcription_service_1 = require("../service/transcription.service");
+const logger_1 = __importDefault(require("../utils/logger"));
+const resendEmail_service_1 = __importDefault(require("../service/resendEmail.service"));
+const mediaReport_model_1 = require("../models/mediaReport.model");
 const getAnalyticsDashboard = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userIdentifier = request.userId;
@@ -222,6 +230,55 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
+        // PRE-UPLOAD VERIFICATION: Verify content before uploading to storage
+        // Skip verification for "live" content type as it doesn't require file uploads
+        let verificationResult = null;
+        if (contentType !== "live") {
+            logger_1.default.info("Starting pre-upload content verification");
+            try {
+                verificationResult = yield verifyContentBeforeUpload(file.buffer, file.mimetype, contentType, title, description);
+            }
+            catch (error) {
+                logger_1.default.error("Pre-upload verification error:", error);
+                // If verification fails, reject the upload for safety
+                response.status(400).json({
+                    success: false,
+                    message: "Content verification failed. Please try again or contact support.",
+                    error: error.message,
+                });
+                return;
+            }
+            // Check if content is approved
+            if (!verificationResult.isApproved) {
+                const status = verificationResult.moderationResult.requiresReview
+                    ? "under_review"
+                    : "rejected";
+                logger_1.default.warn("Content rejected during pre-upload verification", {
+                    status,
+                    reason: verificationResult.moderationResult.reason,
+                    flags: verificationResult.moderationResult.flags,
+                });
+                // Return appropriate error response
+                response.status(403).json({
+                    success: false,
+                    message: verificationResult.moderationResult.requiresReview
+                        ? "Content requires manual review before it can be uploaded. Please contact support."
+                        : "Content does not meet our community guidelines and cannot be uploaded.",
+                    moderationResult: {
+                        status,
+                        reason: verificationResult.moderationResult.reason,
+                        flags: verificationResult.moderationResult.flags,
+                        confidence: verificationResult.moderationResult.confidence,
+                    },
+                });
+                return;
+            }
+            // Content is approved - proceed with upload
+            logger_1.default.info("Content approved, proceeding with upload to storage");
+        }
+        else {
+            logger_1.default.info("Skipping verification for live content type");
+        }
         // Call mediaService to upload the media
         const media = yield media_service_1.mediaService.uploadMedia({
             title,
@@ -236,14 +293,38 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             topics: parsedTopics,
             duration,
         });
+        // Update media with pre-upload verification result (if verification was performed)
+        if (verificationResult) {
+            const updateData = {
+                moderationStatus: "approved",
+                moderationResult: Object.assign(Object.assign({}, verificationResult.moderationResult), { moderatedAt: new Date() }),
+                isHidden: false,
+            };
+            yield media_model_1.Media.findByIdAndUpdate(media._id, updateData);
+            // Update media object for response
+            media.moderationStatus = "approved";
+            media.moderationResult = updateData.moderationResult;
+            media.isHidden = false;
+        }
+        else {
+            // For live content, set to pending (will be moderated separately if needed)
+            const updateData = {
+                moderationStatus: "pending",
+                isHidden: false,
+            };
+            yield media_model_1.Media.findByIdAndUpdate(media._id, updateData);
+            media.moderationStatus = "pending";
+        }
         // Invalidate cache for media lists
         yield cache_service_1.default.delPattern("media:public:*");
         yield cache_service_1.default.delPattern("media:all:*");
         // Return success response
         response.status(201).json({
             success: true,
-            message: "Media uploaded successfully",
-            media: Object.assign(Object.assign({}, media.toObject()), { fileUrl: media.fileUrl, thumbnailUrl: media.thumbnailUrl }),
+            message: verificationResult
+                ? "Media uploaded successfully. Content has been verified and approved."
+                : "Media uploaded successfully.",
+            media: Object.assign(Object.assign({}, media.toObject()), { fileUrl: media.fileUrl, thumbnailUrl: media.thumbnailUrl, moderationStatus: media.moderationStatus || "pending", moderationResult: media.moderationResult }),
         });
     }
     catch (error) {
@@ -1891,3 +1972,443 @@ const removeFromOfflineDownloads = (request, response) => __awaiter(void 0, void
     }
 });
 exports.removeFromOfflineDownloads = removeFromOfflineDownloads;
+/**
+ * Extract text from PDF buffer for moderation
+ */
+function extractTextFromPDF(pdfBuffer) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            // Dynamic import for pdf-parse (uses ES Module pdfjs-dist)
+            const pdfParseModule = yield new Function('return import("pdf-parse")')();
+            const { PDFParse } = pdfParseModule;
+            // Create PDFParse instance
+            const pdfParser = new PDFParse({ data: pdfBuffer });
+            // Get text result
+            const textResult = yield pdfParser.getText();
+            // Clean up
+            yield pdfParser.destroy();
+            // Extract all text from pages
+            let fullText = "";
+            if (textResult.pages && textResult.pages.length > 0) {
+                // Use per-page text if available
+                fullText = textResult.pages
+                    .map((pageData) => pageData.text || "")
+                    .join("\n");
+            }
+            else if (textResult.text) {
+                // Fallback: use full text
+                fullText = textResult.text;
+            }
+            // Clean up text (remove excessive whitespace)
+            fullText = fullText.replace(/\s+/g, " ").trim();
+            // Limit text length for moderation (first 10000 characters should be enough)
+            return fullText.substring(0, 10000);
+        }
+        catch (error) {
+            logger_1.default.error("Failed to extract text from PDF", { error: error.message });
+            throw new Error("Failed to extract text from PDF");
+        }
+    });
+}
+/**
+ * Extract text from EPUB buffer for moderation
+ * EPUB is a ZIP archive containing HTML/XHTML files
+ * Note: For now, EPUB extraction is limited - we'll use basic moderation
+ * TODO: Add proper EPUB parsing library (e.g., epub2 or jszip)
+ */
+function extractTextFromEPUB(epubBuffer) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        try {
+            // Try to use jszip if available, otherwise fall back to basic extraction
+            let JSZip;
+            try {
+                // Dynamic import with type assertion to handle optional dependency
+                JSZip = yield Promise.resolve(`${"jszip"}`).then(s => __importStar(require(s))).catch(() => null);
+                if (!JSZip) {
+                    throw new Error("JSZip not available");
+                }
+            }
+            catch (importError) {
+                logger_1.default.warn("JSZip not available, EPUB text extraction will be limited");
+                // Return empty string - will fall back to title/description moderation
+                return "";
+            }
+            const zip = new JSZip.default();
+            const zipData = yield zip.loadAsync(epubBuffer);
+            let fullText = "";
+            // EPUB structure: content is usually in OEBPS/ or OPS/ folder
+            // Look for .html, .xhtml, or .htm files
+            const contentFiles = [];
+            zipData.forEach((relativePath, file) => {
+                if (!file.dir &&
+                    (relativePath.endsWith(".html") ||
+                        relativePath.endsWith(".xhtml") ||
+                        relativePath.endsWith(".htm")) &&
+                    !relativePath.includes("META-INF") &&
+                    !relativePath.includes("mimetype")) {
+                    contentFiles.push(relativePath);
+                }
+            });
+            // Extract text from content files (limit to first 10 files)
+            for (const filePath of contentFiles.slice(0, 10)) {
+                try {
+                    const fileContent = yield ((_a = zipData.file(filePath)) === null || _a === void 0 ? void 0 : _a.async("string"));
+                    if (fileContent) {
+                        // Remove HTML tags and extract text
+                        const textContent = fileContent
+                            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "") // Remove scripts
+                            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "") // Remove styles
+                            .replace(/<[^>]+>/g, " ") // Remove HTML tags
+                            .replace(/\s+/g, " ") // Normalize whitespace
+                            .trim();
+                        if (textContent) {
+                            fullText += textContent + "\n";
+                        }
+                    }
+                }
+                catch (error) {
+                    logger_1.default.warn(`Failed to extract text from EPUB file: ${filePath}`, error);
+                }
+            }
+            // Clean up text
+            fullText = fullText.trim();
+            if (!fullText) {
+                logger_1.default.warn("No text extracted from EPUB, will use basic moderation");
+                return "";
+            }
+            // Limit text length for moderation (first 10000 characters should be enough)
+            return fullText.substring(0, 10000);
+        }
+        catch (error) {
+            logger_1.default.error("Failed to extract text from EPUB", { error: error.message });
+            // Return empty string - will fall back to title/description moderation
+            return "";
+        }
+    });
+}
+/**
+ * Pre-upload content verification
+ * Processes files in memory, extracts audio/frames, transcribes, and runs moderation
+ * Returns moderation result before upload to storage
+ */
+function verifyContentBeforeUpload(file, fileMimeType, contentType, title, description) {
+    return __awaiter(this, void 0, void 0, function* () {
+        logger_1.default.info("Starting pre-upload content verification", {
+            contentType,
+            fileSize: file.length,
+            fileMimeType,
+        });
+        let transcript = "";
+        let videoFrames = [];
+        // For video content, extract audio and frames
+        if (contentType === "videos" && fileMimeType.startsWith("video")) {
+            try {
+                logger_1.default.info("Processing video: extracting audio and frames");
+                // Extract audio for transcription
+                const audioResult = yield mediaProcessing_service_1.mediaProcessingService.extractAudio(file, fileMimeType);
+                // Transcribe audio
+                const transcriptionResult = yield transcription_service_1.transcriptionService.transcribeAudio(audioResult.audioBuffer, "audio/mp3");
+                transcript = transcriptionResult.transcript;
+                logger_1.default.info("Video transcription completed", {
+                    transcriptLength: transcript.length,
+                });
+                // Extract video frames
+                const framesResult = yield mediaProcessing_service_1.mediaProcessingService.extractVideoFrames(file, fileMimeType, 3 // Extract 3 key frames
+                );
+                videoFrames = framesResult.frames;
+                logger_1.default.info("Video frames extracted", { frameCount: videoFrames.length });
+            }
+            catch (error) {
+                logger_1.default.warn("Media processing failed, continuing with basic moderation:", error);
+                // Continue with basic moderation (title/description only)
+            }
+        }
+        // For audio/music content, transcribe
+        if ((contentType === "music" || contentType === "audio") &&
+            fileMimeType.startsWith("audio")) {
+            try {
+                logger_1.default.info("Processing audio: transcribing");
+                const transcriptionResult = yield transcription_service_1.transcriptionService.transcribeAudio(file, fileMimeType);
+                transcript = transcriptionResult.transcript;
+                logger_1.default.info("Audio transcription completed", {
+                    transcriptLength: transcript.length,
+                });
+            }
+            catch (error) {
+                logger_1.default.warn("Transcription failed, continuing with basic moderation:", error);
+                // Continue with basic moderation (title/description only)
+            }
+        }
+        // For books/ebooks, extract text from PDF or EPUB
+        if (contentType === "books") {
+            try {
+                logger_1.default.info("Processing book: extracting text");
+                if (fileMimeType === "application/pdf") {
+                    // Extract text from PDF
+                    const pdfText = yield extractTextFromPDF(file);
+                    transcript = pdfText;
+                    logger_1.default.info("PDF text extraction completed", {
+                        textLength: transcript.length,
+                    });
+                }
+                else if (fileMimeType === "application/epub+zip") {
+                    // Extract text from EPUB
+                    const epubText = yield extractTextFromEPUB(file);
+                    transcript = epubText;
+                    logger_1.default.info("EPUB text extraction completed", {
+                        textLength: transcript.length,
+                    });
+                }
+                else {
+                    logger_1.default.warn("Unsupported book file type, continuing with basic moderation");
+                }
+            }
+            catch (error) {
+                logger_1.default.warn("Book text extraction failed, continuing with basic moderation:", error);
+                // Continue with basic moderation (title/description only)
+            }
+        }
+        // Run moderation
+        logger_1.default.info("Running AI moderation");
+        const moderationResult = yield contentModeration_service_1.contentModerationService.moderateContent({
+            transcript: transcript || undefined,
+            videoFrames: videoFrames.length > 0 ? videoFrames : undefined,
+            title,
+            description,
+            contentType,
+        });
+        logger_1.default.info("Pre-upload verification completed", {
+            isApproved: moderationResult.isApproved,
+            requiresReview: moderationResult.requiresReview,
+            confidence: moderationResult.confidence,
+        });
+        return {
+            isApproved: moderationResult.isApproved,
+            moderationResult,
+            transcript: transcript || undefined,
+            videoFrames: videoFrames.length > 0 ? videoFrames : undefined,
+        };
+    });
+}
+/**
+ * Generate AI-powered description for media creation
+ * This endpoint helps users generate engaging descriptions for their media content
+ */
+/**
+ * Async function to moderate content after upload
+ * This runs in the background and updates the media's moderation status
+ * NOTE: This is kept for backward compatibility but is no longer used for new uploads
+ */
+function moderateContentAsync(mediaId, mediaData) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        try {
+            logger_1.default.info("Starting content moderation", { mediaId });
+            let transcript = "";
+            let videoFrames = [];
+            // For video content, extract audio and frames
+            if (mediaData.contentType === "videos" && mediaData.fileMimeType.startsWith("video")) {
+                try {
+                    // Extract audio for transcription
+                    const audioResult = yield mediaProcessing_service_1.mediaProcessingService.extractAudio(mediaData.file, mediaData.fileMimeType);
+                    // Transcribe audio
+                    const transcriptionResult = yield transcription_service_1.transcriptionService.transcribeAudio(audioResult.audioBuffer, "audio/mp3");
+                    transcript = transcriptionResult.transcript;
+                    // Extract video frames
+                    const framesResult = yield mediaProcessing_service_1.mediaProcessingService.extractVideoFrames(mediaData.file, mediaData.fileMimeType, 3 // Extract 3 key frames
+                    );
+                    videoFrames = framesResult.frames;
+                }
+                catch (error) {
+                    logger_1.default.warn("Media processing failed, continuing with basic moderation:", error);
+                }
+            }
+            // For audio/music content, transcribe
+            if ((mediaData.contentType === "music" || mediaData.contentType === "audio") &&
+                mediaData.fileMimeType.startsWith("audio")) {
+                try {
+                    const transcriptionResult = yield transcription_service_1.transcriptionService.transcribeAudio(mediaData.file, mediaData.fileMimeType);
+                    transcript = transcriptionResult.transcript;
+                }
+                catch (error) {
+                    logger_1.default.warn("Transcription failed, continuing with basic moderation:", error);
+                }
+            }
+            // Run moderation
+            const moderationResult = yield contentModeration_service_1.contentModerationService.moderateContent({
+                transcript: transcript || undefined,
+                videoFrames: videoFrames.length > 0 ? videoFrames : undefined,
+                title: mediaData.title,
+                description: mediaData.description,
+                contentType: mediaData.contentType,
+            });
+            // Update media with moderation result
+            const updateData = {
+                moderationStatus: moderationResult.isApproved
+                    ? "approved"
+                    : moderationResult.requiresReview
+                        ? "under_review"
+                        : "rejected",
+                moderationResult: Object.assign(Object.assign({}, moderationResult), { moderatedAt: new Date() }),
+                isHidden: !moderationResult.isApproved && !moderationResult.requiresReview,
+            };
+            const media = yield media_model_1.Media.findByIdAndUpdate(mediaId, updateData).populate("uploadedBy", "firstName lastName email");
+            if (!media) {
+                logger_1.default.error("Media not found after moderation", { mediaId });
+                return;
+            }
+            // Get report count
+            const reportCount = yield mediaReport_model_1.MediaReport.countDocuments({
+                mediaId: new mongoose_1.Types.ObjectId(mediaId),
+                status: "pending",
+            });
+            // Send notifications
+            try {
+                // Notify admins if content is rejected or needs review
+                if (!moderationResult.isApproved || moderationResult.requiresReview || reportCount > 0) {
+                    const admins = yield user_model_1.User.find({ role: "admin" }).select("email");
+                    const adminEmails = admins.map(admin => admin.email).filter(Boolean);
+                    if (adminEmails.length > 0) {
+                        yield resendEmail_service_1.default.sendAdminModerationAlert(adminEmails, media.title, media.contentType, ((_a = media.uploadedBy) === null || _a === void 0 ? void 0 : _a.email) || "Unknown", moderationResult, reportCount);
+                    }
+                    // Also send in-app notification to admins
+                    for (const admin of admins) {
+                        yield notification_service_1.NotificationService.createNotification({
+                            userId: admin._id.toString(),
+                            type: "moderation_alert",
+                            title: "Content Moderation Alert",
+                            message: `Content "${media.title}" requires review`,
+                            metadata: {
+                                mediaId: mediaId,
+                                contentType: media.contentType,
+                                moderationStatus: updateData.moderationStatus,
+                                reportCount,
+                            },
+                            priority: "high",
+                            relatedId: mediaId,
+                        });
+                    }
+                }
+                // Notify user if content is rejected
+                if (!moderationResult.isApproved && !moderationResult.requiresReview) {
+                    const uploader = media.uploadedBy;
+                    if (uploader && uploader.email) {
+                        yield resendEmail_service_1.default.sendContentRemovedEmail(uploader.email, uploader.firstName || "User", media.title, moderationResult.reason || "Content violates community guidelines", moderationResult.flags || []);
+                        // Send in-app notification
+                        yield notification_service_1.NotificationService.createNotification({
+                            userId: uploader._id.toString(),
+                            type: "content_removed",
+                            title: "Content Removed",
+                            message: `Your content "${media.title}" has been removed`,
+                            metadata: {
+                                mediaId: mediaId,
+                                reason: moderationResult.reason,
+                                flags: moderationResult.flags,
+                            },
+                            priority: "high",
+                            relatedId: mediaId,
+                        });
+                    }
+                }
+            }
+            catch (emailError) {
+                logger_1.default.error("Failed to send moderation notifications:", emailError);
+                // Don't fail moderation if email fails
+            }
+            logger_1.default.info("Content moderation completed", {
+                mediaId,
+                isApproved: moderationResult.isApproved,
+                requiresReview: moderationResult.requiresReview,
+            });
+        }
+        catch (error) {
+            logger_1.default.error("Content moderation error:", error);
+            // On error, set to under_review for manual review
+            yield media_model_1.Media.findByIdAndUpdate(mediaId, {
+                moderationStatus: "under_review",
+                isHidden: false,
+            });
+        }
+    });
+}
+const generateMediaDescription = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { title, contentType, category, topics } = request.body;
+        // Validate required fields
+        if (!title || typeof title !== "string" || title.trim().length === 0) {
+            response.status(400).json({
+                success: false,
+                message: "Title is required",
+            });
+            return;
+        }
+        if (!contentType ||
+            !["music", "videos", "books", "live", "audio", "sermon", "devotional", "ebook", "podcast"].includes(contentType)) {
+            response.status(400).json({
+                success: false,
+                message: "Valid contentType is required (music, videos, books, live, audio, sermon, devotional, ebook, podcast)",
+            });
+            return;
+        }
+        // Get user info if authenticated (optional for this endpoint)
+        let authorInfo = undefined;
+        if (request.userId) {
+            try {
+                const user = yield user_model_1.User.findById(request.userId).select("firstName lastName username avatar");
+                if (user) {
+                    authorInfo = {
+                        _id: user._id.toString(),
+                        firstName: user.firstName || "",
+                        lastName: user.lastName || "",
+                        fullName: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown Author",
+                        avatar: user.avatar || undefined,
+                    };
+                }
+            }
+            catch (userError) {
+                // Non-blocking - continue without author info
+                console.log("Could not fetch user info for AI description:", userError);
+            }
+        }
+        // Prepare media content object for AI service
+        const mediaContent = {
+            _id: "temp-id", // Not needed for generation
+            title: title.trim(),
+            description: undefined, // No existing description
+            contentType: contentType,
+            category: category || undefined,
+            topics: Array.isArray(topics) ? topics : typeof topics === "string" ? [topics] : undefined,
+            authorInfo: authorInfo,
+        };
+        // Generate description using AI service
+        const aiResponse = yield aiContentDescription_service_1.aiContentDescriptionService.generateContentDescription(mediaContent);
+        if (!aiResponse.success) {
+            // Return fallback description if AI fails
+            response.status(200).json({
+                success: true,
+                description: aiResponse.description || aiContentDescription_service_1.aiContentDescriptionService.getFallbackDescription(mediaContent),
+                bibleVerses: aiResponse.bibleVerses || [],
+                message: "Description generated (using fallback)",
+            });
+            return;
+        }
+        // Return successful AI-generated description
+        response.status(200).json({
+            success: true,
+            description: aiResponse.description,
+            bibleVerses: aiResponse.bibleVerses || [],
+            enhancedDescription: aiResponse.enhancedDescription,
+            message: "Description generated successfully",
+        });
+    }
+    catch (error) {
+        console.error("Generate media description error:", error);
+        response.status(500).json({
+            success: false,
+            message: "Failed to generate description",
+            error: error.message,
+        });
+    }
+});
+exports.generateMediaDescription = generateMediaDescription;

@@ -40,11 +40,31 @@ export const verifyToken = async (
 
     // Fetch user and attach full user to request
     const user = await User.findById(decoded.userId).select(
-      "role isVerifiedCreator isVerifiedVendor isVerifiedChurch"
+      "role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil"
     );
     if (!user) {
       res.status(401).json({ success: false, message: "User not found" });
       return;
+    }
+
+    // Check if user is banned
+    if (user.isBanned) {
+      // Check if ban has expired
+      if (user.banUntil && new Date() > user.banUntil) {
+        // Ban expired, unban user
+        await User.findByIdAndUpdate(decoded.userId, {
+          isBanned: false,
+          banUntil: undefined,
+        });
+      } else {
+        res.status(403).json({
+          success: false,
+          message: "Account is banned",
+          banReason: user.banReason || "Violation of community guidelines",
+          banUntil: user.banUntil || null,
+        });
+        return;
+      }
     }
 
     // Attach the user object for role checks

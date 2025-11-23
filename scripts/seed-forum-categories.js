@@ -79,7 +79,7 @@ async function seedForumCategories() {
 
     // Find or create admin user
     console.log("\n📋 Setting up admin user...");
-    let adminUser = await User.findOne({ 
+    let adminUser = await User.findOne({
       $or: [
         { email: "admin@jevah.com" },
         { role: "admin" }
@@ -107,16 +107,27 @@ async function seedForumCategories() {
     console.log("\n🌱 Seeding forum categories...");
     let createdCount = 0;
     let skippedCount = 0;
+    let updatedCount = 0;
 
     for (const category of forumCategories) {
       // Check if category already exists (by title)
-      const existing = await Forum.findOne({ 
-        title: category.title 
+      const existing = await Forum.findOne({
+        title: category.title,
       });
 
       if (existing) {
-        console.log(`⏭️  Skipped: "${category.title}" (already exists)`);
-        skippedCount++;
+        // Ensure legacy categories are marked correctly
+        if (!existing.isCategory || existing.categoryId) {
+          existing.isCategory = true;
+          existing.categoryId = null;
+          existing.createdBy = existing.createdBy || adminUser._id;
+          await existing.save();
+          updatedCount++;
+          console.log(`🔄 Updated: "${category.title}" to category mode`);
+        } else {
+          console.log(`⏭️  Skipped: "${category.title}" (already exists)`);
+          skippedCount++;
+        }
         continue;
       }
 
@@ -125,7 +136,9 @@ async function seedForumCategories() {
         title: category.title,
         description: category.description,
         createdBy: adminUser._id,
+        isCategory: true,
         isActive: true,
+        categoryId: null,
         postsCount: 0,
         participantsCount: 0,
       });
@@ -138,12 +151,13 @@ async function seedForumCategories() {
     console.log("\n" + "=".repeat(50));
     console.log("📊 Seeding Summary:");
     console.log(`   ✅ Created: ${createdCount} categories`);
-    console.log(`   ⏭️  Skipped: ${skippedCount} categories (already exist)`);
+    console.log(`   🔄 Updated: ${updatedCount} categories`);
+    console.log(`   ⏭️  Skipped: ${skippedCount} categories (already category)`);
     console.log(`   📝 Total: ${forumCategories.length} categories`);
     console.log("=".repeat(50));
 
     // Display all active forums
-    const allForums = await Forum.find({ isActive: true })
+    const allForums = await Forum.find({ isActive: true, $or: [{ isCategory: true }, { categoryId: { $exists: false } }] })
       .populate("createdBy", "firstName lastName email")
       .sort({ createdAt: 1 });
 

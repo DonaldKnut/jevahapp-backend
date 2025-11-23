@@ -47,6 +47,8 @@ import {
   getOnboardingContent,
   // Video URL refresh method
   refreshVideoUrl,
+  // AI description generation
+  generateMediaDescription,
 } from "../controllers/media.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import {
@@ -99,6 +101,20 @@ router.get("/public/search", apiRateLimiter, searchPublicMedia);
  * @returns { success: boolean, media: object }
  */
 router.get("/public/:id", apiRateLimiter, getPublicMediaByIdentifier);
+
+/**
+ * @route   POST /api/media/generate-description
+ * @desc    Generate AI-powered description for media creation (helps users create engaging descriptions)
+ * @access  Protected (Authenticated users only - optional, works without auth too)
+ * @body    { title: string, contentType: "music" | "videos" | "books" | "live" | "audio" | "sermon" | "devotional" | "ebook" | "podcast", category?: string, topics?: string[] }
+ * @returns { success: boolean, description: string, bibleVerses?: string[], enhancedDescription?: string, message: string }
+ */
+router.post(
+  "/generate-description",
+  verifyToken, // Optional - will work without user info too
+  apiRateLimiter,
+  generateMediaDescription
+);
 
 /**
  * @route   POST /api/media/upload

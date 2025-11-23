@@ -43,6 +43,15 @@ router.get("/public/search", rateLimiter_1.apiRateLimiter, media_controller_1.se
  */
 router.get("/public/:id", rateLimiter_1.apiRateLimiter, media_controller_1.getPublicMediaByIdentifier);
 /**
+ * @route   POST /api/media/generate-description
+ * @desc    Generate AI-powered description for media creation (helps users create engaging descriptions)
+ * @access  Protected (Authenticated users only - optional, works without auth too)
+ * @body    { title: string, contentType: "music" | "videos" | "books" | "live" | "audio" | "sermon" | "devotional" | "ebook" | "podcast", category?: string, topics?: string[] }
+ * @returns { success: boolean, description: string, bibleVerses?: string[], enhancedDescription?: string, message: string }
+ */
+router.post("/generate-description", auth_middleware_1.verifyToken, // Optional - will work without user info too
+rateLimiter_1.apiRateLimiter, media_controller_1.generateMediaDescription);
+/**
  * @route   POST /api/media/upload
  * @desc    Upload a new media item (music, video, or book) with thumbnail
  * @access  Protected (Authenticated users only)

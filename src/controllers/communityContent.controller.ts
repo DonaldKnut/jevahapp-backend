@@ -30,12 +30,12 @@ export const createPrayerPost = async (req: Request, res: Response): Promise<voi
 
 export const listPrayerPosts = async (req: Request, res: Response): Promise<void> => {
   try {
-    const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
-    const sortParam = String(req.query.sort || "recent");
-    const sort: any = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
+  const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+  const sortParam = String(req.query.sort || "recent");
+  const sort: any = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
     
-    const [items, total] = await Promise.all([
+  const [items, total] = await Promise.all([
       PrayerPost.find()
         .select("content anonymous media authorId createdAt updatedAt")
         .populate("authorId", "firstName lastName avatar")
@@ -43,8 +43,8 @@ export const listPrayerPosts = async (req: Request, res: Response): Promise<void
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-      PrayerPost.countDocuments(),
-    ]);
+    PrayerPost.countDocuments(),
+  ]);
     
     res.status(200).json({ 
       success: true, 
@@ -236,14 +236,14 @@ export const listPolls = async (req: Request, res: Response): Promise<void> => {
   const result = await cacheService.getOrSet(
     cacheKey,
     async () => {
-      const now = new Date();
-      const query: any = {};
-      if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
-      if (status === "closed") query.closesAt = { $lte: now };
-      const [items, total] = await Promise.all([
+  const now = new Date();
+  const query: any = {};
+  if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
+  if (status === "closed") query.closesAt = { $lte: now };
+  const [items, total] = await Promise.all([
         Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-        Poll.countDocuments(query),
-      ]);
+    Poll.countDocuments(query),
+  ]);
       return {
         success: true,
         items: items.map(poll => serializePoll(poll)),

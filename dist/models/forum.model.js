@@ -51,22 +51,37 @@ const forumSchema = new mongoose_1.Schema({
     createdBy: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "User",
-        required: true
+        required: true,
     },
     isActive: {
         type: Boolean,
-        default: true
+        default: true,
+    },
+    isCategory: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    categoryId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "Forum",
+        default: null,
+        index: true,
     },
     postsCount: {
         type: Number,
-        default: 0
+        default: 0,
     },
     participantsCount: {
         type: Number,
-        default: 0
+        default: 0,
     },
 }, { timestamps: true });
 forumSchema.index({ createdAt: -1 });
 forumSchema.index({ isActive: 1, createdAt: -1 });
 forumSchema.index({ createdBy: 1 });
+forumSchema.index({ title: 1 }, {
+    unique: true,
+    partialFilterExpression: { isCategory: true },
+});
 exports.Forum = mongoose_1.default.models.Forum || mongoose_1.default.model("Forum", forumSchema);

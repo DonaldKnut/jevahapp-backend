@@ -194,6 +194,13 @@ export interface IUser {
   returnCount?: number;
   timezone?: string;
 
+  // Ban fields
+  isBanned?: boolean;
+  banReason?: string;
+  bannedAt?: Date;
+  banUntil?: Date;
+  bannedBy?: mongoose.Types.ObjectId;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -416,6 +423,12 @@ const userSchema = new Schema<IUserDocument>(
     totalSessions: { type: Number, default: 0 },
     returnCount: { type: Number, default: 0 },
     timezone: { type: String, default: "UTC" },
+    // Ban fields
+    isBanned: { type: Boolean, default: false, index: true },
+    banReason: { type: String },
+    bannedAt: { type: Date },
+    banUntil: { type: Date },
+    bannedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

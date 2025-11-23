@@ -15,10 +15,12 @@ import userRoutes from "./routes/user.route";
 import authRoutes from "./routes/auth.route";
 import locationRoutes from "./routes/location.routes";
 import mediaRoutes from "./routes/media.route";
+import mediaReportRoutes from "./routes/mediaReport.route";
 import pushNotificationRoutes from "./routes/pushNotification.routes";
 import aiReengagementRoutes from "./routes/aiReengagement.routes";
 import bibleFactsRoutes from "./routes/bibleFacts.routes";
 import adminRoutes from "./routes/admin.routes";
+import adminDashboardRoutes from "./routes/adminDashboard.routes";
 import devotionalsRoutes from "./routes/devotionals.routes";
 import logsRoutes from "./routes/logs.routes";
 // import artistRoutes from "./routes/artist.route";
@@ -218,7 +220,7 @@ app.get("/", (req, res) => {
       "Ebook Text Extraction & TTS",
       "Complete Bible Access & Search",
     ],
-    documentation: "https://jevahapp-backend.onrender.com/api-docs",
+    documentation: "https://jevahapp-backend-rped.onrender.com/api-docs",
   });
 });
 
@@ -254,11 +256,13 @@ app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/location", locationRoutes);
 app.use("/api/media", mediaRoutes);
+app.use("/api/media", mediaReportRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/push-notifications", pushNotificationRoutes);
 app.use("/api/ai-reengagement", aiReengagementRoutes);
 app.use("/api/bible-facts", bibleFactsRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/admin", adminDashboardRoutes);
 app.use("/api/devotionals", devotionalsRoutes);
 app.use("/api/logs", logsRoutes);
 // app.use("/api/artist", artistRoutes);
@@ -341,8 +345,12 @@ app.use(
 
 // Lightweight self-ping to mitigate cold starts (configurable)
 (() => {
-  const enabled = (process.env.SELF_PING_ENABLED || "true").toLowerCase() !== "false";
-  const intervalMinutes = parseInt(process.env.SELF_PING_INTERVAL_MIN || "10", 10);
+  const enabled =
+    (process.env.SELF_PING_ENABLED || "true").toLowerCase() !== "false";
+  const intervalMinutes = parseInt(
+    process.env.SELF_PING_INTERVAL_MIN || "10",
+    10
+  );
   const baseUrl =
     process.env.SELF_PING_URL ||
     process.env.RENDER_EXTERNAL_URL ||
@@ -355,7 +363,10 @@ app.use(
         const url = `${baseUrl.replace(/\/$/, "")}/health`;
         const response = await fetch(url, { method: "GET" });
         if (response.ok) {
-          logger.info("Self-ping successful", { url, timestamp: new Date().toISOString() });
+          logger.info("Self-ping successful", {
+            url,
+            timestamp: new Date().toISOString(),
+          });
         } else {
           logger.warn("Self-ping non-200", { status: response.status, url });
         }

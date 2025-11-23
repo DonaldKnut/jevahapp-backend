@@ -240,6 +240,12 @@ const userSchema = new mongoose_1.Schema({
     totalSessions: { type: Number, default: 0 },
     returnCount: { type: Number, default: 0 },
     timezone: { type: String, default: "UTC" },
+    // Ban fields
+    isBanned: { type: Boolean, default: false, index: true },
+    banReason: { type: String },
+    bannedAt: { type: Date },
+    banUntil: { type: Date },
+    bannedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });
 // Indexes for better performance
 userSchema.index({ "artistProfile.artistName": "text" });

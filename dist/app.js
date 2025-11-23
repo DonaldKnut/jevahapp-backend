@@ -28,10 +28,12 @@ const user_route_1 = __importDefault(require("./routes/user.route"));
 const auth_route_1 = __importDefault(require("./routes/auth.route"));
 const location_routes_1 = __importDefault(require("./routes/location.routes"));
 const media_route_1 = __importDefault(require("./routes/media.route"));
+const mediaReport_route_1 = __importDefault(require("./routes/mediaReport.route"));
 const pushNotification_routes_1 = __importDefault(require("./routes/pushNotification.routes"));
 const aiReengagement_routes_1 = __importDefault(require("./routes/aiReengagement.routes"));
 const bibleFacts_routes_1 = __importDefault(require("./routes/bibleFacts.routes"));
 const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
+const adminDashboard_routes_1 = __importDefault(require("./routes/adminDashboard.routes"));
 const devotionals_routes_1 = __importDefault(require("./routes/devotionals.routes"));
 const logs_routes_1 = __importDefault(require("./routes/logs.routes"));
 // import artistRoutes from "./routes/artist.route";
@@ -207,7 +209,7 @@ app.get("/", (req, res) => {
             "Ebook Text Extraction & TTS",
             "Complete Bible Access & Search",
         ],
-        documentation: "https://jevahapp-backend.onrender.com/api-docs",
+        documentation: "https://jevahapp-backend-rped.onrender.com/api-docs",
     });
 });
 // Health check endpoint
@@ -235,11 +237,13 @@ app.use("/api/users", user_route_1.default);
 app.use("/api/auth", auth_route_1.default);
 app.use("/api/location", location_routes_1.default);
 app.use("/api/media", media_route_1.default);
+app.use("/api/media", mediaReport_route_1.default);
 app.use("/api/notifications", notification_routes_1.default);
 app.use("/api/push-notifications", pushNotification_routes_1.default);
 app.use("/api/ai-reengagement", aiReengagement_routes_1.default);
 app.use("/api/bible-facts", bibleFacts_routes_1.default);
 app.use("/api/admin", admin_routes_1.default);
+app.use("/api/admin", adminDashboard_routes_1.default);
 app.use("/api/devotionals", devotionals_routes_1.default);
 app.use("/api/logs", logs_routes_1.default);
 // app.use("/api/artist", artistRoutes);
@@ -316,7 +320,10 @@ app.use((error, req, res, next) => {
                 const url = `${baseUrl.replace(/\/$/, "")}/health`;
                 const response = yield fetch(url, { method: "GET" });
                 if (response.ok) {
-                    logger_1.default.info("Self-ping successful", { url, timestamp: new Date().toISOString() });
+                    logger_1.default.info("Self-ping successful", {
+                        url,
+                        timestamp: new Date().toISOString(),
+                    });
                 }
                 else {
                     logger_1.default.warn("Self-ping non-200", { status: response.status, url });

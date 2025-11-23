@@ -11,7 +11,7 @@ import logger from "../utils/logger";
  */
 export const createForum = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, description } = req.body || {};
+    const { title, description, categoryId } = req.body || {};
 
     if (!title || typeof title !== "string" || title.trim().length < 3) {
       res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
@@ -33,7 +33,23 @@ export const createForum = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Verify user is authenticated (handled by verifyToken middleware)
+    if (!categoryId || typeof categoryId !== "string" || !Types.ObjectId.isValid(categoryId)) {
+      res.status(400).json({ success: false, error: "Validation error: categoryId is required" });
+      return;
+    }
+
+    // Verify category exists (legacy categories may not have isCategory flag yet)
+    const category = await Forum.findOne({
+      _id: new Types.ObjectId(categoryId),
+      isActive: true,
+      $or: [{ isCategory: true }, { categoryId: { $exists: false } }],
+    }).select("title description isCategory");
+
+    if (!category) {
+      res.status(400).json({ success: false, error: "Validation error: category not found" });
+      return;
+    }
+
     if (!req.userId) {
       res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
       return;
@@ -44,13 +60,18 @@ export const createForum = async (req: Request, res: Response): Promise<void> =>
       description: description.trim(),
       createdBy: req.userId,
       isActive: true,
+      isCategory: false,
+      categoryId: category._id,
       postsCount: 0,
       participantsCount: 0,
     });
 
-    await forum.populate("createdBy", "firstName lastName username avatar");
+    await forum.populate([
+      { path: "createdBy", select: "firstName lastName username avatar" },
+      { path: "categoryId", select: "title description" },
+    ]);
 
-    logger.info("Forum created", { forumId: forum._id, createdBy: req.userId });
+    logger.info("Forum created", { forumId: forum._id, createdBy: req.userId, categoryId: category._id });
 
     res.status(201).json({
       success: true,
@@ -69,14 +90,31 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
   try {
     const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+    const viewParam = String(req.query.view || req.query.type || "categories").toLowerCase();
+    const categoryFilter = req.query.categoryId;
+
+    const query: any = { isActive: true };
+
+    if (categoryFilter && typeof categoryFilter === "string" && Types.ObjectId.isValid(categoryFilter)) {
+      query.categoryId = new Types.ObjectId(categoryFilter);
+      query.isCategory = false;
+    } else if (viewParam === "discussions") {
+      query.$or = [{ isCategory: false }, { categoryId: { $exists: true } }];
+    } else if (viewParam === "all") {
+      // no additional filtering
+    } else {
+      // default to categories
+      query.$or = [{ isCategory: true }, { categoryId: { $exists: false } }];
+    }
 
     const [forums, total] = await Promise.all([
-      Forum.find({ isActive: true })
+      Forum.find(query)
         .populate("createdBy", "firstName lastName username avatar")
+        .populate("categoryId", "title description")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
-      Forum.countDocuments({ isActive: true }),
+      Forum.countDocuments(query),
     ]);
 
     res.status(200).json({
@@ -118,6 +156,11 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    if (forum.isCategory) {
+      res.status(400).json({ success: false, error: "Cannot post directly to a category" });
+      return;
+    }
+
     if (!content || typeof content !== "string" || content.trim().length === 0) {
       res.status(400).json({ success: false, error: "Validation error: content is required" });
       return;
@@ -134,13 +177,11 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
         res.status(400).json({ success: false, error: "Validation error: maximum 5 embedded links allowed" });
         return;
       }
-
       for (const link of embeddedLinks) {
         if (!link.url || typeof link.url !== "string") {
           res.status(400).json({ success: false, error: "Validation error: each link must have a valid URL" });
           return;
         }
-
         // Validate URL format
         try {
           new URL(link.url);
@@ -148,17 +189,14 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
           res.status(400).json({ success: false, error: "Validation error: invalid URL format" });
           return;
         }
-
         if (!link.type || !["video", "article", "resource", "other"].includes(link.type)) {
           res.status(400).json({ success: false, error: "Validation error: link type must be video, article, resource, or other" });
           return;
         }
-
         if (link.title && link.title.length > 200) {
           res.status(400).json({ success: false, error: "Validation error: link title must be less than 200 characters" });
           return;
         }
-
         if (link.description && link.description.length > 500) {
           res.status(400).json({ success: false, error: "Validation error: link description must be less than 500 characters" });
           return;
@@ -167,7 +205,7 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
     }
 
     const post = await ForumPost.create({
-      forumId: new Types.ObjectId(forumId),
+      forumId: new mongoose.Types.ObjectId(forumId),
       userId: req.userId,
       content: content.trim(),
       embeddedLinks: Array.isArray(embeddedLinks) ? embeddedLinks : undefined,
@@ -177,7 +215,7 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
 
     // Update forum stats
     forum.postsCount = (forum.postsCount || 0) + 1;
-    
+
     // Check if this is a new participant
     const existingPosts = await ForumPost.findOne({
       forumId: forum._id,
@@ -186,17 +224,16 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
     if (!existingPosts || String(existingPosts._id) === String(post._id)) {
       forum.participantsCount = (forum.participantsCount || 0) + 1;
     }
-    
+
     await forum.save();
 
     await post.populate("userId", "firstName lastName username avatar");
-    await post.populate("forumId", "title");
 
-    logger.info("Forum post created", { postId: post._id, forumId, userId: req.userId });
+    logger.info("Forum post created", { postId: post._id, forumId: forum._id, userId: req.userId });
 
     res.status(201).json({
       success: true,
-      data: await serializeForumPost(post, req.userId),
+      post: await serializeForumPost(post, req.userId),
     });
   } catch (error: any) {
     logger.error("Error creating forum post", { error: error.message, forumId: req.params.forumId });
@@ -403,23 +440,40 @@ export const deleteForumPost = async (req: Request, res: Response): Promise<void
  */
 function serializeForum(doc: any) {
   const obj = doc.toObject ? doc.toObject() : doc;
+  const category = obj.categoryId && typeof obj.categoryId === "object" && obj.categoryId._id
+    ? {
+        id: String(obj.categoryId._id),
+        title: obj.categoryId.title,
+        description: obj.categoryId.description,
+      }
+    : obj.categoryId
+    ? { id: String(obj.categoryId) }
+    : null;
+
   return {
+    id: String(obj._id),
     _id: String(obj._id),
     title: obj.title,
     description: obj.description,
+    isCategory: obj.isCategory || false,
+    categoryId: obj.categoryId ? String(obj.categoryId._id || obj.categoryId) : null,
+    category,
     createdBy: String(obj.createdBy?._id || obj.createdBy),
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt,
     isActive: obj.isActive,
     postsCount: obj.postsCount || 0,
     participantsCount: obj.participantsCount || 0,
-    createdByUser: obj.createdBy && typeof obj.createdBy === "object" && obj.createdBy._id
-      ? {
-          _id: String(obj.createdBy._id),
-          username: obj.createdBy.username,
-          avatarUrl: obj.createdBy.avatar,
-        }
-      : null,
+    createdByUser:
+      obj.createdBy && typeof obj.createdBy === "object" && obj.createdBy._id
+        ? {
+            _id: String(obj.createdBy._id),
+            username: obj.createdBy.username,
+            avatarUrl: obj.createdBy.avatar,
+            firstName: obj.createdBy.firstName,
+            lastName: obj.createdBy.lastName,
+          }
+        : null,
   };
 }
 
