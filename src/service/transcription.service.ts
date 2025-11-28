@@ -1,6 +1,10 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import logger from "../utils/logger";
 import { mediaProcessingService } from "./mediaProcessing.service";
+import {
+  LanguageDetectionUtil,
+  NIGERIAN_LANGUAGE_CODES,
+} from "../utils/languageDetection.util";
 
 export interface TranscriptionResult {
   transcript: string;
@@ -34,8 +38,15 @@ export class TranscriptionService {
   /**
    * Transcribe audio using Gemini (or fallback to Google Cloud Speech-to-Text)
    * 
-   * Note: Gemini 1.5 can process audio, but for production, consider using
-   * Google Cloud Speech-to-Text API for better accuracy
+   * Note: Gemini 1.5 can process audio and automatically detect languages including:
+   * - English (en-US, en-NG)
+   * - Yoruba (yo-NG)
+   * - Hausa (ha-NG)
+   * - Igbo (ig-NG)
+   * - And many other languages
+   * 
+   * When languageCode is "en-US" (default), Gemini will automatically detect the language.
+   * For production, consider using Google Cloud Speech-to-Text API for better accuracy
    */
   async transcribeAudio(
     audioBuffer: Buffer,
@@ -59,13 +70,14 @@ export class TranscriptionService {
         try {
           const base64Audio = preparedAudio.toString("base64");
           
-          // Gemini 1.5 can process audio files
+          // Gemini 1.5 can process audio files and supports multiple languages
+          // Updated prompt to handle Nigerian languages (Yoruba, Hausa, Igbo) and other languages
           const result = await this.model.generateContent({
             contents: [{
               role: "user",
               parts: [
                 {
-                  text: "Transcribe the following audio. Return only the transcript text, no additional commentary."
+                  text: `Transcribe the following audio in whatever language it is spoken or sung. The audio may be in English, Yoruba, Hausa, Igbo, or any other language. Return only the transcript text in the original language, preserving the exact words. No additional commentary or translation.`
                 },
                 {
                   inlineData: {
@@ -80,10 +92,22 @@ export class TranscriptionService {
           const response = await result.response;
           const transcript = response.text().trim();
 
+          // Try to detect the language from the transcript
+          let detectedLanguage = languageCode;
+          if (transcript && transcript.length > 0) {
+            const languageInfo = LanguageDetectionUtil.detectLanguageFromText(transcript);
+            detectedLanguage = languageInfo.code;
+            logger.info("Language detected from transcript", {
+              detected: languageInfo.name,
+              code: languageInfo.code,
+              confidence: languageInfo.confidence,
+            });
+          }
+
           return {
             transcript,
             confidence: 0.7, // Gemini doesn't provide confidence scores
-            language: languageCode,
+            language: detectedLanguage,
           };
         } catch (error: any) {
           logger.warn("Gemini transcription failed, trying fallback:", error);
@@ -131,17 +155,35 @@ export class TranscriptionService {
 
       const audioBytes = audioBuffer.toString("base64");
 
+      // Support multiple Nigerian languages for Google Cloud Speech-to-Text
+      // When default language is used, try multiple language alternatives
+      const nigerianLanguages = LanguageDetectionUtil.getNigerianLanguageCodes();
+      
+      const config: any = {
+        encoding: "LINEAR16" as const,
+        sampleRateHertz: 16000,
+        languageCode: languageCode || NIGERIAN_LANGUAGE_CODES.ENGLISH_US,
+        enableAutomaticPunctuation: true,
+        model: "default",
+      };
+
+      // If using default English, add alternative language codes to try Nigerian languages
+      if (languageCode === NIGERIAN_LANGUAGE_CODES.ENGLISH_US || !languageCode) {
+        // Filter out the primary language from alternatives
+        const alternatives = nigerianLanguages.filter(
+          (code) => code !== NIGERIAN_LANGUAGE_CODES.ENGLISH_US
+        );
+        config.alternativeLanguageCodes = alternatives;
+        logger.info("Using alternative language codes for Nigerian languages", {
+          alternatives,
+        });
+      }
+
       const request = {
         audio: {
           content: audioBytes,
         },
-        config: {
-          encoding: "LINEAR16" as const,
-          sampleRateHertz: 16000,
-          languageCode: languageCode,
-          enableAutomaticPunctuation: true,
-          model: "default",
-        },
+        config,
       };
 
       const [response] = await client.recognize(request);

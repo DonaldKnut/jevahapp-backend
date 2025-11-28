@@ -113,6 +113,10 @@ ${framesText}
 **Your Task:**
 Analyze this content and determine if it is:
 1. **Gospel-inclined/Christian content** - Content that aligns with Christian values, biblical teachings, worship, prayer, spiritual growth, or Christian community
+   - This includes gospel music and videos in ANY language (English, Yoruba, Hausa, Igbo, or any other language)
+   - Gospel songs without preaching are still valid gospel content
+   - Worship songs, praise songs, and hymns in any language are acceptable
+   - Contemporary gospel, traditional gospel, and gospel in local languages are all acceptable
 2. **Inappropriate content** - Content that contains:
    - Explicit sexual content, nudity, or sexual themes
    - Violence, hate speech, or harmful content
@@ -138,12 +142,22 @@ Respond in this exact JSON format:
 - Flags should include specific issues found (e.g., "explicit_language", "non_gospel_content", "violence", "sexual_content", "blasphemy", "secular_music")
 - For gospel content, flags can be empty or include positive tags like "gospel_music", "biblical_teaching", "worship_content"
 
+**CRITICAL - Multilingual Support:**
+- **Content can be in ANY language** - English, Yoruba, Hausa, Igbo, or any other language
+- **Gospel music in Nigerian languages** (Yoruba, Hausa, Igbo) is VALID and should be APPROVED
+- **Pure gospel songs** (without preaching or spoken words) are VALID gospel content
+- **Worship songs** in any language that align with Christian values are acceptable
+- Do NOT reject content just because it's in a language other than English
+- Analyze the CONTENT and MEANING, not the language
+- If transcript contains gospel/Christian themes, biblical references, worship, praise, or prayer in ANY language, approve it
+
 **Important:**
 - Be strict about non-gospel content (secular music, non-Christian teachings)
 - Allow Christian content even if it's contemporary or modern in style
-- Consider context - Christian rap, contemporary worship, etc. are acceptable
-- Reject content that promotes values contrary to Christianity
+- Consider context - Christian rap, contemporary worship, gospel in local languages, etc. are all acceptable
+- Reject content that promotes values contrary to Christianity, regardless of language
 - When in doubt, set requiresReview = true
+- Remember: A gospel song in Yoruba, Hausa, or Igbo is just as valid as one in English
 
 Now analyze the content and provide your response in the exact JSON format above.`;
   }
@@ -210,6 +224,7 @@ Now analyze the content and provide your response in the exact JSON format above
     ];
 
     const gospelKeywords = [
+      // English keywords
       "jesus",
       "christ",
       "god",
@@ -227,6 +242,36 @@ Now analyze the content and provide your response in the exact JSON format above
       "devotional",
       "blessing",
       "amen",
+      "hallelujah",
+      "hosanna",
+      // Yoruba keywords (common gospel terms)
+      "jésù",
+      "jésu",
+      "olúwa",
+      "oluwa",
+      "ọlọrun",
+      "olorun",
+      "ìwòrìpò",
+      "iworipo",
+      "àdúrà",
+      "adura",
+      "ìgbàgbọ",
+      "igbagbo",
+      // Hausa keywords
+      "yesu",
+      "ubangiji",
+      "allah",
+      "addu'a",
+      "ibada",
+      // Igbo keywords
+      "jisos",
+      "chiukwu",
+      "ekpere",
+      "abụ",
+      // Common transliterations and variations
+      "yehovah",
+      "yahweh",
+      "messiah",
     ];
 
     const textToCheck = `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`.toLowerCase();

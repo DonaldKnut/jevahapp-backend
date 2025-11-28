@@ -49,6 +49,7 @@ exports.transcriptionService = exports.TranscriptionService = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const logger_1 = __importDefault(require("../utils/logger"));
 const mediaProcessing_service_1 = require("./mediaProcessing.service");
+const languageDetection_util_1 = require("../utils/languageDetection.util");
 class TranscriptionService {
     constructor() {
         const apiKey = process.env.GOOGLE_AI_API_KEY;
@@ -70,8 +71,15 @@ class TranscriptionService {
     /**
      * Transcribe audio using Gemini (or fallback to Google Cloud Speech-to-Text)
      *
-     * Note: Gemini 1.5 can process audio, but for production, consider using
-     * Google Cloud Speech-to-Text API for better accuracy
+     * Note: Gemini 1.5 can process audio and automatically detect languages including:
+     * - English (en-US, en-NG)
+     * - Yoruba (yo-NG)
+     * - Hausa (ha-NG)
+     * - Igbo (ig-NG)
+     * - And many other languages
+     *
+     * When languageCode is "en-US" (default), Gemini will automatically detect the language.
+     * For production, consider using Google Cloud Speech-to-Text API for better accuracy
      */
     transcribeAudio(audioBuffer_1, audioMimeType_1) {
         return __awaiter(this, arguments, void 0, function* (audioBuffer, audioMimeType, languageCode = "en-US") {
@@ -86,13 +94,14 @@ class TranscriptionService {
                 if (this.model) {
                     try {
                         const base64Audio = preparedAudio.toString("base64");
-                        // Gemini 1.5 can process audio files
+                        // Gemini 1.5 can process audio files and supports multiple languages
+                        // Updated prompt to handle Nigerian languages (Yoruba, Hausa, Igbo) and other languages
                         const result = yield this.model.generateContent({
                             contents: [{
                                     role: "user",
                                     parts: [
                                         {
-                                            text: "Transcribe the following audio. Return only the transcript text, no additional commentary."
+                                            text: `Transcribe the following audio in whatever language it is spoken or sung. The audio may be in English, Yoruba, Hausa, Igbo, or any other language. Return only the transcript text in the original language, preserving the exact words. No additional commentary or translation.`
                                         },
                                         {
                                             inlineData: {
@@ -105,10 +114,21 @@ class TranscriptionService {
                         });
                         const response = yield result.response;
                         const transcript = response.text().trim();
+                        // Try to detect the language from the transcript
+                        let detectedLanguage = languageCode;
+                        if (transcript && transcript.length > 0) {
+                            const languageInfo = languageDetection_util_1.LanguageDetectionUtil.detectLanguageFromText(transcript);
+                            detectedLanguage = languageInfo.code;
+                            logger_1.default.info("Language detected from transcript", {
+                                detected: languageInfo.name,
+                                code: languageInfo.code,
+                                confidence: languageInfo.confidence,
+                            });
+                        }
                         return {
                             transcript,
                             confidence: 0.7, // Gemini doesn't provide confidence scores
-                            language: languageCode,
+                            language: detectedLanguage,
                         };
                     }
                     catch (error) {
@@ -154,17 +174,30 @@ class TranscriptionService {
                 }
                 const client = new speech.SpeechClient();
                 const audioBytes = audioBuffer.toString("base64");
+                // Support multiple Nigerian languages for Google Cloud Speech-to-Text
+                // When default language is used, try multiple language alternatives
+                const nigerianLanguages = languageDetection_util_1.LanguageDetectionUtil.getNigerianLanguageCodes();
+                const config = {
+                    encoding: "LINEAR16",
+                    sampleRateHertz: 16000,
+                    languageCode: languageCode || languageDetection_util_1.NIGERIAN_LANGUAGE_CODES.ENGLISH_US,
+                    enableAutomaticPunctuation: true,
+                    model: "default",
+                };
+                // If using default English, add alternative language codes to try Nigerian languages
+                if (languageCode === languageDetection_util_1.NIGERIAN_LANGUAGE_CODES.ENGLISH_US || !languageCode) {
+                    // Filter out the primary language from alternatives
+                    const alternatives = nigerianLanguages.filter((code) => code !== languageDetection_util_1.NIGERIAN_LANGUAGE_CODES.ENGLISH_US);
+                    config.alternativeLanguageCodes = alternatives;
+                    logger_1.default.info("Using alternative language codes for Nigerian languages", {
+                        alternatives,
+                    });
+                }
                 const request = {
                     audio: {
                         content: audioBytes,
                     },
-                    config: {
-                        encoding: "LINEAR16",
-                        sampleRateHertz: 16000,
-                        languageCode: languageCode,
-                        enableAutomaticPunctuation: true,
-                        model: "default",
-                    },
+                    config,
                 };
                 const [response] = yield client.recognize(request);
                 if (!response.results || response.results.length === 0) {
