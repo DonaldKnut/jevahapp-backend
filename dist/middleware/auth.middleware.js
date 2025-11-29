@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -17,15 +50,82 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = require("../models/user.model");
 const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
 const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // Try to get token from Authorization header first
+    let token;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.split(" ")[1];
+    }
+    else {
+        // If no Authorization header, try to get refresh token from cookie and auto-refresh
+        const refreshToken = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.refreshToken;
+        if (refreshToken) {
+            try {
+                // Dynamic import to avoid circular dependencies
+                const authServiceModule = yield Promise.resolve().then(() => __importStar(require("../service/auth.service")));
+                const authService = authServiceModule.default;
+                const refreshResult = yield authService.refreshToken(refreshToken);
+                // Set new access token in response header for client to pick up
+                res.setHeader("X-New-Access-Token", refreshResult.accessToken);
+                // Use the new access token for this request
+                token = refreshResult.accessToken;
+                // Fetch full user info for role checks
+                const user = yield user_model_1.User.findById(refreshResult.user.id).select("role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil");
+                if (!user) {
+                    res.status(401).json({ success: false, message: "User not found" });
+                    return;
+                }
+                // Check if user is banned
+                if (user.isBanned) {
+                    if (user.banUntil && new Date() > user.banUntil) {
+                        yield user_model_1.User.findByIdAndUpdate(refreshResult.user.id, {
+                            isBanned: false,
+                            banUntil: undefined,
+                        });
+                    }
+                    else {
+                        res.status(403).json({
+                            success: false,
+                            message: "Account is banned",
+                        });
+                        return;
+                    }
+                }
+                // Attach user info
+                req.userId = refreshResult.user.id.toString();
+                req.user = {
+                    role: user.role,
+                    isVerifiedCreator: user.isVerifiedCreator,
+                    isVerifiedVendor: user.isVerifiedVendor,
+                    isVerifiedChurch: user.isVerifiedChurch,
+                };
+                // Continue with the request using the new token
+                return next();
+            }
+            catch (error) {
+                // Refresh token invalid/expired, clear cookie and require login
+                res.clearCookie("refreshToken", {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+                    path: "/",
+                });
+                res.status(401).json({
+                    success: false,
+                    message: "Session expired. Please login again.",
+                });
+                return;
+            }
+        }
+    }
+    if (!token) {
         res.status(401).json({
             success: false,
             message: "Unauthorized: No token provided",
         });
         return;
     }
-    const token = authHeader.split(" ")[1];
     try {
         // Check if token is blacklisted
         const isBlacklisted = yield blacklistedToken_model_1.BlacklistedToken.findOne({ token });

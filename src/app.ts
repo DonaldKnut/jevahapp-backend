@@ -7,6 +7,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 
@@ -44,6 +45,7 @@ import userContentRoutes from "./routes/userContent.routes";
 import ebookRoutes from "./routes/ebook.routes";
 import bibleRoutes from "./routes/bible.routes";
 import communityRoutes from "./routes/community.routes";
+import playlistRoutes from "./routes/playlist.route";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -144,6 +146,7 @@ app.use((req, res, next) => {
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser()); // Parse cookies for refresh token support
 
 // Request logging middleware
 let firstRequestLogged = false;
@@ -292,6 +295,7 @@ app.use("/api/ebooks", ebookRoutes);
 app.use("/api/tts", ebookRoutes);
 app.use("/api/bible", bibleRoutes);
 app.use("/api/community", communityRoutes);
+app.use("/api/playlists", playlistRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {

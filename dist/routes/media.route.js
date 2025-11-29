@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const media_controller_1 = require("../controllers/media.controller");
+const mediaAnalytics_controller_1 = require("../controllers/mediaAnalytics.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
 // Configure Multer for in-memory file uploads
@@ -97,6 +98,23 @@ router.get("/search", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimite
  * @returns { success: boolean, message: string, data: { isAdmin: boolean, mediaCountByContentType: object, totalInteractionCounts: object, totalBookmarks: number, recentMedia: object[], uploadsLastThirtyDays: number, interactionsLastThirtyDays: number } }
  */
 router.get("/analytics", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getAnalyticsDashboard);
+/**
+ * @route   GET /api/media/analytics/creator
+ * @desc    Get comprehensive analytics for all media by a creator (Twitter/X style analytics dashboard)
+ * @access  Protected (Authenticated users only - creators can only view their own analytics)
+ * @query   { startDate?: string, endDate?: string } - Optional date range (ISO format)
+ * @returns { success: boolean, data: CreatorMediaAnalytics }
+ */
+router.get("/analytics/creator", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, mediaAnalytics_controller_1.getCreatorAnalytics);
+/**
+ * @route   GET /api/media/:mediaId/analytics
+ * @desc    Get detailed analytics for a specific media item (Twitter/X style post analytics)
+ * @access  Protected (Authenticated users only - creators can only view their own media analytics)
+ * @param   { mediaId: string } - MongoDB ObjectId of the media item
+ * @query   { startDate?: string, endDate?: string } - Optional date range (ISO format)
+ * @returns { success: boolean, data: PerMediaAnalytics }
+ */
+router.get("/:mediaId/analytics", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, mediaAnalytics_controller_1.getMediaAnalytics);
 /**
  * @route   GET /api/media/default
  * @desc    Get default/onboarding content for new users (PUBLIC - no authentication required)

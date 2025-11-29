@@ -187,19 +187,37 @@ class AuthController {
     loginUser(request, response, next) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const { email, password, } = request.body;
+                const { email, password, rememberMe = false, } = request.body;
                 if (!email || !password) {
                     return response.status(400).json({
                         success: false,
                         message: "Email and password are required",
                     });
                 }
-                const result = yield auth_service_1.default.loginUser(email, password);
+                // Extract device info for security tracking
+                const deviceInfo = request.headers["user-agent"] || "Unknown";
+                const ipAddress = request.ip || request.socket.remoteAddress || "Unknown";
+                const userAgent = request.headers["user-agent"] || "";
+                const result = yield auth_service_1.default.loginUser(email, password, rememberMe, deviceInfo, ipAddress, userAgent);
+                // Set secure httpOnly cookie for refresh token if rememberMe is true
+                if (rememberMe && result.refreshToken) {
+                    const isProduction = process.env.NODE_ENV === "production";
+                    response.cookie("refreshToken", result.refreshToken, {
+                        httpOnly: true, // Prevents JavaScript access (XSS protection)
+                        secure: isProduction, // Only send over HTTPS in production
+                        sameSite: isProduction ? "strict" : "lax", // CSRF protection
+                        maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days in milliseconds
+                        path: "/", // Available for all routes
+                    });
+                }
+                // Return access token in response body (for immediate use)
                 return response.status(200).json({
                     success: true,
                     message: "Login successful",
-                    token: result.token,
+                    token: result.accessToken, // Access token for Authorization header
+                    accessToken: result.accessToken, // Alias for clarity
                     user: result.user,
+                    rememberMe: rememberMe,
                 });
             }
             catch (error) {
@@ -600,17 +618,25 @@ class AuthController {
     }
     logout(request, response, next) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b;
             try {
                 const userId = request.userId;
-                const token = (_a = request.headers.authorization) === null || _a === void 0 ? void 0 : _a.split(" ")[1]; // Assuming Bearer token
+                const token = (_a = request.headers.authorization) === null || _a === void 0 ? void 0 : _a.split(" ")[1]; // Access token from header
+                const refreshToken = (_b = request.cookies) === null || _b === void 0 ? void 0 : _b.refreshToken; // Refresh token from cookie
                 if (!userId || !token) {
                     return response.status(401).json({
                         success: false,
                         message: "Unauthorized: User ID or token missing",
                     });
                 }
-                yield auth_service_1.default.logout(userId, token);
+                yield auth_service_1.default.logout(userId, token, refreshToken);
+                // Clear refresh token cookie
+                response.clearCookie("refreshToken", {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+                    path: "/",
+                });
                 return response.status(200).json({
                     success: true,
                     message: "Logout successful",
@@ -822,31 +848,41 @@ class AuthController {
     }
     refreshToken(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
             try {
-                const { token } = req.body;
-                if (!token) {
+                // Get refresh token from cookie (preferred) or request body
+                const refreshTokenString = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.refreshToken) || ((_b = req.body) === null || _b === void 0 ? void 0 : _b.refreshToken);
+                if (!refreshTokenString) {
                     res.status(400).json({
                         success: false,
-                        message: "Token is required",
+                        message: "Refresh token is required",
                     });
                     return;
                 }
-                // Verify the existing token
-                const result = yield auth_service_1.default.refreshToken(token);
+                // Refresh the token
+                const result = yield auth_service_1.default.refreshToken(refreshTokenString);
                 res.json({
                     success: true,
                     message: "Token refreshed successfully",
                     data: {
-                        token: result.token,
+                        token: result.accessToken,
+                        accessToken: result.accessToken,
                         user: result.user,
                     },
                 });
             }
             catch (error) {
                 console.error("Token refresh error:", error);
+                // Clear invalid refresh token cookie
+                res.clearCookie("refreshToken", {
+                    httpOnly: true,
+                    secure: process.env.NODE_ENV === "production",
+                    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+                    path: "/",
+                });
                 res.status(401).json({
                     success: false,
-                    message: "Invalid or expired token",
+                    message: error.message || "Invalid or expired refresh token",
                 });
             }
         });

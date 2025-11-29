@@ -4,6 +4,7 @@ import { MediaReport, ReportReason } from "../models/mediaReport.model";
 import { Media } from "../models/media.model";
 import { User } from "../models/user.model";
 import resendEmailService from "../service/resendEmail.service";
+import { NotificationService } from "../service/notification.service";
 import logger from "../utils/logger";
 
 interface ReportMediaRequestBody {
@@ -49,6 +50,16 @@ export const reportMedia = async (
       return;
     }
 
+    // Check if user is trying to report their own media
+    const mediaUploaderId = media.uploadedBy?.toString();
+    if (mediaUploaderId === userId) {
+      response.status(400).json({
+        success: false,
+        message: "You cannot report your own content",
+      });
+      return;
+    }
+
     // Check if user already reported this media
     const existingReport = await MediaReport.findOne({
       mediaId: new Types.ObjectId(id),
@@ -72,6 +83,16 @@ export const reportMedia = async (
       status: "pending",
     });
 
+    // Get reporter information
+    const reporter = await User.findById(userId).select("firstName lastName email username");
+    const reporterName = reporter 
+      ? `${reporter.firstName || ""} ${reporter.lastName || ""}`.trim() || reporter.username || reporter.email
+      : "Unknown User";
+
+    // Get media uploader information
+    const uploader = await User.findById(media.uploadedBy).select("email");
+    const uploaderEmail = uploader?.email || "Unknown";
+
     // Increment report count on media
     const newReportCount = (media.reportCount || 0) + 1;
     await Media.findByIdAndUpdate(id, {
@@ -85,7 +106,62 @@ export const reportMedia = async (
       },
     });
 
-    // If report count reaches threshold, notify admins
+    // Send email notification to admins on EVERY report
+    try {
+      const admins = await User.find({ role: "admin" }).select("email _id");
+      const adminEmails = admins.map(admin => admin.email).filter(Boolean);
+
+      if (adminEmails.length > 0) {
+        // Send email notification
+        await resendEmailService.sendAdminReportNotification(
+          adminEmails,
+          media.title,
+          media.contentType,
+          uploaderEmail,
+          reporterName,
+          reason,
+          description,
+          id,
+          newReportCount
+        );
+
+        // Send in-app notification to all admins
+        for (const admin of admins) {
+          try {
+            await NotificationService.createNotification({
+              userId: admin._id.toString(),
+              type: "content_report",
+              title: "New Content Report",
+              message: `${reporterName} reported "${media.title}" - Reason: ${reason}`,
+              metadata: {
+                mediaId: id,
+                contentType: media.contentType,
+                reportId: report._id.toString(),
+                reportReason: reason,
+                reportCount: newReportCount,
+                reporterName,
+              },
+              priority: newReportCount >= 3 ? "high" : "medium",
+              relatedId: id,
+            });
+          } catch (notifError) {
+            logger.error("Failed to send in-app notification to admin:", notifError);
+          }
+        }
+
+        logger.info("Admin notifications sent for report", {
+          mediaId: id,
+          reportId: report._id,
+          adminCount: admins.length,
+          reportCount: newReportCount,
+        });
+      }
+    } catch (emailError) {
+      logger.error("Failed to send admin notifications for report:", emailError);
+      // Don't fail the report submission if email fails
+    }
+
+    // If report count reaches threshold (3+), also send moderation alert
     if (newReportCount >= 3) {
       try {
         const admins = await User.find({ role: "admin" }).select("email");
@@ -96,7 +172,7 @@ export const reportMedia = async (
             adminEmails,
             media.title,
             media.contentType,
-            (await User.findById(media.uploadedBy))?.email || "Unknown",
+            uploaderEmail,
             {
               isApproved: false,
               confidence: 0.7,
@@ -107,8 +183,8 @@ export const reportMedia = async (
             newReportCount
           );
         }
-      } catch (emailError) {
-        logger.error("Failed to send admin alert on report threshold:", emailError);
+      } catch (thresholdEmailError) {
+        logger.error("Failed to send threshold alert:", thresholdEmailError);
       }
     }
 

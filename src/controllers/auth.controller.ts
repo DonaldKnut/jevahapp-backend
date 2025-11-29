@@ -197,8 +197,8 @@ class AuthController {
     try {
       const {
         email,
-
         password,
+        rememberMe = false,
       } = request.body;
 
       if (!email || !password) {
@@ -208,13 +208,41 @@ class AuthController {
         });
       }
 
-      const result = await authService.loginUser(email, password);
+      // Extract device info for security tracking
+      const deviceInfo = request.headers["user-agent"] || "Unknown";
+      const ipAddress = request.ip || request.socket.remoteAddress || "Unknown";
+      const userAgent = request.headers["user-agent"] || "";
 
+      const result = await authService.loginUser(
+        email,
+        password,
+        rememberMe,
+        deviceInfo,
+        ipAddress,
+        userAgent
+      );
+
+      // Set secure httpOnly cookie for refresh token if rememberMe is true
+      if (rememberMe && result.refreshToken) {
+        const isProduction = process.env.NODE_ENV === "production";
+        
+        response.cookie("refreshToken", result.refreshToken, {
+          httpOnly: true, // Prevents JavaScript access (XSS protection)
+          secure: isProduction, // Only send over HTTPS in production
+          sameSite: isProduction ? "strict" : "lax", // CSRF protection
+          maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days in milliseconds
+          path: "/", // Available for all routes
+        });
+      }
+
+      // Return access token in response body (for immediate use)
       return response.status(200).json({
         success: true,
         message: "Login successful",
-        token: result.token,
+        token: result.accessToken, // Access token for Authorization header
+        accessToken: result.accessToken, // Alias for clarity
         user: result.user,
+        rememberMe: rememberMe,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -703,7 +731,8 @@ class AuthController {
   async logout(request: Request, response: Response, next: NextFunction) {
     try {
       const userId = request.userId;
-      const token = request.headers.authorization?.split(" ")[1]; // Assuming Bearer token
+      const token = request.headers.authorization?.split(" ")[1]; // Access token from header
+      const refreshToken = request.cookies?.refreshToken; // Refresh token from cookie
 
       if (!userId || !token) {
         return response.status(401).json({
@@ -712,7 +741,15 @@ class AuthController {
         });
       }
 
-      await authService.logout(userId, token);
+      await authService.logout(userId, token, refreshToken);
+
+      // Clear refresh token cookie
+      response.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+        path: "/",
+      });
 
       return response.status(200).json({
         success: true,
@@ -975,32 +1012,43 @@ class AuthController {
 
   async refreshToken(req: Request, res: Response): Promise<void> {
     try {
-      const { token } = req.body;
+      // Get refresh token from cookie (preferred) or request body
+      const refreshTokenString = req.cookies?.refreshToken || req.body?.refreshToken;
 
-      if (!token) {
+      if (!refreshTokenString) {
         res.status(400).json({
           success: false,
-          message: "Token is required",
+          message: "Refresh token is required",
         });
         return;
       }
 
-      // Verify the existing token
-      const result = await authService.refreshToken(token);
+      // Refresh the token
+      const result = await authService.refreshToken(refreshTokenString);
 
       res.json({
         success: true,
         message: "Token refreshed successfully",
         data: {
-          token: result.token,
+          token: result.accessToken,
+          accessToken: result.accessToken,
           user: result.user,
         },
       });
     } catch (error: any) {
       console.error("Token refresh error:", error);
+      
+      // Clear invalid refresh token cookie
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+        path: "/",
+      });
+
       res.status(401).json({
         success: false,
-        message: "Invalid or expired token",
+        message: error.message || "Invalid or expired refresh token",
       });
     }
   }

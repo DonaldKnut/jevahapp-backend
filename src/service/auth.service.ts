@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { Types } from "mongoose";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
 import emailService from "./email.service";
@@ -486,7 +487,14 @@ class AuthService {
     };
   }
 
-  async loginUser(email: string, password: string) {
+  async loginUser(
+    email: string,
+    password: string,
+    rememberMe: boolean = false,
+    deviceInfo?: string,
+    ipAddress?: string,
+    userAgent?: string
+  ) {
     const user = await User.findOne({ email, provider: "email" });
     if (!user || !(await bcrypt.compare(password, user.password || ""))) {
       throw new Error("Invalid email or password");
@@ -496,9 +504,37 @@ class AuthService {
       throw new Error("Please verify your email before logging in");
     }
 
-    const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
-      expiresIn: "7d",
+    // Generate access token (short-lived: 15 minutes for regular, 7 days if rememberMe)
+    const accessTokenExpiry = rememberMe ? "7d" : "15m";
+    const accessToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
+      expiresIn: accessTokenExpiry,
     });
+
+    let refreshToken: string | undefined;
+
+    // If rememberMe is true, generate a long-lived refresh token (90 days)
+    if (rememberMe) {
+      const { RefreshToken } = await import("../models/refreshToken.model");
+      const crypto = await import("crypto");
+      
+      // Generate secure random refresh token
+      refreshToken = crypto.randomBytes(64).toString("hex");
+      
+      // Calculate expiration (90 days from now)
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 90);
+
+      // Store refresh token in database
+      await RefreshToken.create({
+        token: refreshToken,
+        userId: user._id,
+        deviceInfo,
+        ipAddress,
+        userAgent,
+        expiresAt,
+        isRevoked: false,
+      });
+    }
 
     // Update last login time
     await User.findByIdAndUpdate(user._id, {
@@ -509,7 +545,8 @@ class AuthService {
     await aiReengagementService.trackUserReturn(user._id.toString());
 
     return {
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user._id,
         email: user.email,
@@ -820,7 +857,7 @@ class AuthService {
     };
   }
 
-  async logout(userId: string, token: string) {
+  async logout(userId: string, token: string, refreshToken?: string) {
     const user = await User.findById(userId);
     if (!user) {
       throw new Error("User not found");
@@ -841,11 +878,16 @@ class AuthService {
       throw new Error("Token already invalidated");
     }
 
-    // Add token to blacklist
+    // Add access token to blacklist
     await BlacklistedToken.create({
       token,
       expiresAt,
     });
+
+    // Revoke refresh token if provided
+    if (refreshToken) {
+      await this.revokeRefreshToken(refreshToken, userId);
+    }
 
     // Track user signout for re-engagement
     await aiReengagementService.trackUserSignout(userId);
@@ -898,24 +940,52 @@ class AuthService {
     };
   }
 
-  async refreshToken(token: string) {
+  async refreshToken(refreshTokenString: string) {
     try {
-      // Verify the existing token (even if expired, we'll still decode it)
-      const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }) as { userId: string };
+      const { RefreshToken } = await import("../models/refreshToken.model");
       
+      // Find refresh token in database
+      const refreshTokenDoc = await RefreshToken.findOne({
+        token: refreshTokenString,
+        isRevoked: false,
+      });
+
+      if (!refreshTokenDoc) {
+        throw new Error("Invalid refresh token");
+      }
+
+      // Check if token is expired
+      if (new Date() > refreshTokenDoc.expiresAt) {
+        // Mark as revoked
+        refreshTokenDoc.isRevoked = true;
+        refreshTokenDoc.revokedAt = new Date();
+        await refreshTokenDoc.save();
+        throw new Error("Refresh token expired");
+      }
+
       // Check if user still exists
-      const user = await User.findById(decoded.userId);
+      const user = await User.findById(refreshTokenDoc.userId);
       if (!user) {
         throw new Error("User not found");
       }
 
-      // Generate new token
-      const newToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
-        expiresIn: "7d",
+      // Check if user is banned
+      if (user.isBanned) {
+        // Revoke all tokens for banned user
+        await RefreshToken.updateMany(
+          { userId: user._id },
+          { isRevoked: true, revokedAt: new Date() }
+        );
+        throw new Error("Account is banned");
+      }
+
+      // Generate new access token (15 minutes)
+      const newAccessToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
+        expiresIn: "15m",
       });
 
       return {
-        token: newToken,
+        accessToken: newAccessToken,
         user: {
           id: user._id,
           email: user.email,
@@ -926,9 +996,29 @@ class AuthService {
           isProfileComplete: user.isProfileComplete,
         },
       };
-    } catch (error) {
-      throw new Error("Invalid or expired token");
+    } catch (error: any) {
+      throw new Error(error.message || "Invalid or expired refresh token");
     }
+  }
+
+  async revokeRefreshToken(refreshTokenString: string, userId: string) {
+    const { RefreshToken } = await import("../models/refreshToken.model");
+    
+    // Revoke specific token
+    await RefreshToken.findOneAndUpdate(
+      { token: refreshTokenString, userId: new Types.ObjectId(userId) },
+      { isRevoked: true, revokedAt: new Date() }
+    );
+  }
+
+  async revokeAllUserRefreshTokens(userId: string) {
+    const { RefreshToken } = await import("../models/refreshToken.model");
+    
+    // Revoke all tokens for user (useful for logout all devices)
+    await RefreshToken.updateMany(
+      { userId: new Types.ObjectId(userId) },
+      { isRevoked: true, revokedAt: new Date() }
+    );
   }
 }
 

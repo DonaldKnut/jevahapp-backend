@@ -22,6 +22,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const http_1 = require("http");
 // Import routes
 const user_route_1 = __importDefault(require("./routes/user.route"));
@@ -57,6 +58,7 @@ const userContent_routes_1 = __importDefault(require("./routes/userContent.route
 const ebook_routes_1 = __importDefault(require("./routes/ebook.routes"));
 const bible_routes_1 = __importDefault(require("./routes/bible.routes"));
 const community_routes_1 = __importDefault(require("./routes/community.routes"));
+const playlist_route_1 = __importDefault(require("./routes/playlist.route"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -139,6 +141,7 @@ app.use((req, res, next) => {
 // Body parsing middleware
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
+app.use((0, cookie_parser_1.default)()); // Parse cookies for refresh token support
 // Request logging middleware
 let firstRequestLogged = false;
 app.use((req, res, next) => {
@@ -273,6 +276,7 @@ app.use("/api/ebooks", ebook_routes_1.default);
 app.use("/api/tts", ebook_routes_1.default);
 app.use("/api/bible", bible_routes_1.default);
 app.use("/api/community", community_routes_1.default);
+app.use("/api/playlists", playlist_route_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

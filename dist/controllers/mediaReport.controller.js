@@ -18,6 +18,7 @@ const mediaReport_model_1 = require("../models/mediaReport.model");
 const media_model_1 = require("../models/media.model");
 const user_model_1 = require("../models/user.model");
 const resendEmail_service_1 = __importDefault(require("../service/resendEmail.service"));
+const notification_service_1 = require("../service/notification.service");
 const logger_1 = __importDefault(require("../utils/logger"));
 /**
  * Report inappropriate media content
@@ -51,6 +52,15 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
+        // Check if user is trying to report their own media
+        const mediaUploaderId = (_a = media.uploadedBy) === null || _a === void 0 ? void 0 : _a.toString();
+        if (mediaUploaderId === userId) {
+            response.status(400).json({
+                success: false,
+                message: "You cannot report your own content",
+            });
+            return;
+        }
         // Check if user already reported this media
         const existingReport = yield mediaReport_model_1.MediaReport.findOne({
             mediaId: new mongoose_1.Types.ObjectId(id),
@@ -71,6 +81,14 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             description: description === null || description === void 0 ? void 0 : description.trim(),
             status: "pending",
         });
+        // Get reporter information
+        const reporter = yield user_model_1.User.findById(userId).select("firstName lastName email username");
+        const reporterName = reporter
+            ? `${reporter.firstName || ""} ${reporter.lastName || ""}`.trim() || reporter.username || reporter.email
+            : "Unknown User";
+        // Get media uploader information
+        const uploader = yield user_model_1.User.findById(media.uploadedBy).select("email");
+        const uploaderEmail = (uploader === null || uploader === void 0 ? void 0 : uploader.email) || "Unknown";
         // Increment report count on media
         const newReportCount = (media.reportCount || 0) + 1;
         yield media_model_1.Media.findByIdAndUpdate(id, {
@@ -82,13 +100,56 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                     : media.moderationStatus || "pending",
             },
         });
-        // If report count reaches threshold, notify admins
+        // Send email notification to admins on EVERY report
+        try {
+            const admins = yield user_model_1.User.find({ role: "admin" }).select("email _id");
+            const adminEmails = admins.map(admin => admin.email).filter(Boolean);
+            if (adminEmails.length > 0) {
+                // Send email notification
+                yield resendEmail_service_1.default.sendAdminReportNotification(adminEmails, media.title, media.contentType, uploaderEmail, reporterName, reason, description, id, newReportCount);
+                // Send in-app notification to all admins
+                for (const admin of admins) {
+                    try {
+                        yield notification_service_1.NotificationService.createNotification({
+                            userId: admin._id.toString(),
+                            type: "content_report",
+                            title: "New Content Report",
+                            message: `${reporterName} reported "${media.title}" - Reason: ${reason}`,
+                            metadata: {
+                                mediaId: id,
+                                contentType: media.contentType,
+                                reportId: report._id.toString(),
+                                reportReason: reason,
+                                reportCount: newReportCount,
+                                reporterName,
+                            },
+                            priority: newReportCount >= 3 ? "high" : "medium",
+                            relatedId: id,
+                        });
+                    }
+                    catch (notifError) {
+                        logger_1.default.error("Failed to send in-app notification to admin:", notifError);
+                    }
+                }
+                logger_1.default.info("Admin notifications sent for report", {
+                    mediaId: id,
+                    reportId: report._id,
+                    adminCount: admins.length,
+                    reportCount: newReportCount,
+                });
+            }
+        }
+        catch (emailError) {
+            logger_1.default.error("Failed to send admin notifications for report:", emailError);
+            // Don't fail the report submission if email fails
+        }
+        // If report count reaches threshold (3+), also send moderation alert
         if (newReportCount >= 3) {
             try {
                 const admins = yield user_model_1.User.find({ role: "admin" }).select("email");
                 const adminEmails = admins.map(admin => admin.email).filter(Boolean);
                 if (adminEmails.length > 0) {
-                    yield resendEmail_service_1.default.sendAdminModerationAlert(adminEmails, media.title, media.contentType, ((_a = (yield user_model_1.User.findById(media.uploadedBy))) === null || _a === void 0 ? void 0 : _a.email) || "Unknown", {
+                    yield resendEmail_service_1.default.sendAdminModerationAlert(adminEmails, media.title, media.contentType, uploaderEmail, {
                         isApproved: false,
                         confidence: 0.7,
                         reason: `Content has been reported ${newReportCount} times`,
@@ -97,8 +158,8 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                     }, newReportCount);
                 }
             }
-            catch (emailError) {
-                logger_1.default.error("Failed to send admin alert on report threshold:", emailError);
+            catch (thresholdEmailError) {
+                logger_1.default.error("Failed to send threshold alert:", thresholdEmailError);
             }
         }
         logger_1.default.info("Media reported", {

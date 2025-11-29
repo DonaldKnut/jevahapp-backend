@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -15,6 +48,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const crypto_1 = __importDefault(require("crypto"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const mongoose_1 = require("mongoose");
 const user_model_1 = require("../models/user.model");
 const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
 const email_service_1 = __importDefault(require("./email.service"));
@@ -372,8 +406,8 @@ class AuthService {
             };
         });
     }
-    loginUser(email, password) {
-        return __awaiter(this, void 0, void 0, function* () {
+    loginUser(email_1, password_1) {
+        return __awaiter(this, arguments, void 0, function* (email, password, rememberMe = false, deviceInfo, ipAddress, userAgent) {
             const user = yield user_model_1.User.findOne({ email, provider: "email" });
             if (!user || !(yield bcrypt_1.default.compare(password, user.password || ""))) {
                 throw new Error("Invalid email or password");
@@ -381,9 +415,32 @@ class AuthService {
             if (!user.isEmailVerified) {
                 throw new Error("Please verify your email before logging in");
             }
-            const token = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
-                expiresIn: "7d",
+            // Generate access token (short-lived: 15 minutes for regular, 7 days if rememberMe)
+            const accessTokenExpiry = rememberMe ? "7d" : "15m";
+            const accessToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
+                expiresIn: accessTokenExpiry,
             });
+            let refreshToken;
+            // If rememberMe is true, generate a long-lived refresh token (90 days)
+            if (rememberMe) {
+                const { RefreshToken } = yield Promise.resolve().then(() => __importStar(require("../models/refreshToken.model")));
+                const crypto = yield Promise.resolve().then(() => __importStar(require("crypto")));
+                // Generate secure random refresh token
+                refreshToken = crypto.randomBytes(64).toString("hex");
+                // Calculate expiration (90 days from now)
+                const expiresAt = new Date();
+                expiresAt.setDate(expiresAt.getDate() + 90);
+                // Store refresh token in database
+                yield RefreshToken.create({
+                    token: refreshToken,
+                    userId: user._id,
+                    deviceInfo,
+                    ipAddress,
+                    userAgent,
+                    expiresAt,
+                    isRevoked: false,
+                });
+            }
             // Update last login time
             yield user_model_1.User.findByIdAndUpdate(user._id, {
                 lastLoginAt: new Date(),
@@ -391,7 +448,8 @@ class AuthService {
             // Track user return for re-engagement
             yield aiReengagement_service_1.default.trackUserReturn(user._id.toString());
             return {
-                token,
+                accessToken,
+                refreshToken,
                 user: {
                     id: user._id,
                     email: user.email,
@@ -629,7 +687,7 @@ class AuthService {
             };
         });
     }
-    logout(userId, token) {
+    logout(userId, token, refreshToken) {
         return __awaiter(this, void 0, void 0, function* () {
             const user = yield user_model_1.User.findById(userId);
             if (!user) {
@@ -647,11 +705,15 @@ class AuthService {
             if (existingBlacklistedToken) {
                 throw new Error("Token already invalidated");
             }
-            // Add token to blacklist
+            // Add access token to blacklist
             yield blacklistedToken_model_1.BlacklistedToken.create({
                 token,
                 expiresAt,
             });
+            // Revoke refresh token if provided
+            if (refreshToken) {
+                yield this.revokeRefreshToken(refreshToken, userId);
+            }
             // Track user signout for re-engagement
             yield aiReengagement_service_1.default.trackUserSignout(userId);
             return { message: "User logged out successfully" };
@@ -698,22 +760,43 @@ class AuthService {
             };
         });
     }
-    refreshToken(token) {
+    refreshToken(refreshTokenString) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Verify the existing token (even if expired, we'll still decode it)
-                const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET, { ignoreExpiration: true });
+                const { RefreshToken } = yield Promise.resolve().then(() => __importStar(require("../models/refreshToken.model")));
+                // Find refresh token in database
+                const refreshTokenDoc = yield RefreshToken.findOne({
+                    token: refreshTokenString,
+                    isRevoked: false,
+                });
+                if (!refreshTokenDoc) {
+                    throw new Error("Invalid refresh token");
+                }
+                // Check if token is expired
+                if (new Date() > refreshTokenDoc.expiresAt) {
+                    // Mark as revoked
+                    refreshTokenDoc.isRevoked = true;
+                    refreshTokenDoc.revokedAt = new Date();
+                    yield refreshTokenDoc.save();
+                    throw new Error("Refresh token expired");
+                }
                 // Check if user still exists
-                const user = yield user_model_1.User.findById(decoded.userId);
+                const user = yield user_model_1.User.findById(refreshTokenDoc.userId);
                 if (!user) {
                     throw new Error("User not found");
                 }
-                // Generate new token
-                const newToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
-                    expiresIn: "7d",
+                // Check if user is banned
+                if (user.isBanned) {
+                    // Revoke all tokens for banned user
+                    yield RefreshToken.updateMany({ userId: user._id }, { isRevoked: true, revokedAt: new Date() });
+                    throw new Error("Account is banned");
+                }
+                // Generate new access token (15 minutes)
+                const newAccessToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
+                    expiresIn: "15m",
                 });
                 return {
-                    token: newToken,
+                    accessToken: newAccessToken,
                     user: {
                         id: user._id,
                         email: user.email,
@@ -726,8 +809,22 @@ class AuthService {
                 };
             }
             catch (error) {
-                throw new Error("Invalid or expired token");
+                throw new Error(error.message || "Invalid or expired refresh token");
             }
+        });
+    }
+    revokeRefreshToken(refreshTokenString, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { RefreshToken } = yield Promise.resolve().then(() => __importStar(require("../models/refreshToken.model")));
+            // Revoke specific token
+            yield RefreshToken.findOneAndUpdate({ token: refreshTokenString, userId: new mongoose_1.Types.ObjectId(userId) }, { isRevoked: true, revokedAt: new Date() });
+        });
+    }
+    revokeAllUserRefreshTokens(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { RefreshToken } = yield Promise.resolve().then(() => __importStar(require("../models/refreshToken.model")));
+            // Revoke all tokens for user (useful for logout all devices)
+            yield RefreshToken.updateMany({ userId: new mongoose_1.Types.ObjectId(userId) }, { isRevoked: true, revokedAt: new Date() });
         });
     }
 }
