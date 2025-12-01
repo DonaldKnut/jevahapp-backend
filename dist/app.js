@@ -59,6 +59,9 @@ const ebook_routes_1 = __importDefault(require("./routes/ebook.routes"));
 const bible_routes_1 = __importDefault(require("./routes/bible.routes"));
 const community_routes_1 = __importDefault(require("./routes/community.routes"));
 const playlist_route_1 = __importDefault(require("./routes/playlist.route"));
+const playbackSession_route_1 = __importDefault(require("./routes/playbackSession.route"));
+const comment_route_1 = __importDefault(require("./routes/comment.route"));
+const audio_route_1 = __importDefault(require("./routes/audio.route"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -199,6 +202,7 @@ app.get("/", (req, res) => {
             tts: "/api/tts",
             bible: "/api/bible",
             community: "/api/community/modules",
+            audio: "/api/audio",
         },
         features: [
             "User Authentication & Authorization",
@@ -277,6 +281,9 @@ app.use("/api/tts", ebook_routes_1.default);
 app.use("/api/bible", bible_routes_1.default);
 app.use("/api/community", community_routes_1.default);
 app.use("/api/playlists", playlist_route_1.default);
+app.use("/api/media", playbackSession_route_1.default);
+app.use("/api/comments", comment_route_1.default);
+app.use("/api/audio", audio_route_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

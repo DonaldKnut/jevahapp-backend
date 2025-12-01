@@ -95,6 +95,11 @@ export interface IMedia extends Document {
   isDefaultContent?: boolean;
   isOnboardingContent?: boolean;
   
+  // Copyright-free audio library fields (YouTube Audio Library style)
+  isPublicDomain?: boolean; // For copyright-free songs
+  speaker?: string; // For audio content (speaker/preacher/artist name)
+  year?: number; // Year of creation/release
+  
   // Content moderation fields
   moderationStatus?: "pending" | "approved" | "rejected" | "under_review";
   moderationResult?: {
@@ -404,6 +409,21 @@ const mediaSchema = new Schema<IMedia>(
   isOnboardingContent: {
     type: Boolean,
     default: false,
+  },
+  // Copyright-free audio library fields (YouTube Audio Library style)
+  isPublicDomain: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  speaker: {
+    type: String,
+    trim: true,
+  },
+  year: {
+    type: Number,
+    min: 1000,
+    max: new Date().getFullYear() + 1,
   },
   // Content moderation fields
   moderationStatus: {

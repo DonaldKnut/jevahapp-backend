@@ -327,6 +327,21 @@ const mediaSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    // Copyright-free audio library fields (YouTube Audio Library style)
+    isPublicDomain: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
+    speaker: {
+        type: String,
+        trim: true,
+    },
+    year: {
+        type: Number,
+        min: 1000,
+        max: new Date().getFullYear() + 1,
+    },
     // Content moderation fields
     moderationStatus: {
         type: String,

@@ -120,11 +120,14 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
 );
 
 // Indexes for better performance
+// NOTE: This index is NOT unique - allows multiple comments per user per media
 mediaInteractionSchema.index({ user: 1, media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ parentCommentId: 1 });
 mediaInteractionSchema.index({ createdAt: -1 });
 mediaInteractionSchema.index({ media: 1, parentCommentId: 1, createdAt: -1 });
+// Index for comment queries with isRemoved filter
+mediaInteractionSchema.index({ media: 1, interactionType: 1, isRemoved: 1, parentCommentId: 1, createdAt: -1 });
 
 export const MediaInteraction =
   mongoose.models.MediaInteraction ||

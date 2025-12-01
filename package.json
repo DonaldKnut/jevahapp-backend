@@ -20,6 +20,12 @@
     "seed:forums": "node scripts/seed-forum-categories.js",
     "seed:polls": "node scripts/seed-polls.js",
     "seed:polls:clear": "node scripts/seed-polls.js --clear",
+    "seed:copyright-free": "node scripts/seed-copyright-free-songs.js",
+    "seed:copyright-free:clear": "node scripts/seed-copyright-free-songs.js --clear",
+    "seed:copyright-free:upload": "node scripts/seed-copyright-free-with-upload.js",
+    "seed:copyright-free:assets": "node scripts/seed-copyright-free-from-assets.js",
+    "seed:new-copyright-free": "node scripts/seed-new-copyright-free-songs.js",
+    "drop:old-copyright-free": "node scripts/drop-old-copyright-free-songs.js",
     "indexes:create": "node scripts/create-performance-indexes.js"
   },
   "keywords": [
