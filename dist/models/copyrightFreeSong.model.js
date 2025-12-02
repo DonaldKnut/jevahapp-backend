@@ -67,6 +67,10 @@ const copyrightFreeSongSchema = new mongoose_1.Schema({
         type: Number,
         default: 0,
     },
+    viewCount: {
+        type: Number,
+        default: 0,
+    },
     duration: {
         type: Number,
     },
@@ -76,6 +80,7 @@ const copyrightFreeSongSchema = new mongoose_1.Schema({
 // Indexes
 copyrightFreeSongSchema.index({ title: "text", singer: "text" }); // For search
 copyrightFreeSongSchema.index({ likeCount: -1 }); // For sorting by popularity
+copyrightFreeSongSchema.index({ viewCount: -1 }); // For sorting by most viewed
 copyrightFreeSongSchema.index({ createdAt: -1 }); // For sorting by newest
 exports.CopyrightFreeSong = mongoose_1.default.models.CopyrightFreeSong ||
     mongoose_1.default.model("CopyrightFreeSong", copyrightFreeSongSchema);

@@ -158,8 +158,9 @@ class ContentInteractionService {
                         };
                         // Global event (backward compatible)
                         io.emit("content-like-update", payload);
-                        // Room-scoped event for fine-grained subscriptions
-                        io.to(`content:${contentId}`).emit("like-updated", payload);
+                        // Room-scoped event for fine-grained subscriptions (spec format: content:contentType:contentId)
+                        const roomKey = contentType ? `content:${contentType}:${contentId}` : `content:${contentId}`;
+                        io.to(roomKey).emit("like-updated", payload);
                     }
                 }
                 catch (socketError) {
@@ -380,13 +381,17 @@ class ContentInteractionService {
                 try {
                     const io = require("../socket/socketManager").getIO();
                     if (io) {
+                        const roomKey = `content:${contentType}:${contentId}`;
                         const payload = {
                             contentId,
                             contentType,
-                            comment: formattedComment,
+                            commentId: formattedComment.id || formattedComment._id,
+                            action: "created",
                         };
-                        io.emit("content-comment", payload);
-                        io.to(`content:${contentId}`).emit("new-comment", formattedComment);
+                        // Emit to the specific content room (per spec: content:contentType:contentId)
+                        io.to(roomKey).emit("content:comment", payload);
+                        // Also emit the full comment for immediate UI updates
+                        io.to(roomKey).emit("new-comment", formattedComment);
                     }
                 }
                 catch (_a) { }
@@ -404,7 +409,7 @@ class ContentInteractionService {
      * Helper function to format comment with nested replies and frontend-compatible fields
      */
     formatCommentWithReplies(comment, includeReplies = true) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         // Calculate reactions count
         const reactionsCount = comment.reactions
             ? Object.values(comment.reactions).reduce((sum, arr) => sum + arr.length, 0)
@@ -419,8 +424,10 @@ class ContentInteractionService {
             user: comment.user
                 ? {
                     _id: comment.user._id || comment.user,
+                    id: (comment.user._id || comment.user).toString(),
                     firstName: comment.user.firstName || "",
                     lastName: comment.user.lastName || "",
+                    username: comment.user.username || ((_h = (_g = comment.user.firstName) === null || _g === void 0 ? void 0 : _g.toLowerCase()) === null || _h === void 0 ? void 0 : _h.replace(/\s+/g, "_")) || null,
                     avatar: comment.user.avatar || null,
                 }
                 : null,
@@ -436,6 +443,7 @@ class ContentInteractionService {
             timestamp: comment.createdAt, // Alias
             reactionsCount,
             likes: reactionsCount, // Alias for frontend
+            likesCount: reactionsCount, // Spec-compliant field name
             replyCount: comment.replyCount || 0,
             replies: [], // Will be populated if includeReplies is true
         };

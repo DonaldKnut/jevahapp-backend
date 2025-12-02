@@ -58,13 +58,17 @@ const getSongById = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             });
             return;
         }
+        // Increment view count when song is viewed
+        yield songService.incrementViewCount(songId);
+        // Get updated song with new view count
+        const updatedSong = yield songService.getSongById(songId);
         let isLiked = false;
         if (userId) {
             isLiked = yield interactionService.isLiked(userId, songId);
         }
         res.status(200).json({
             success: true,
-            data: Object.assign(Object.assign({}, song), { isLiked }),
+            data: Object.assign(Object.assign({}, updatedSong), { isLiked }),
         });
     }
     catch (error) {
@@ -180,13 +184,14 @@ const toggleLike = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             });
             return;
         }
-        const { liked, likeCount, shareCount } = yield interactionService.toggleLike(userId, songId);
+        const { liked, likeCount, shareCount, viewCount } = yield interactionService.toggleLike(userId, songId);
         res.status(200).json({
             success: true,
             data: {
                 liked,
                 likeCount,
                 shareCount,
+                viewCount,
             },
         });
     }
@@ -211,12 +216,13 @@ const shareSong = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             });
             return;
         }
-        const { shareCount, likeCount } = yield interactionService.shareSong(userId, songId);
+        const { shareCount, likeCount, viewCount } = yield interactionService.shareSong(userId, songId);
         res.status(200).json({
             success: true,
             data: {
                 shareCount,
                 likeCount,
+                viewCount,
             },
         });
     }

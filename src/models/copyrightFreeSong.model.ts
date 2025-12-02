@@ -8,6 +8,7 @@ export interface ICopyrightFreeSong extends Document {
   thumbnailUrl?: string; // Optional thumbnail
   likeCount: number;
   shareCount: number;
+  viewCount: number;
   duration?: number; // Optional duration in seconds
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +47,10 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
       type: Number,
       default: 0,
     },
+    viewCount: {
+      type: Number,
+      default: 0,
+    },
     duration: {
       type: Number,
     },
@@ -58,6 +63,7 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
 // Indexes
 copyrightFreeSongSchema.index({ title: "text", singer: "text" }); // For search
 copyrightFreeSongSchema.index({ likeCount: -1 }); // For sorting by popularity
+copyrightFreeSongSchema.index({ viewCount: -1 }); // For sorting by most viewed
 copyrightFreeSongSchema.index({ createdAt: -1 }); // For sorting by newest
 
 export const CopyrightFreeSong =

@@ -50,6 +50,12 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // Increment view count when song is viewed
+    await songService.incrementViewCount(songId);
+
+    // Get updated song with new view count
+    const updatedSong = await songService.getSongById(songId);
+
     let isLiked = false;
     if (userId) {
       isLiked = await interactionService.isLiked(userId, songId);
@@ -58,7 +64,7 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
     res.status(200).json({
       success: true,
       data: {
-        ...song,
+        ...updatedSong,
         isLiked,
       },
     });
@@ -183,7 +189,7 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { liked, likeCount, shareCount } = await interactionService.toggleLike(userId, songId);
+    const { liked, likeCount, shareCount, viewCount } = await interactionService.toggleLike(userId, songId);
 
     res.status(200).json({
       success: true,
@@ -191,6 +197,7 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
         liked,
         likeCount,
         shareCount,
+        viewCount,
       },
     });
   } catch (error: any) {
@@ -216,13 +223,14 @@ export const shareSong = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { shareCount, likeCount } = await interactionService.shareSong(userId, songId);
+    const { shareCount, likeCount, viewCount } = await interactionService.shareSong(userId, songId);
 
     res.status(200).json({
       success: true,
       data: {
         shareCount,
         likeCount,
+        viewCount,
       },
     });
   } catch (error: any) {

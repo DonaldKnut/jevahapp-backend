@@ -74,6 +74,7 @@ export class CopyrightFreeSongService {
         uploadedBy: input.uploadedBy,
         likeCount: 0,
         shareCount: 0,
+        viewCount: 0,
       });
 
       return song;
@@ -137,6 +138,17 @@ export class CopyrightFreeSongService {
       });
     } catch (error: any) {
       logger.error("Error incrementing share count:", error);
+      throw error;
+    }
+  }
+
+  async incrementViewCount(songId: string): Promise<void> {
+    try {
+      await CopyrightFreeSong.findByIdAndUpdate(songId, {
+        $inc: { viewCount: 1 },
+      });
+    } catch (error: any) {
+      logger.error("Error incrementing view count:", error);
       throw error;
     }
   }

@@ -232,8 +232,9 @@ export class ContentInteractionService {
           };
           // Global event (backward compatible)
           io.emit("content-like-update", payload);
-          // Room-scoped event for fine-grained subscriptions
-          io.to(`content:${contentId}`).emit("like-updated", payload);
+          // Room-scoped event for fine-grained subscriptions (spec format: content:contentType:contentId)
+          const roomKey = contentType ? `content:${contentType}:${contentId}` : `content:${contentId}`;
+          io.to(roomKey).emit("like-updated", payload);
         }
       } catch (socketError) {
         logger.warn("Failed to send real-time like update", {
@@ -549,13 +550,17 @@ export class ContentInteractionService {
       try {
         const io = require("../socket/socketManager").getIO();
         if (io) {
+          const roomKey = `content:${contentType}:${contentId}`;
           const payload = {
             contentId,
             contentType,
-            comment: formattedComment,
+            commentId: formattedComment.id || formattedComment._id,
+            action: "created",
           };
-          io.emit("content-comment", payload);
-          io.to(`content:${contentId}`).emit("new-comment", formattedComment);
+          // Emit to the specific content room (per spec: content:contentType:contentId)
+          io.to(roomKey).emit("content:comment", payload);
+          // Also emit the full comment for immediate UI updates
+          io.to(roomKey).emit("new-comment", formattedComment);
         }
       } catch {}
 
@@ -590,8 +595,10 @@ export class ContentInteractionService {
       user: comment.user
         ? {
             _id: comment.user._id || comment.user,
+            id: (comment.user._id || comment.user).toString(),
             firstName: comment.user.firstName || "",
             lastName: comment.user.lastName || "",
+            username: comment.user.username || comment.user.firstName?.toLowerCase()?.replace(/\s+/g, "_") || null,
             avatar: comment.user.avatar || null,
           }
         : null,
@@ -607,6 +614,7 @@ export class ContentInteractionService {
       timestamp: comment.createdAt, // Alias
       reactionsCount,
       likes: reactionsCount, // Alias for frontend
+      likesCount: reactionsCount, // Spec-compliant field name
       replyCount: comment.replyCount || 0,
       replies: [], // Will be populated if includeReplies is true
     };

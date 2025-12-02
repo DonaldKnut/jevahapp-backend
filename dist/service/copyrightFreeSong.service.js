@@ -68,6 +68,7 @@ class CopyrightFreeSongService {
                     uploadedBy: input.uploadedBy,
                     likeCount: 0,
                     shareCount: 0,
+                    viewCount: 0,
                 });
                 return song;
             }
@@ -136,6 +137,19 @@ class CopyrightFreeSongService {
             }
             catch (error) {
                 logger_1.default.error("Error incrementing share count:", error);
+                throw error;
+            }
+        });
+    }
+    incrementViewCount(songId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                yield copyrightFreeSong_model_1.CopyrightFreeSong.findByIdAndUpdate(songId, {
+                    $inc: { viewCount: 1 },
+                });
+            }
+            catch (error) {
+                logger_1.default.error("Error incrementing view count:", error);
                 throw error;
             }
         });

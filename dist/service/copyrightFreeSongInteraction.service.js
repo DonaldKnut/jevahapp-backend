@@ -71,6 +71,7 @@ class CopyrightFreeSongInteractionService {
                     liked: newLikedState,
                     likeCount: (song === null || song === void 0 ? void 0 : song.likeCount) || 0,
                     shareCount: (song === null || song === void 0 ? void 0 : song.shareCount) || 0,
+                    viewCount: (song === null || song === void 0 ? void 0 : song.viewCount) || 0,
                 };
             }
             catch (error) {
@@ -105,6 +106,7 @@ class CopyrightFreeSongInteractionService {
                     return {
                         shareCount: (song === null || song === void 0 ? void 0 : song.shareCount) || 0,
                         likeCount: (song === null || song === void 0 ? void 0 : song.likeCount) || 0,
+                        viewCount: (song === null || song === void 0 ? void 0 : song.viewCount) || 0,
                     };
                 }
                 // Increment share count
@@ -114,6 +116,7 @@ class CopyrightFreeSongInteractionService {
                 return {
                     shareCount: (song === null || song === void 0 ? void 0 : song.shareCount) || 0,
                     likeCount: (song === null || song === void 0 ? void 0 : song.likeCount) || 0,
+                    viewCount: (song === null || song === void 0 ? void 0 : song.viewCount) || 0,
                 };
             }
             catch (error) {

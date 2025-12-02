@@ -27,7 +27,7 @@ export class CopyrightFreeSongInteractionService {
   async toggleLike(
     userId: string,
     songId: string
-  ): Promise<{ liked: boolean; likeCount: number; shareCount: number }> {
+  ): Promise<{ liked: boolean; likeCount: number; shareCount: number; viewCount: number }> {
     try {
       // Get or create interaction
       let interaction = await CopyrightFreeSongInteraction.findOne({
@@ -64,6 +64,7 @@ export class CopyrightFreeSongInteractionService {
         liked: newLikedState,
         likeCount: song?.likeCount || 0,
         shareCount: song?.shareCount || 0,
+        viewCount: song?.viewCount || 0,
       };
     } catch (error: any) {
       logger.error("Error toggling like:", error);
@@ -74,7 +75,7 @@ export class CopyrightFreeSongInteractionService {
   async shareSong(
     userId: string,
     songId: string
-  ): Promise<{ shareCount: number; likeCount: number }> {
+  ): Promise<{ shareCount: number; likeCount: number; viewCount: number }> {
     try {
       // Get or create interaction
       let interaction = await CopyrightFreeSongInteraction.findOne({
@@ -98,6 +99,7 @@ export class CopyrightFreeSongInteractionService {
         return {
           shareCount: song?.shareCount || 0,
           likeCount: song?.likeCount || 0,
+          viewCount: song?.viewCount || 0,
         };
       }
 
@@ -110,6 +112,7 @@ export class CopyrightFreeSongInteractionService {
       return {
         shareCount: song?.shareCount || 0,
         likeCount: song?.likeCount || 0,
+        viewCount: song?.viewCount || 0,
       };
     } catch (error: any) {
       logger.error("Error sharing song:", error);
