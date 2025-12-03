@@ -53,11 +53,11 @@ router.post("/batch-metadata", contentInteraction_controller_1.getBatchContentMe
 /**
  * @route   POST /api/content/:contentType/:contentId/view
  * @desc    Record a view/listen/read event with dedupe and thresholding
- * @access  Public (auth optional)
+ * @access  Protected (Authentication required)
  * @body    { durationMs?: number, progressPct?: number, isComplete?: boolean }
  * @returns { success: boolean, data: { viewCount: number, hasViewed: boolean } }
  */
-router.post("/:contentType/:contentId/view", contentInteraction_controller_1.recordContentView);
+router.post("/:contentType/:contentId/view", auth_middleware_1.verifyToken, interactionRateLimiter, contentInteraction_controller_1.recordContentView);
 /**
  * @route   DELETE /api/content/comments/:commentId
  * @desc    Remove comment

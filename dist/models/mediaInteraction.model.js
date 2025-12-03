@@ -116,6 +116,7 @@ const mediaInteractionSchema = new mongoose_1.Schema({
 }, { timestamps: true });
 // Indexes for better performance
 // NOTE: This index is NOT unique - allows multiple comments per user per media
+// For views, application-level deduplication ensures one view per user per content
 mediaInteractionSchema.index({ user: 1, media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ media: 1, interactionType: 1 });
 mediaInteractionSchema.index({ parentCommentId: 1 });

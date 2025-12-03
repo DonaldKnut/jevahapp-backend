@@ -9,6 +9,7 @@ import {
   deleteSong as deleteCopyrightFreeSongNew,
   toggleLike as toggleLikeCopyrightFreeSongNew,
   shareSong as shareCopyrightFreeSongNew,
+  trackPlayback as trackCopyrightFreeSongPlayback,
 } from "../controllers/copyrightFreeSong.controller";
 import {
   getUserAudioLibrary,
@@ -162,6 +163,21 @@ router.post(
   verifyToken,
   apiRateLimiter,
   downloadCopyrightFreeSong
+);
+
+/**
+ * @route   POST /api/audio/copyright-free/:songId/playback/track
+ * @desc    Track playback and increment view count if threshold is met (Authenticated)
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @body    { playbackDuration: number (required), thresholdSeconds?: number (optional, default: 30) }
+ * @returns { success: boolean, data: { viewCountIncremented: boolean, newViewCount: number, playbackDuration: number, thresholdSeconds: number } }
+ */
+router.post(
+  "/copyright-free/:songId/playback/track",
+  verifyToken,
+  apiRateLimiter,
+  trackCopyrightFreeSongPlayback
 );
 
 

@@ -134,6 +134,15 @@ router.post("/copyright-free/:songId/share", auth_middleware_1.verifyToken, rate
  * @returns { success: boolean, downloadUrl: string, fileName: string, fileSize: number, contentType: string }
  */
 router.post("/copyright-free/:songId/download", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, audio_controller_1.downloadCopyrightFreeSong);
+/**
+ * @route   POST /api/audio/copyright-free/:songId/playback/track
+ * @desc    Track playback and increment view count if threshold is met (Authenticated)
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @body    { playbackDuration: number (required), thresholdSeconds?: number (optional, default: 30) }
+ * @returns { success: boolean, data: { viewCountIncremented: boolean, newViewCount: number, playbackDuration: number, thresholdSeconds: number } }
+ */
+router.post("/copyright-free/:songId/playback/track", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.trackPlayback);
 // ============================================================================
 // AUDIO PLAYLIST ROUTES (Wrapper for existing playlist routes)
 // ============================================================================

@@ -328,7 +328,15 @@ const recordContentView = (req, res) => __awaiter(void 0, void 0, void 0, functi
     try {
         const { contentId, contentType } = req.params;
         const { durationMs, progressPct, isComplete } = req.body || {};
-        const userId = req.userId; // optional
+        const userId = req.userId; // Required - authentication enforced by middleware
+        // Authentication is required - middleware should handle this, but check anyway
+        if (!userId) {
+            res.status(401).json({
+                success: false,
+                message: "Authentication required for view tracking"
+            });
+            return;
+        }
         if (!contentId || !mongoose_1.Types.ObjectId.isValid(contentId)) {
             res.status(400).json({ success: false, message: "Invalid content ID" });
             return;
@@ -345,10 +353,10 @@ const recordContentView = (req, res) => __awaiter(void 0, void 0, void 0, functi
             res.status(400).json({ success: false, message: "Invalid content type" });
             return;
         }
-        // Delegate to service method (reuse contentInteractionService responsibilities)
+        // Delegate to service method
         const { default: contentService } = yield Promise.resolve().then(() => __importStar(require("../service/contentView.service")));
         const result = yield contentService.recordView({
-            userId: userId || undefined,
+            userId: userId,
             contentId,
             contentType: contentType,
             durationMs: typeof durationMs === "number" ? durationMs : undefined,
@@ -366,6 +374,21 @@ const recordContentView = (req, res) => __awaiter(void 0, void 0, void 0, functi
             contentId: req.params.contentId,
             contentType: req.params.contentType,
         });
+        // Handle specific error types
+        if (error.message.includes("Authentication required")) {
+            res.status(401).json({
+                success: false,
+                message: "Authentication required for view tracking"
+            });
+            return;
+        }
+        if (error.message.includes("not found") || error.message.includes("Content not found")) {
+            res.status(404).json({
+                success: false,
+                message: "Content not found",
+            });
+            return;
+        }
         res.status(500).json({ success: false, message: "Failed to record view" });
     }
 });
