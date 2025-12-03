@@ -95,16 +95,38 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
 
     const query: any = { isActive: true };
 
-    if (categoryFilter && typeof categoryFilter === "string" && Types.ObjectId.isValid(categoryFilter)) {
-      query.categoryId = new Types.ObjectId(categoryFilter);
+    // Handle categories view - return only categories (isCategory: true, categoryId: null)
+    if (viewParam === "categories") {
+      query.isCategory = true;
+      query.$or = [
+        { categoryId: null },
+        { categoryId: { $exists: false } }
+      ];
+    }
+    // Handle discussions view - return discussions under a specific category
+    else if (viewParam === "discussions") {
+      // categoryId is required for discussions view
+      if (!categoryFilter || typeof categoryFilter !== "string" || !Types.ObjectId.isValid(categoryFilter)) {
+        res.status(400).json({
+          success: false,
+          error: "categoryId is required when view=discussions"
+        });
+        return;
+      }
       query.isCategory = false;
-    } else if (viewParam === "discussions") {
-      query.$or = [{ isCategory: false }, { categoryId: { $exists: true } }];
-    } else if (viewParam === "all") {
-      // no additional filtering
-    } else {
-      // default to categories
-      query.$or = [{ isCategory: true }, { categoryId: { $exists: false } }];
+      query.categoryId = new Types.ObjectId(categoryFilter);
+    }
+    // Handle all view - return all active forums
+    else if (viewParam === "all") {
+      // No additional filtering - return all active forums
+    }
+    // Default to categories if view param is not recognized
+    else {
+      query.isCategory = true;
+      query.$or = [
+        { categoryId: null },
+        { categoryId: { $exists: false } }
+      ];
     }
 
     const [forums, total] = await Promise.all([

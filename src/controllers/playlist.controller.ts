@@ -876,8 +876,8 @@ export const reorderPlaylistTracks = async (
       const trackId = track.mediaId?.toString() || track.copyrightFreeSongId?.toString();
       if (trackId) {
         const newOrder = trackMap.get(trackId);
-        if (newOrder !== undefined) {
-          track.order = newOrder;
+      if (newOrder !== undefined) {
+        track.order = newOrder;
         }
       }
     });

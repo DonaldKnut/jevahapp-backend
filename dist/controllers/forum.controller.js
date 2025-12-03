@@ -128,19 +128,38 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const viewParam = String(req.query.view || req.query.type || "categories").toLowerCase();
         const categoryFilter = req.query.categoryId;
         const query = { isActive: true };
-        if (categoryFilter && typeof categoryFilter === "string" && mongoose_1.Types.ObjectId.isValid(categoryFilter)) {
-            query.categoryId = new mongoose_1.Types.ObjectId(categoryFilter);
-            query.isCategory = false;
+        // Handle categories view - return only categories (isCategory: true, categoryId: null)
+        if (viewParam === "categories") {
+            query.isCategory = true;
+            query.$or = [
+                { categoryId: null },
+                { categoryId: { $exists: false } }
+            ];
         }
+        // Handle discussions view - return discussions under a specific category
         else if (viewParam === "discussions") {
-            query.$or = [{ isCategory: false }, { categoryId: { $exists: true } }];
+            // categoryId is required for discussions view
+            if (!categoryFilter || typeof categoryFilter !== "string" || !mongoose_1.Types.ObjectId.isValid(categoryFilter)) {
+                res.status(400).json({
+                    success: false,
+                    error: "categoryId is required when view=discussions"
+                });
+                return;
+            }
+            query.isCategory = false;
+            query.categoryId = new mongoose_1.Types.ObjectId(categoryFilter);
         }
+        // Handle all view - return all active forums
         else if (viewParam === "all") {
-            // no additional filtering
+            // No additional filtering - return all active forums
         }
+        // Default to categories if view param is not recognized
         else {
-            // default to categories
-            query.$or = [{ isCategory: true }, { categoryId: { $exists: false } }];
+            query.isCategory = true;
+            query.$or = [
+                { categoryId: null },
+                { categoryId: { $exists: false } }
+            ];
         }
         const [forums, total] = yield Promise.all([
             forum_model_1.Forum.find(query)
