@@ -8,9 +8,19 @@ import {
   getUserVideos,
   getUserAudios,
   getUserContentById,
+  getMyContent,
 } from "../controllers/userContent.controller";
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/user-content/my-content
+ * @desc    Get all authenticated user's uploaded content with engagement metrics
+ * @access  Protected (Authenticated users only)
+ * @query   { page?: number, limit?: number, sort?: "recent" | "popular", contentType?: "all" | "video" | "audio" | "photo" | "post" }
+ * @returns { success: boolean, data: Array<ContentItem>, pagination: object }
+ */
+router.get("/my-content", verifyToken, apiRateLimiter, getMyContent);
 
 router.get("/user/tabs", verifyToken, apiRateLimiter, getProfileTabs);
 router.get("/user/photos", verifyToken, apiRateLimiter, getUserPhotos);

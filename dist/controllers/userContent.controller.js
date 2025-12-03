@@ -17,6 +17,7 @@ exports.getUserPhotos = getUserPhotos;
 exports.getUserPosts = getUserPosts;
 exports.getUserVideos = getUserVideos;
 exports.getUserAudios = getUserAudios;
+exports.getMyContent = getMyContent;
 exports.getUserContentById = getUserContentById;
 const mongoose_1 = __importDefault(require("mongoose"));
 const media_model_1 = require("../models/media.model");
@@ -172,6 +173,91 @@ function getUserAudios(req, res) {
         likes: d.likeCount || 0,
         comments: d.commentCount || 0,
     }));
+}
+/**
+ * Get all user's uploaded content with basic engagement metrics
+ * Unified endpoint for listing all content by the authenticated user
+ */
+function getMyContent(req, res) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const userId = req.userId;
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    message: "Unauthorized: User not authenticated",
+                });
+                return;
+            }
+            const { page, limit, skip, sort } = parsePaging(req);
+            const contentType = req.query.contentType;
+            // Build query
+            const query = {
+                uploadedBy: new mongoose_1.default.Types.ObjectId(userId),
+            };
+            // Filter by content type if provided
+            if (contentType && contentType !== "all") {
+                const typeMap = {
+                    video: ["videos", "sermon", "live", "recording"],
+                    audio: ["audio", "music", "podcast"],
+                    photo: ["image"],
+                    post: ["ebook", "devotional", "sermon"],
+                };
+                if (typeMap[contentType]) {
+                    query.contentType = { $in: typeMap[contentType] };
+                }
+                else {
+                    query.contentType = contentType;
+                }
+            }
+            // Get content with pagination
+            const [items, total] = yield Promise.all([
+                media_model_1.Media.find(query)
+                    .sort(sort)
+                    .skip(skip)
+                    .limit(limit)
+                    .select("_id title description contentType thumbnailUrl fileUrl viewCount likeCount commentCount shareCount downloadCount createdAt updatedAt")
+                    .lean(),
+                media_model_1.Media.countDocuments(query),
+            ]);
+            // Format response with engagement metrics
+            const formattedItems = items.map((doc) => ({
+                id: doc._id.toString(),
+                title: doc.title || "Untitled",
+                description: doc.description || "",
+                contentType: doc.contentType,
+                thumbnailUrl: doc.thumbnailUrl,
+                fileUrl: doc.fileUrl,
+                engagement: {
+                    views: doc.viewCount || 0,
+                    likes: doc.likeCount || 0,
+                    comments: doc.commentCount || 0,
+                    shares: doc.shareCount || 0,
+                    downloads: doc.downloadCount || 0,
+                },
+                createdAt: doc.createdAt,
+                updatedAt: doc.updatedAt,
+            }));
+            res.status(200).json({
+                success: true,
+                data: formattedItems,
+                pagination: {
+                    page,
+                    pageSize: limit,
+                    total,
+                    totalPages: Math.ceil(total / limit),
+                },
+            });
+        }
+        catch (error) {
+            console.error("Get my content error:", error);
+            res.status(500).json({
+                success: false,
+                message: "Failed to retrieve your content",
+                error: error.message,
+            });
+        }
+    });
 }
 function getUserContentById(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
