@@ -672,3 +672,139 @@ export const getUserAudioLibrary = async (
   }
 };
 
+/**
+ * Download a copyright-free song for offline listening (Authenticated)
+ */
+export const downloadCopyrightFreeSong = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { songId } = req.params;
+    const { fileSize } = req.body as { fileSize?: number };
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not authenticated",
+      });
+      return;
+    }
+
+    if (!songId || !Types.ObjectId.isValid(songId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID",
+      });
+      return;
+    }
+
+    // Fetch the song to verify it exists and is a copyright-free song
+    const { Media } = await import("../models/media.model");
+    const song = await Media.findById(songId).select(
+      "fileSize fileUrl contentType title isPublicDomain"
+    );
+
+    if (!song) {
+      res.status(404).json({
+        success: false,
+        message: "Song not found",
+      });
+      return;
+    }
+
+    // Verify this is a copyright-free song
+    if (!song.isPublicDomain) {
+      res.status(403).json({
+        success: false,
+        message: "This song is not available for download as a copyright-free song",
+      });
+      return;
+    }
+
+    // Verify it's an audio/music file
+    if (!["music", "audio"].includes(song.contentType)) {
+      res.status(400).json({
+        success: false,
+        message: "This content is not an audio file",
+      });
+      return;
+    }
+
+    // Check if file is available
+    if (!song.fileUrl) {
+      res.status(403).json({
+        success: false,
+        message: "Song file not available for download",
+      });
+      return;
+    }
+
+    // Use provided fileSize, or fallback to song.fileSize, or 0 as default
+    const finalFileSize =
+      fileSize && typeof fileSize === "number" && fileSize > 0
+        ? fileSize
+        : song.fileSize && typeof song.fileSize === "number" && song.fileSize > 0
+        ? song.fileSize
+        : 0;
+
+    // Use the existing MediaService to handle download
+    const mediaService = new MediaService();
+    const result = await mediaService.downloadMedia({
+      userId,
+      mediaId: songId,
+      fileSize: finalFileSize,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Download recorded successfully",
+      downloadUrl: result.downloadUrl,
+      fileName: result.fileName,
+      fileSize: result.fileSize,
+      contentType: result.contentType,
+    });
+  } catch (error: unknown) {
+    logger.error("Error downloading copyright-free song:", error);
+
+    if (error instanceof Error) {
+      if (error.message.includes("not found")) {
+        res.status(404).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
+      if (
+        error.message.includes("not available for download") ||
+        error.message.includes("not available")
+      ) {
+        res.status(403).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+
+      if (
+        error.message.includes("Invalid") ||
+        error.message.includes("required")
+      ) {
+        res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to record download",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
