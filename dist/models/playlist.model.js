@@ -45,10 +45,23 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Playlist = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const playlistTrackSchema = new mongoose_1.Schema({
+    // Content reference - one required (polymorphic)
     mediaId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "Media",
+        required: false,
+    },
+    copyrightFreeSongId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "CopyrightFreeSong",
+        required: false,
+    },
+    // Type discriminator (required)
+    trackType: {
+        type: String,
+        enum: ["media", "copyrightFree"],
         required: true,
+        index: true,
     },
     addedAt: {
         type: Date,
@@ -70,6 +83,26 @@ const playlistTrackSchema = new mongoose_1.Schema({
         maxlength: 500,
     },
 }, { _id: false });
+// Professional validation: Ensure exactly one content reference matches trackType
+playlistTrackSchema.pre("validate", function (next) {
+    const hasMedia = !!this.mediaId;
+    const hasCopyrightFree = !!this.copyrightFreeSongId;
+    // Must have exactly one
+    if (!hasMedia && !hasCopyrightFree) {
+        return next(new Error("Track must have either mediaId or copyrightFreeSongId"));
+    }
+    if (hasMedia && hasCopyrightFree) {
+        return next(new Error("Track cannot have both mediaId and copyrightFreeSongId"));
+    }
+    // Validate trackType matches content reference
+    if (this.trackType === "media" && !hasMedia) {
+        return next(new Error("trackType 'media' requires mediaId"));
+    }
+    if (this.trackType === "copyrightFree" && !hasCopyrightFree) {
+        return next(new Error("trackType 'copyrightFree' requires copyrightFreeSongId"));
+    }
+    next();
+});
 const playlistSchema = new mongoose_1.Schema({
     name: {
         type: String,
@@ -128,7 +161,9 @@ const playlistSchema = new mongoose_1.Schema({
 playlistSchema.index({ userId: 1, createdAt: -1 });
 playlistSchema.index({ userId: 1, name: 1 }); // For finding playlists by name
 playlistSchema.index({ isPublic: 1, playCount: -1 }); // For public playlist discovery
-playlistSchema.index({ "tracks.mediaId": 1 }); // For finding which playlists contain a track
+playlistSchema.index({ "tracks.mediaId": 1 }); // For finding which playlists contain a media track
+playlistSchema.index({ "tracks.copyrightFreeSongId": 1 }); // For finding which playlists contain a copyright-free song
+playlistSchema.index({ "tracks.trackType": 1 }); // For filtering by track type
 // Pre-save middleware to update totalTracks
 playlistSchema.pre("save", function (next) {
     this.totalTracks = this.tracks ? this.tracks.length : 0;

@@ -291,6 +291,16 @@ export const banUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Security: Prevent self-ban
+    if (id === adminId) {
+      res.status(400).json({
+        success: false,
+        message: "Cannot ban yourself",
+      });
+      return;
+    }
+
+    // Security: Prevent banning other admins
     if (user.role === "admin") {
       res.status(403).json({
         success: false,
@@ -449,6 +459,24 @@ export const updateUserRole = async (
     }
 
     const oldRole = user.role;
+
+    // Security: Prevent removing your own admin role
+    if (id === adminId && role !== "admin") {
+      res.status(400).json({
+        success: false,
+        message: "Cannot remove your own admin role",
+      });
+      return;
+    }
+
+    // Security: Prevent removing admin role from other admins
+    if (user.role === "admin" && role !== "admin") {
+      res.status(403).json({
+        success: false,
+        message: "Cannot remove admin role from other admins",
+      });
+      return;
+    }
 
     await User.findByIdAndUpdate(id, { role });
 

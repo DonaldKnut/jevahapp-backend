@@ -63,20 +63,21 @@ router.delete("/:playlistId", verifyToken, apiRateLimiter, deletePlaylist);
 
 /**
  * @route   POST /api/playlists/:playlistId/tracks
- * @desc    Add a track (media) to a playlist
+ * @desc    Add a track to a playlist (supports both Media and CopyrightFreeSong)
  * @access  Protected (Authenticated users only - own playlists only)
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
- * @body    { mediaId: string, notes?: string, position?: number }
+ * @body    { mediaId?: string, copyrightFreeSongId?: string, notes?: string, position?: number }
  * @returns { success: boolean, message: string, data: Playlist }
  */
 router.post("/:playlistId/tracks", verifyToken, apiRateLimiter, addTrackToPlaylist);
 
 /**
  * @route   DELETE /api/playlists/:playlistId/tracks/:mediaId
- * @desc    Remove a track from a playlist
+ * @desc    Remove a track from a playlist (supports both Media and CopyrightFreeSong)
  * @access  Protected (Authenticated users only - own playlists only)
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
- * @param   { mediaId: string } - MongoDB ObjectId of the media item
+ * @param   { mediaId: string } - MongoDB ObjectId of the track (media or copyright-free song)
+ * @query   { trackType?: "media" | "copyrightFree", copyrightFreeSongId?: string }
  * @returns { success: boolean, message: string, data: Playlist }
  */
 router.delete("/:playlistId/tracks/:mediaId", verifyToken, apiRateLimiter, removeTrackFromPlaylist);

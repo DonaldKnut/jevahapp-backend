@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { Playlist } from "../models/playlist.model";
 import { Media } from "../models/media.model";
+import { CopyrightFreeSong } from "../models/copyrightFreeSong.model";
 import logger from "../utils/logger";
 
 interface CreatePlaylistBody {
@@ -13,7 +14,8 @@ interface CreatePlaylistBody {
 }
 
 interface AddTrackToPlaylistBody {
-  mediaId: string;
+  mediaId?: string; // For regular Media items
+  copyrightFreeSongId?: string; // For copyright-free songs
   notes?: string;
   position?: number; // Optional position to insert at
 }
@@ -28,9 +30,124 @@ interface UpdatePlaylistBody {
 
 interface ReorderTracksBody {
   tracks: Array<{
-    mediaId: string;
+    mediaId?: string;
+    copyrightFreeSongId?: string;
+    trackType: "media" | "copyrightFree";
     order: number;
   }>;
+}
+
+/**
+ * Professional helper: Populate playlist tracks from both collections
+ * Returns unified format for frontend consumption
+ */
+async function populatePlaylistTracks(playlist: any) {
+  if (!playlist || !playlist.tracks || playlist.tracks.length === 0) {
+    return playlist;
+  }
+
+  // Separate track IDs by type
+  const mediaIds: Types.ObjectId[] = [];
+  const copyrightFreeIds: Types.ObjectId[] = [];
+
+  playlist.tracks.forEach((track: any) => {
+    // Backward compatibility: if trackType doesn't exist, assume it's media (old format)
+    if (!track.trackType && track.mediaId) {
+      track.trackType = "media"; // Auto-migrate old tracks
+    }
+    
+    if (track.trackType === "media" && track.mediaId) {
+      mediaIds.push(track.mediaId);
+    } else if (track.trackType === "copyrightFree" && track.copyrightFreeSongId) {
+      copyrightFreeIds.push(track.copyrightFreeSongId);
+    }
+  });
+
+  // Fetch both collections in parallel (performance optimization)
+  const [mediaItems, copyrightFreeSongs] = await Promise.all([
+    mediaIds.length > 0
+      ? Media.find({ _id: { $in: mediaIds } })
+          .populate("uploadedBy", "firstName lastName avatar")
+          .lean()
+      : Promise.resolve([]),
+    copyrightFreeIds.length > 0
+      ? CopyrightFreeSong.find({ _id: { $in: copyrightFreeIds } })
+          .populate("uploadedBy", "firstName lastName avatar")
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
+  // Create lookup maps for O(1) access
+  const mediaMap = new Map(mediaItems.map((m: any) => [String(m._id), m]));
+  const copyrightFreeMap = new Map(
+    copyrightFreeSongs.map((s: any) => [String(s._id), s])
+  );
+
+  // Transform tracks to unified format
+  const populatedTracks = playlist.tracks.map((track: any) => {
+    const trackData = track.toObject ? track.toObject() : track;
+    
+    // Backward compatibility: auto-detect trackType if missing
+    if (!trackData.trackType) {
+      if (trackData.mediaId) {
+        trackData.trackType = "media";
+      } else if (trackData.copyrightFreeSongId) {
+        trackData.trackType = "copyrightFree";
+      }
+    }
+    
+    let content: any = null;
+    
+    if (trackData.trackType === "media" && trackData.mediaId) {
+      const media = mediaMap.get(String(trackData.mediaId));
+      if (media) {
+        content = {
+          _id: media._id,
+          title: media.title,
+          thumbnailUrl: media.thumbnailUrl,
+          fileUrl: media.fileUrl,
+          duration: media.duration,
+          artistName: media.speaker || 
+            (media.uploadedBy ? `${media.uploadedBy.firstName || ""} ${media.uploadedBy.lastName || ""}`.trim() || "Unknown" : "Unknown"),
+          contentType: media.contentType,
+          uploadedBy: media.uploadedBy,
+        };
+      }
+    } else if (trackData.trackType === "copyrightFree" && trackData.copyrightFreeSongId) {
+      const song = copyrightFreeMap.get(String(trackData.copyrightFreeSongId));
+      if (song) {
+        content = {
+          _id: song._id,
+          title: song.title,
+          thumbnailUrl: song.thumbnailUrl,
+          fileUrl: song.fileUrl,
+          duration: song.duration,
+          artistName: song.singer || "Unknown",
+          contentType: "music",
+          uploadedBy: song.uploadedBy,
+        };
+      }
+    }
+    
+    return {
+      _id: trackData._id,
+      trackType: trackData.trackType,
+      mediaId: trackData.mediaId || null,
+      copyrightFreeSongId: trackData.copyrightFreeSongId || null,
+      content, // Unified content object (frontend doesn't need to care about source)
+      addedAt: trackData.addedAt,
+      addedBy: trackData.addedBy,
+      order: trackData.order,
+      notes: trackData.notes,
+    };
+  });
+
+  // Return playlist with populated tracks
+  const playlistObj = playlist.toObject ? playlist.toObject() : playlist;
+  return {
+    ...playlistObj,
+    tracks: populatedTracks,
+  };
 }
 
 /**
@@ -132,8 +249,6 @@ export const getUserPlaylists = async (
     const playlists = await Playlist.find({
       userId: new Types.ObjectId(userId),
     })
-      .populate("tracks.mediaId", "title contentType thumbnailUrl duration")
-      .populate("tracks.addedBy", "firstName lastName")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -142,9 +257,14 @@ export const getUserPlaylists = async (
       userId: new Types.ObjectId(userId),
     });
 
+    // Populate tracks for all playlists using unified helper
+    const populatedPlaylists = await Promise.all(
+      playlists.map((playlist) => populatePlaylistTracks(playlist))
+    );
+
     response.status(200).json({
       success: true,
-      data: playlists,
+      data: populatedPlaylists,
       pagination: {
         page,
         limit,
@@ -189,16 +309,7 @@ export const getPlaylistById = async (
     }
 
     const playlist = await Playlist.findById(playlistId)
-      .populate("userId", "firstName lastName avatar")
-      .populate({
-        path: "tracks.mediaId",
-        select: "title description contentType thumbnailUrl fileUrl duration uploadedBy createdAt",
-        populate: {
-          path: "uploadedBy",
-          select: "firstName lastName avatar",
-        },
-      })
-      .populate("tracks.addedBy", "firstName lastName");
+      .populate("userId", "firstName lastName avatar");
 
     if (!playlist) {
       response.status(404).json({
@@ -218,9 +329,12 @@ export const getPlaylistById = async (
       return;
     }
 
+    // Populate tracks using unified helper
+    const populated = await populatePlaylistTracks(playlist);
+
     response.status(200).json({
       success: true,
-      data: playlist,
+      data: populated,
     });
   } catch (error: any) {
     logger.error("Get playlist by ID error:", error);
@@ -307,19 +421,20 @@ export const updatePlaylist = async (
       playlistId,
       updateData,
       { new: true }
-    )
-      .populate("tracks.mediaId", "title contentType thumbnailUrl duration")
-      .populate("tracks.addedBy", "firstName lastName");
+    );
 
     logger.info("Playlist updated", {
       playlistId,
       userId,
     });
 
+    // Populate tracks using unified helper
+    const populated = await populatePlaylistTracks(updatedPlaylist!);
+
     response.status(200).json({
       success: true,
       message: "Playlist updated successfully",
-      data: updatedPlaylist,
+      data: populated,
     });
   } catch (error: any) {
     logger.error("Update playlist error:", error);
@@ -449,30 +564,68 @@ export const addTrackToPlaylist = async (
       return;
     }
 
-    const { mediaId, notes, position } = request.body as AddTrackToPlaylistBody;
+    const { mediaId, copyrightFreeSongId, notes, position } = request.body as AddTrackToPlaylistBody;
 
-    if (!mediaId || !Types.ObjectId.isValid(mediaId)) {
+    // Professional validation: Determine track type and validate
+    let trackType: "media" | "copyrightFree" | null = null;
+    let trackId: string | null = null;
+
+    if (mediaId && copyrightFreeSongId) {
       response.status(400).json({
         success: false,
-        message: "Valid media ID is required",
+        error: "Cannot specify both mediaId and copyrightFreeSongId",
       });
       return;
     }
 
-    // Verify media exists
-    const media = await Media.findById(mediaId);
-    if (!media) {
+    if (mediaId) {
+      trackType = "media";
+      trackId = mediaId;
+    } else if (copyrightFreeSongId) {
+      trackType = "copyrightFree";
+      trackId = copyrightFreeSongId;
+    } else {
+      response.status(400).json({
+        success: false,
+        error: "Either mediaId or copyrightFreeSongId is required",
+      });
+      return;
+    }
+
+    if (!Types.ObjectId.isValid(trackId)) {
+      response.status(400).json({
+        success: false,
+        error: `Invalid ${trackType === "media" ? "media" : "copyright-free song"} ID`,
+      });
+      return;
+    }
+
+    // Verify content exists in appropriate collection
+    let contentExists = false;
+    if (trackType === "media") {
+      const media = await Media.findById(trackId);
+      contentExists = !!media;
+    } else {
+      const song = await CopyrightFreeSong.findById(trackId);
+      contentExists = !!song;
+    }
+
+    if (!contentExists) {
       response.status(404).json({
         success: false,
-        message: "Media not found",
+        error: `${trackType === "media" ? "Media" : "Copyright-free song"} not found`,
       });
       return;
     }
 
-    // Check if track is already in playlist
-    const existingTrack = playlist.tracks.find(
-      (t: any) => t.mediaId.toString() === mediaId
-    );
+    // Check for duplicate (check both fields)
+    const existingTrack = playlist.tracks.find((t: any) => {
+      if (trackType === "media") {
+        return t.trackType === "media" && t.mediaId?.toString() === trackId;
+      } else {
+        return t.trackType === "copyrightFree" && t.copyrightFreeSongId?.toString() === trackId;
+      }
+    });
 
     if (existingTrack) {
       response.status(400).json({
@@ -494,34 +647,40 @@ export const addTrackToPlaylist = async (
       });
     }
 
-    // Add track
-    playlist.tracks.push({
-      mediaId: new Types.ObjectId(mediaId),
+    // Create track object
+    const newTrack: any = {
+      trackType,
       addedAt: new Date(),
       addedBy: new Types.ObjectId(userId),
       order,
       notes: notes?.trim(),
-    });
+    };
 
-    // Update total tracks (will be done by pre-save hook, but we can also do it manually)
+    if (trackType === "media") {
+      newTrack.mediaId = new Types.ObjectId(trackId);
+    } else {
+      newTrack.copyrightFreeSongId = new Types.ObjectId(trackId);
+    }
+
+    // Add track
+    playlist.tracks.push(newTrack);
     playlist.totalTracks = playlist.tracks.length;
-
     await playlist.save();
 
-    const updatedPlaylist = await Playlist.findById(playlistId)
-      .populate("tracks.mediaId", "title contentType thumbnailUrl duration")
-      .populate("tracks.addedBy", "firstName lastName");
+    // Return populated playlist with unified format
+    const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Track added to playlist", {
       playlistId,
-      mediaId,
+      trackId,
+      trackType,
       userId,
     });
 
     response.status(200).json({
       success: true,
       message: "Track added to playlist successfully",
-      data: updatedPlaylist,
+      data: populated,
     });
   } catch (error: any) {
     logger.error("Add track to playlist error:", error);
@@ -534,7 +693,7 @@ export const addTrackToPlaylist = async (
 };
 
 /**
- * Remove a track from a playlist
+ * Remove a track from a playlist (supports both Media and CopyrightFreeSong)
  */
 export const removeTrackFromPlaylist = async (
   request: Request,
@@ -542,6 +701,7 @@ export const removeTrackFromPlaylist = async (
 ): Promise<void> => {
   try {
     const { playlistId, mediaId } = request.params;
+    const { copyrightFreeSongId, trackType } = request.query; // Support query params too
     const userId = request.userId;
 
     if (!userId) {
@@ -552,10 +712,10 @@ export const removeTrackFromPlaylist = async (
       return;
     }
 
-    if (!Types.ObjectId.isValid(playlistId) || !Types.ObjectId.isValid(mediaId)) {
+    if (!Types.ObjectId.isValid(playlistId)) {
       response.status(400).json({
         success: false,
-        message: "Invalid playlist ID or media ID",
+        message: "Invalid playlist ID",
       });
       return;
     }
@@ -578,10 +738,26 @@ export const removeTrackFromPlaylist = async (
       return;
     }
 
-    // Find and remove the track
-    const trackIndex = playlist.tracks.findIndex(
-      (t: any) => t.mediaId.toString() === mediaId
-    );
+    // Determine which track to remove
+    const trackIdToRemove = mediaId || (copyrightFreeSongId as string);
+    const trackTypeToRemove = trackType as string || (mediaId ? "media" : "copyrightFree");
+
+    if (!trackIdToRemove || !Types.ObjectId.isValid(trackIdToRemove)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid track ID",
+      });
+      return;
+    }
+
+    // Find and remove the track (check both types)
+    const trackIndex = playlist.tracks.findIndex((t: any) => {
+      if (trackTypeToRemove === "media") {
+        return t.trackType === "media" && t.mediaId?.toString() === trackIdToRemove;
+      } else {
+        return t.trackType === "copyrightFree" && t.copyrightFreeSongId?.toString() === trackIdToRemove;
+      }
+    });
 
     if (trackIndex === -1) {
       response.status(404).json({
@@ -607,20 +783,20 @@ export const removeTrackFromPlaylist = async (
 
     await playlist.save();
 
-    const updatedPlaylist = await Playlist.findById(playlistId)
-      .populate("tracks.mediaId", "title contentType thumbnailUrl duration")
-      .populate("tracks.addedBy", "firstName lastName");
+    // Return populated playlist with unified format
+    const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Track removed from playlist", {
       playlistId,
-      mediaId,
+      trackId: trackIdToRemove,
+      trackType: trackTypeToRemove,
       userId,
     });
 
     response.status(200).json({
       success: true,
       message: "Track removed from playlist successfully",
-      data: updatedPlaylist,
+      data: populated,
     });
   } catch (error: any) {
     logger.error("Remove track from playlist error:", error);
@@ -686,15 +862,23 @@ export const reorderPlaylistTracks = async (
       return;
     }
 
-    // Update order for each track
-    const trackMap = new Map(
-      tracks.map((t) => [t.mediaId, t.order])
-    );
+    // Create track lookup map - support both track types
+    const trackMap = new Map<string, number>();
+    tracks.forEach((t) => {
+      const trackId = t.mediaId || t.copyrightFreeSongId;
+      if (trackId) {
+        trackMap.set(trackId, t.order);
+      }
+    });
 
+    // Update order for each track (support both types)
     playlist.tracks.forEach((track: any) => {
-      const newOrder = trackMap.get(track.mediaId.toString());
-      if (newOrder !== undefined) {
-        track.order = newOrder;
+      const trackId = track.mediaId?.toString() || track.copyrightFreeSongId?.toString();
+      if (trackId) {
+        const newOrder = trackMap.get(trackId);
+        if (newOrder !== undefined) {
+          track.order = newOrder;
+        }
       }
     });
 
@@ -703,9 +887,8 @@ export const reorderPlaylistTracks = async (
 
     await playlist.save();
 
-    const updatedPlaylist = await Playlist.findById(playlistId)
-      .populate("tracks.mediaId", "title contentType thumbnailUrl duration")
-      .populate("tracks.addedBy", "firstName lastName");
+    // Return populated playlist with unified format
+    const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Playlist tracks reordered", {
       playlistId,
@@ -715,7 +898,7 @@ export const reorderPlaylistTracks = async (
     response.status(200).json({
       success: true,
       message: "Playlist tracks reordered successfully",
-      data: updatedPlaylist,
+      data: populated,
     });
   } catch (error: any) {
     logger.error("Reorder playlist tracks error:", error);

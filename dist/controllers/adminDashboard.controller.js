@@ -249,6 +249,15 @@ const banUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             });
             return;
         }
+        // Security: Prevent self-ban
+        if (id === adminId) {
+            res.status(400).json({
+                success: false,
+                message: "Cannot ban yourself",
+            });
+            return;
+        }
+        // Security: Prevent banning other admins
         if (user.role === "admin") {
             res.status(403).json({
                 success: false,
@@ -371,6 +380,22 @@ const updateUserRole = (req, res) => __awaiter(void 0, void 0, void 0, function*
             return;
         }
         const oldRole = user.role;
+        // Security: Prevent removing your own admin role
+        if (id === adminId && role !== "admin") {
+            res.status(400).json({
+                success: false,
+                message: "Cannot remove your own admin role",
+            });
+            return;
+        }
+        // Security: Prevent removing admin role from other admins
+        if (user.role === "admin" && role !== "admin") {
+            res.status(403).json({
+                success: false,
+                message: "Cannot remove admin role from other admins",
+            });
+            return;
+        }
         yield user_model_1.User.findByIdAndUpdate(id, { role });
         // Log admin action
         yield audit_service_1.AuditService.logAdminAction(adminId, "update_user_role", id, { oldRole, newRole: role }, req.ip, req.get("User-Agent"));
