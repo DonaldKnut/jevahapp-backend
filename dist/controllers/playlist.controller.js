@@ -213,7 +213,9 @@ const getUserPlaylists = (request, response) => __awaiter(void 0, void 0, void 0
         const populatedPlaylists = yield Promise.all(playlists.map((playlist) => populatePlaylistTracks(playlist)));
         response.status(200).json({
             success: true,
-            data: populatedPlaylists,
+            data: {
+                playlists: populatedPlaylists,
+            },
             pagination: {
                 page,
                 limit,
@@ -536,7 +538,8 @@ const addTrackToPlaylist = (request, response) => __awaiter(void 0, void 0, void
         if (existingTrack) {
             response.status(400).json({
                 success: false,
-                message: "This track is already in the playlist",
+                error: "This song is already in the playlist",
+                message: "This song is already in the playlist",
             });
             return;
         }
