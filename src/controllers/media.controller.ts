@@ -898,7 +898,7 @@ export const downloadMedia = async (
     }
 
     // Fetch media to get fileSize if not provided in request
-    const media = await Media.findById(id).select("fileSize fileUrl contentType title");
+    const media = await Media.findById(id).select("fileSize fileUrl contentType title isDownloadable");
     if (!media) {
       response.status(404).json({
         success: false,

@@ -986,15 +986,19 @@ export class MediaService {
       throw new Error("Media not found");
     }
 
-    if (
-      (media.contentType === "videos" && data.interactionType !== "view") ||
-      (media.contentType === "music" && data.interactionType !== "listen") ||
-      (media.contentType === "books" &&
-        !["read", "download"].includes(data.interactionType))
-    ) {
-      throw new Error(
-        `Invalid interaction type ${data.interactionType} for ${media.contentType} media`
-      );
+    // Allow "download" interaction for all content types
+    // Other interaction types have specific restrictions per content type
+    if (data.interactionType !== "download") {
+      if (
+        (media.contentType === "videos" && data.interactionType !== "view") ||
+        (media.contentType === "music" && data.interactionType !== "listen") ||
+        (media.contentType === "ebook" &&
+          !["read", "download"].includes(data.interactionType))
+      ) {
+        throw new Error(
+          `Invalid interaction type ${data.interactionType} for ${media.contentType} media`
+        );
+      }
     }
 
     const session: ClientSession = await Media.startSession();
@@ -1728,7 +1732,7 @@ export class MediaService {
       const user = await User.findById(userId)
         .populate(
           "offlineDownloads.mediaId",
-          "title description thumbnailUrl contentType duration"
+          "title description thumbnailUrl contentType duration isPublicDomain speaker year category tags fileUrl"
         )
         .lean();
 
