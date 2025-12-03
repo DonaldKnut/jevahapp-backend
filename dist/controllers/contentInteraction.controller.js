@@ -253,7 +253,9 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
             });
             return;
         }
-        const metadata = yield contentInteraction_service_1.default.getContentMetadata(userId || "", contentId, contentType);
+        // Ensure userId is valid before passing to service
+        const validUserId = userId && mongoose_1.Types.ObjectId.isValid(userId) ? userId : "";
+        const metadata = yield contentInteraction_service_1.default.getContentMetadata(validUserId, contentId, contentType);
         // Fetch bookmark count if content type supports it
         let bookmarkCount = 0;
         if (["media", "ebook", "podcast", "merch"].includes(contentType)) {
@@ -268,10 +270,10 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
         }
         // Check hasViewed status if user is authenticated
         let hasViewed = false;
-        if (userId && mongoose_1.Types.ObjectId.isValid(userId) && mongoose_1.Types.ObjectId.isValid(contentId)) {
+        if (validUserId && mongoose_1.Types.ObjectId.isValid(validUserId) && mongoose_1.Types.ObjectId.isValid(contentId)) {
             try {
                 const view = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                    user: new mongoose_1.Types.ObjectId(userId),
+                    user: new mongoose_1.Types.ObjectId(validUserId),
                     media: new mongoose_1.Types.ObjectId(contentId),
                     interactionType: "view",
                     isRemoved: { $ne: true },
@@ -281,6 +283,11 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 hasViewed = !!view;
             }
             catch (error) {
+                logger_1.default.warn("Error checking hasViewed in metadata", {
+                    error: error instanceof Error ? error.message : String(error),
+                    userId: validUserId,
+                    contentId,
+                });
                 // Ignore view check errors
             }
         }

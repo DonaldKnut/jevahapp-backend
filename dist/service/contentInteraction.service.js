@@ -951,20 +951,53 @@ class ContentInteractionService {
                     hasBookmarked: false,
                 };
             }
-            const [hasLiked, hasCommented, hasShared, hasFavorited, hasBookmarked] = yield Promise.all([
-                this.checkUserLike(userId, contentId, contentType),
-                this.checkUserComment(userId, contentId, contentType),
-                this.checkUserShare(userId, contentId, contentType),
-                this.checkUserFavorite(userId, contentId, contentType),
-                this.checkUserBookmark(userId, contentId, contentType),
-            ]);
-            return {
-                hasLiked,
-                hasCommented,
-                hasShared,
-                hasFavorited,
-                hasBookmarked,
-            };
+            // Validate userId format before querying
+            if (!mongoose_1.Types.ObjectId.isValid(userId)) {
+                logger_1.default.warn("Invalid userId format in getUserInteraction", {
+                    userId,
+                    contentId,
+                    contentType,
+                });
+                return {
+                    hasLiked: false,
+                    hasCommented: false,
+                    hasShared: false,
+                    hasFavorited: false,
+                    hasBookmarked: false,
+                };
+            }
+            try {
+                const [hasLiked, hasCommented, hasShared, hasFavorited, hasBookmarked] = yield Promise.all([
+                    this.checkUserLike(userId, contentId, contentType),
+                    this.checkUserComment(userId, contentId, contentType),
+                    this.checkUserShare(userId, contentId, contentType),
+                    this.checkUserFavorite(userId, contentId, contentType),
+                    this.checkUserBookmark(userId, contentId, contentType),
+                ]);
+                return {
+                    hasLiked,
+                    hasCommented,
+                    hasShared,
+                    hasFavorited,
+                    hasBookmarked,
+                };
+            }
+            catch (error) {
+                logger_1.default.error("Error in getUserInteraction", {
+                    error: error.message,
+                    userId,
+                    contentId,
+                    contentType,
+                });
+                // Return false for all on error to prevent UI issues
+                return {
+                    hasLiked: false,
+                    hasCommented: false,
+                    hasShared: false,
+                    hasFavorited: false,
+                    hasBookmarked: false,
+                };
+            }
         });
     }
     /**
@@ -1164,22 +1197,39 @@ class ContentInteractionService {
                     const viewCount = (_d = stats === null || stats === void 0 ? void 0 : stats.views) !== null && _d !== void 0 ? _d : 0;
                     // Bookmark count (for media-like)
                     const bookmarkCount = yield this.getBookmarkCount(id);
-                    // User interaction flags
-                    const userFlags = yield this.getUserInteraction(userId || "", id, contentType);
+                    // User interaction flags - ensure userId is valid ObjectId
+                    let validUserId = userId || "";
+                    if (validUserId && !mongoose_1.Types.ObjectId.isValid(validUserId)) {
+                        logger_1.default.warn("Invalid userId format in batch metadata", {
+                            userId: validUserId,
+                            contentId: id,
+                            contentType,
+                        });
+                        validUserId = "";
+                    }
+                    const userFlags = yield this.getUserInteraction(validUserId, id, contentType);
                     // hasViewed: infer from MediaInteraction 'view' events if present
                     let hasViewed = false;
-                    try {
-                        const view = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                            user: userId ? new mongoose_1.Types.ObjectId(userId) : undefined,
-                            media: new mongoose_1.Types.ObjectId(id),
-                            interactionType: "view",
-                            isRemoved: { $ne: true },
-                        })
-                            .select("_id")
-                            .lean();
-                        hasViewed = !!view;
+                    if (validUserId && mongoose_1.Types.ObjectId.isValid(validUserId)) {
+                        try {
+                            const view = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                                user: new mongoose_1.Types.ObjectId(validUserId),
+                                media: new mongoose_1.Types.ObjectId(id),
+                                interactionType: "view",
+                                isRemoved: { $ne: true },
+                            })
+                                .select("_id")
+                                .lean();
+                            hasViewed = !!view;
+                        }
+                        catch (error) {
+                            logger_1.default.warn("Error checking hasViewed in batch metadata", {
+                                error: error.message,
+                                userId: validUserId,
+                                contentId: id,
+                            });
+                        }
                     }
-                    catch (_e) { }
                     return {
                         id,
                         likeCount,

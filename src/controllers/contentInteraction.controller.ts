@@ -253,8 +253,11 @@ export const getContentMetadata = async (
       return;
     }
 
+    // Ensure userId is valid before passing to service
+    const validUserId = userId && Types.ObjectId.isValid(userId) ? userId : "";
+
     const metadata = await contentInteractionService.getContentMetadata(
-      userId || "",
+      validUserId,
       contentId,
       contentType
     );
@@ -273,10 +276,10 @@ export const getContentMetadata = async (
 
     // Check hasViewed status if user is authenticated
     let hasViewed = false;
-    if (userId && Types.ObjectId.isValid(userId) && Types.ObjectId.isValid(contentId)) {
+    if (validUserId && Types.ObjectId.isValid(validUserId) && Types.ObjectId.isValid(contentId)) {
       try {
         const view = await MediaInteraction.findOne({
-          user: new Types.ObjectId(userId),
+          user: new Types.ObjectId(validUserId),
           media: new Types.ObjectId(contentId),
           interactionType: "view",
           isRemoved: { $ne: true },
@@ -285,6 +288,11 @@ export const getContentMetadata = async (
           .lean();
         hasViewed = !!view;
       } catch (error) {
+        logger.warn("Error checking hasViewed in metadata", {
+          error: error instanceof Error ? error.message : String(error),
+          userId: validUserId,
+          contentId,
+        });
         // Ignore view check errors
       }
     }

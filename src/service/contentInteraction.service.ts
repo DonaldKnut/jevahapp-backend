@@ -1256,22 +1256,55 @@ export class ContentInteractionService {
       };
     }
 
-    const [hasLiked, hasCommented, hasShared, hasFavorited, hasBookmarked] =
-      await Promise.all([
-        this.checkUserLike(userId, contentId, contentType),
-        this.checkUserComment(userId, contentId, contentType),
-        this.checkUserShare(userId, contentId, contentType),
-        this.checkUserFavorite(userId, contentId, contentType),
-        this.checkUserBookmark(userId, contentId, contentType),
-      ]);
+    // Validate userId format before querying
+    if (!Types.ObjectId.isValid(userId)) {
+      logger.warn("Invalid userId format in getUserInteraction", {
+        userId,
+        contentId,
+        contentType,
+      });
+      return {
+        hasLiked: false,
+        hasCommented: false,
+        hasShared: false,
+        hasFavorited: false,
+        hasBookmarked: false,
+      };
+    }
 
-    return {
-      hasLiked,
-      hasCommented,
-      hasShared,
-      hasFavorited,
-      hasBookmarked,
-    };
+    try {
+      const [hasLiked, hasCommented, hasShared, hasFavorited, hasBookmarked] =
+        await Promise.all([
+          this.checkUserLike(userId, contentId, contentType),
+          this.checkUserComment(userId, contentId, contentType),
+          this.checkUserShare(userId, contentId, contentType),
+          this.checkUserFavorite(userId, contentId, contentType),
+          this.checkUserBookmark(userId, contentId, contentType),
+        ]);
+
+      return {
+        hasLiked,
+        hasCommented,
+        hasShared,
+        hasFavorited,
+        hasBookmarked,
+      };
+    } catch (error: any) {
+      logger.error("Error in getUserInteraction", {
+        error: error.message,
+        userId,
+        contentId,
+        contentType,
+      });
+      // Return false for all on error to prevent UI issues
+      return {
+        hasLiked: false,
+        hasCommented: false,
+        hasShared: false,
+        hasFavorited: false,
+        hasBookmarked: false,
+      };
+    }
   }
 
   /**
@@ -1507,26 +1540,44 @@ export class ContentInteractionService {
         // Bookmark count (for media-like)
         const bookmarkCount = await this.getBookmarkCount(id);
 
-        // User interaction flags
+        // User interaction flags - ensure userId is valid ObjectId
+        let validUserId = userId || "";
+        if (validUserId && !Types.ObjectId.isValid(validUserId)) {
+          logger.warn("Invalid userId format in batch metadata", {
+            userId: validUserId,
+            contentId: id,
+            contentType,
+          });
+          validUserId = "";
+        }
+        
         const userFlags = await this.getUserInteraction(
-          userId || "",
+          validUserId,
           id,
           contentType
         );
 
         // hasViewed: infer from MediaInteraction 'view' events if present
         let hasViewed = false;
-        try {
-          const view = await MediaInteraction.findOne({
-            user: userId ? new Types.ObjectId(userId) : undefined,
-            media: new Types.ObjectId(id),
-            interactionType: "view",
-            isRemoved: { $ne: true },
-          })
-            .select("_id")
-            .lean();
-          hasViewed = !!view;
-        } catch {}
+        if (validUserId && Types.ObjectId.isValid(validUserId)) {
+          try {
+            const view = await MediaInteraction.findOne({
+              user: new Types.ObjectId(validUserId),
+              media: new Types.ObjectId(id),
+              interactionType: "view",
+              isRemoved: { $ne: true },
+            })
+              .select("_id")
+              .lean();
+            hasViewed = !!view;
+          } catch (error: any) {
+            logger.warn("Error checking hasViewed in batch metadata", {
+              error: error.message,
+              userId: validUserId,
+              contentId: id,
+            });
+          }
+        }
 
         return {
           id,

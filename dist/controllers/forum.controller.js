@@ -79,10 +79,17 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             return;
         }
         // Verify category exists (legacy categories may not have isCategory flag yet)
+        // A category is valid if:
+        // 1. isCategory is explicitly true, OR
+        // 2. categoryId is null/undefined (legacy categories)
         const category = yield forum_model_1.Forum.findOne({
             _id: new mongoose_1.Types.ObjectId(categoryId),
             isActive: true,
-            $or: [{ isCategory: true }, { categoryId: { $exists: false } }],
+            $or: [
+                { isCategory: true },
+                { categoryId: null },
+                { categoryId: { $exists: false } }
+            ],
         }).select("title description isCategory");
         if (!category) {
             res.status(400).json({ success: false, error: "Validation error: category not found" });
@@ -106,7 +113,14 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             { path: "createdBy", select: "firstName lastName username avatar" },
             { path: "categoryId", select: "title description" },
         ]);
-        logger_1.default.info("Forum created", { forumId: forum._id, createdBy: req.userId, categoryId: category._id });
+        logger_1.default.info("Forum created", {
+            forumId: forum._id,
+            createdBy: req.userId,
+            categoryId: category._id,
+            forumIsCategory: forum.isCategory,
+            forumCategoryId: forum.categoryId,
+            forumIsActive: forum.isActive,
+        });
         res.status(201).json({
             success: true,
             data: serializeForum(forum),
@@ -161,6 +175,14 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 { categoryId: { $exists: false } }
             ];
         }
+        // Log query for debugging
+        if (viewParam === "discussions") {
+            logger_1.default.info("Querying discussions", {
+                view: viewParam,
+                categoryId: categoryFilter,
+                query: JSON.stringify(query),
+            });
+        }
         const [forums, total] = yield Promise.all([
             forum_model_1.Forum.find(query)
                 .populate("createdBy", "firstName lastName username avatar")
@@ -170,6 +192,15 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 .limit(limit),
             forum_model_1.Forum.countDocuments(query),
         ]);
+        // Log results for debugging
+        if (viewParam === "discussions") {
+            logger_1.default.info("Discussions query results", {
+                categoryId: categoryFilter,
+                count: forums.length,
+                total,
+                forumIds: forums.map((f) => f._id),
+            });
+        }
         res.status(200).json({
             success: true,
             data: {
