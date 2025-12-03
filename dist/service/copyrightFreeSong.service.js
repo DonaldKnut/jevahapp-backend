@@ -154,6 +154,47 @@ class CopyrightFreeSongService {
             }
         });
     }
+    /**
+     * Track playback and increment view count if threshold is met (30 seconds)
+     * This is called when playback ends
+     */
+    trackPlayback(songId_1, playbackDuration_1) {
+        return __awaiter(this, arguments, void 0, function* (songId, playbackDuration, thresholdSeconds = 30) {
+            var _a;
+            try {
+                const song = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId);
+                if (!song) {
+                    throw new Error("Song not found");
+                }
+                let viewCountIncremented = false;
+                // Only increment view count if user listened for at least threshold seconds
+                if (playbackDuration >= thresholdSeconds) {
+                    yield copyrightFreeSong_model_1.CopyrightFreeSong.findByIdAndUpdate(songId, {
+                        $inc: { viewCount: 1 },
+                    });
+                    viewCountIncremented = true;
+                }
+                // Get updated view count
+                const updatedSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId).select("viewCount").lean();
+                const newViewCount = (_a = updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) !== null && _a !== void 0 ? _a : song.viewCount;
+                logger_1.default.info("Playback tracked for copyright-free song", {
+                    songId,
+                    playbackDuration,
+                    thresholdSeconds,
+                    viewCountIncremented,
+                    newViewCount,
+                });
+                return {
+                    viewCountIncremented,
+                    newViewCount,
+                };
+            }
+            catch (error) {
+                logger_1.default.error("Error tracking playback:", error);
+                throw error;
+            }
+        });
+    }
     searchSongs(query_1) {
         return __awaiter(this, arguments, void 0, function* (query, page = 1, limit = 20) {
             try {

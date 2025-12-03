@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
+exports.trackPlayback = exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
 const copyrightFreeSong_service_1 = require("../service/copyrightFreeSong.service");
 const logger_1 = __importDefault(require("../utils/logger"));
 const copyrightFreeSongInteraction_service_1 = require("../service/copyrightFreeSongInteraction.service");
@@ -58,17 +58,15 @@ const getSongById = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             });
             return;
         }
-        // Increment view count when song is viewed
-        yield songService.incrementViewCount(songId);
-        // Get updated song with new view count
-        const updatedSong = yield songService.getSongById(songId);
+        // Don't increment view count on GET - only count on actual playback (≥30 seconds)
+        // View count is now tracked via playback sessions (POST /playback/track)
         let isLiked = false;
         if (userId) {
             isLiked = yield interactionService.isLiked(userId, songId);
         }
         res.status(200).json({
             success: true,
-            data: Object.assign(Object.assign({}, updatedSong), { isLiked }),
+            data: Object.assign(Object.assign({}, song), { isLiked }),
         });
     }
     catch (error) {
@@ -272,3 +270,45 @@ const searchSongs = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.searchSongs = searchSongs;
+/**
+ * Track playback end and increment view count if threshold is met
+ * Called when user stops or completes playback
+ */
+const trackPlayback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { songId } = req.params;
+        const { playbackDuration, thresholdSeconds } = req.body;
+        if (!playbackDuration || typeof playbackDuration !== "number" || playbackDuration < 0) {
+            res.status(400).json({
+                success: false,
+                message: "playbackDuration is required and must be a positive number",
+            });
+            return;
+        }
+        const threshold = thresholdSeconds && typeof thresholdSeconds === "number"
+            ? thresholdSeconds
+            : 30; // Default 30 seconds
+        const result = yield songService.trackPlayback(songId, playbackDuration, threshold);
+        res.status(200).json({
+            success: true,
+            message: result.viewCountIncremented
+                ? "View count incremented"
+                : "Playback tracked (did not meet threshold)",
+            data: {
+                viewCountIncremented: result.viewCountIncremented,
+                newViewCount: result.newViewCount,
+                playbackDuration,
+                thresholdSeconds: threshold,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error tracking playback:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to track playback",
+            error: error.message,
+        });
+    }
+});
+exports.trackPlayback = trackPlayback;

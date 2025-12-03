@@ -1282,24 +1282,30 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<boolean> {
+    if (!userId || !Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
+      return false;
+    }
+
     switch (contentType) {
       case "media":
         const mediaLike = await MediaInteraction.findOne({
-          user: userId,
-          media: contentId,
+          user: new Types.ObjectId(userId),
+          media: new Types.ObjectId(contentId),
           interactionType: "like",
           isRemoved: { $ne: true },
         });
         return !!mediaLike;
       case "devotional":
         const devotionalLike = await DevotionalLike.findOne({
-          user: userId,
-          devotional: contentId,
+          user: new Types.ObjectId(userId),
+          devotional: new Types.ObjectId(contentId),
         });
         return !!devotionalLike;
       case "artist":
-        const artist = await User.findById(userId);
-        return artist?.following?.includes(contentId) || false;
+        const artist = await User.findById(new Types.ObjectId(userId));
+        return artist?.following?.some(
+          (id: any) => id.toString() === contentId
+        ) || false;
       default:
         return false;
     }
@@ -1314,10 +1320,13 @@ export class ContentInteractionService {
     contentType: string
   ): Promise<boolean> {
     if (!["media", "devotional"].includes(contentType)) return false;
+    if (!userId || !Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
+      return false;
+    }
 
     const comment = await MediaInteraction.findOne({
-      user: userId,
-      media: contentId,
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
     });
@@ -1332,9 +1341,13 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<boolean> {
+    if (!userId || !Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
+      return false;
+    }
+
     const share = await MediaInteraction.findOne({
-      user: userId,
-      media: contentId,
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(contentId),
       interactionType: "share",
       isRemoved: { $ne: true },
     });
@@ -1349,9 +1362,13 @@ export class ContentInteractionService {
     contentId: string,
     contentType: string
   ): Promise<boolean> {
+    if (!userId || !Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
+      return false;
+    }
+
     const favorite = await MediaInteraction.findOne({
-      user: userId,
-      media: contentId,
+      user: new Types.ObjectId(userId),
+      media: new Types.ObjectId(contentId),
       interactionType: "favorite",
       isRemoved: { $ne: true },
     });

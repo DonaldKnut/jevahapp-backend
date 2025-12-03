@@ -125,6 +125,15 @@ router.post("/copyright-free/:songId/like", auth_middleware_1.verifyToken, rateL
  * @returns { success: boolean, data: { shareCount: number, likeCount: number } }
  */
 router.post("/copyright-free/:songId/share", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.shareSong);
+/**
+ * @route   POST /api/audio/copyright-free/:songId/download
+ * @desc    Download a copyright-free song for offline listening (Authenticated)
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @body    { fileSize?: number } - Optional file size in bytes
+ * @returns { success: boolean, downloadUrl: string, fileName: string, fileSize: number, contentType: string }
+ */
+router.post("/copyright-free/:songId/download", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, audio_controller_1.downloadCopyrightFreeSong);
 // ============================================================================
 // AUDIO PLAYLIST ROUTES (Wrapper for existing playlist routes)
 // ============================================================================

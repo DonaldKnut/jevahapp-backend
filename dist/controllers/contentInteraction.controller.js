@@ -49,6 +49,8 @@ exports.shareContent = exports.hideContentComment = exports.reportContentComment
 const mongoose_1 = require("mongoose");
 const contentInteraction_service_1 = __importDefault(require("../service/contentInteraction.service"));
 const logger_1 = __importDefault(require("../utils/logger"));
+const bookmark_model_1 = require("../models/bookmark.model");
+const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 // Toggle like on any content type
 const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -232,6 +234,7 @@ const addContentComment = (req, res) => __awaiter(void 0, void 0, void 0, functi
 exports.addContentComment = addContentComment;
 // Get content metadata for frontend UI
 const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e, _f, _g;
     try {
         const { contentId, contentType } = req.params;
         const userId = req.userId; // Optional, for user-specific interactions
@@ -251,9 +254,52 @@ const getContentMetadata = (req, res) => __awaiter(void 0, void 0, void 0, funct
             return;
         }
         const metadata = yield contentInteraction_service_1.default.getContentMetadata(userId || "", contentId, contentType);
+        // Fetch bookmark count if content type supports it
+        let bookmarkCount = 0;
+        if (["media", "ebook", "podcast", "merch"].includes(contentType)) {
+            try {
+                bookmarkCount = yield bookmark_model_1.Bookmark.countDocuments({
+                    media: new mongoose_1.Types.ObjectId(contentId),
+                });
+            }
+            catch (error) {
+                // Ignore bookmark count errors
+            }
+        }
+        // Check hasViewed status if user is authenticated
+        let hasViewed = false;
+        if (userId && mongoose_1.Types.ObjectId.isValid(userId) && mongoose_1.Types.ObjectId.isValid(contentId)) {
+            try {
+                const view = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                    user: new mongoose_1.Types.ObjectId(userId),
+                    media: new mongoose_1.Types.ObjectId(contentId),
+                    interactionType: "view",
+                    isRemoved: { $ne: true },
+                })
+                    .select("_id")
+                    .lean();
+                hasViewed = !!view;
+            }
+            catch (error) {
+                // Ignore view check errors
+            }
+        }
+        // Transform nested structure to flat structure matching frontend spec
+        const flatMetadata = {
+            id: metadata.id,
+            likeCount: ((_a = metadata.stats) === null || _a === void 0 ? void 0 : _a.likes) || 0,
+            bookmarkCount: bookmarkCount,
+            shareCount: ((_b = metadata.stats) === null || _b === void 0 ? void 0 : _b.shares) || 0,
+            viewCount: ((_c = metadata.stats) === null || _c === void 0 ? void 0 : _c.views) || 0,
+            commentCount: ((_d = metadata.stats) === null || _d === void 0 ? void 0 : _d.comments) || 0,
+            hasLiked: ((_e = metadata.userInteraction) === null || _e === void 0 ? void 0 : _e.hasLiked) || false,
+            hasBookmarked: ((_f = metadata.userInteraction) === null || _f === void 0 ? void 0 : _f.hasBookmarked) || false,
+            hasShared: ((_g = metadata.userInteraction) === null || _g === void 0 ? void 0 : _g.hasShared) || false,
+            hasViewed: hasViewed,
+        };
         res.status(200).json({
             success: true,
-            data: metadata,
+            data: flatMetadata,
         });
     }
     catch (error) {

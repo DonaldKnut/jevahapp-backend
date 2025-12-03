@@ -973,24 +973,27 @@ class ContentInteractionService {
     checkUserLike(userId, contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
+            if (!userId || !mongoose_1.Types.ObjectId.isValid(userId) || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+                return false;
+            }
             switch (contentType) {
                 case "media":
                     const mediaLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                        user: userId,
-                        media: contentId,
+                        user: new mongoose_1.Types.ObjectId(userId),
+                        media: new mongoose_1.Types.ObjectId(contentId),
                         interactionType: "like",
                         isRemoved: { $ne: true },
                     });
                     return !!mediaLike;
                 case "devotional":
                     const devotionalLike = yield devotionalLike_model_1.DevotionalLike.findOne({
-                        user: userId,
-                        devotional: contentId,
+                        user: new mongoose_1.Types.ObjectId(userId),
+                        devotional: new mongoose_1.Types.ObjectId(contentId),
                     });
                     return !!devotionalLike;
                 case "artist":
-                    const artist = yield user_model_1.User.findById(userId);
-                    return ((_a = artist === null || artist === void 0 ? void 0 : artist.following) === null || _a === void 0 ? void 0 : _a.includes(contentId)) || false;
+                    const artist = yield user_model_1.User.findById(new mongoose_1.Types.ObjectId(userId));
+                    return ((_a = artist === null || artist === void 0 ? void 0 : artist.following) === null || _a === void 0 ? void 0 : _a.some((id) => id.toString() === contentId)) || false;
                 default:
                     return false;
             }
@@ -1003,9 +1006,12 @@ class ContentInteractionService {
         return __awaiter(this, void 0, void 0, function* () {
             if (!["media", "devotional"].includes(contentType))
                 return false;
+            if (!userId || !mongoose_1.Types.ObjectId.isValid(userId) || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+                return false;
+            }
             const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                user: userId,
-                media: contentId,
+                user: new mongoose_1.Types.ObjectId(userId),
+                media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "comment",
                 isRemoved: { $ne: true },
             });
@@ -1017,9 +1023,12 @@ class ContentInteractionService {
      */
     checkUserShare(userId, contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (!userId || !mongoose_1.Types.ObjectId.isValid(userId) || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+                return false;
+            }
             const share = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                user: userId,
-                media: contentId,
+                user: new mongoose_1.Types.ObjectId(userId),
+                media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "share",
                 isRemoved: { $ne: true },
             });
@@ -1031,9 +1040,12 @@ class ContentInteractionService {
      */
     checkUserFavorite(userId, contentId, contentType) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (!userId || !mongoose_1.Types.ObjectId.isValid(userId) || !mongoose_1.Types.ObjectId.isValid(contentId)) {
+                return false;
+            }
             const favorite = yield mediaInteraction_model_1.MediaInteraction.findOne({
-                user: userId,
-                media: contentId,
+                user: new mongoose_1.Types.ObjectId(userId),
+                media: new mongoose_1.Types.ObjectId(contentId),
                 interactionType: "favorite",
                 isRemoved: { $ne: true },
             });

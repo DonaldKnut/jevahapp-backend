@@ -757,7 +757,7 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
             return;
         }
         // Fetch media to get fileSize if not provided in request
-        const media = yield media_model_1.Media.findById(id).select("fileSize fileUrl contentType title");
+        const media = yield media_model_1.Media.findById(id).select("fileSize fileUrl contentType title isDownloadable");
         if (!media) {
             response.status(404).json({
                 success: false,

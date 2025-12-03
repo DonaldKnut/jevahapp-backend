@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import contentInteractionService from "../service/contentInteraction.service";
 import logger from "../utils/logger";
+import { Bookmark } from "../models/bookmark.model";
+import { MediaInteraction } from "../models/mediaInteraction.model";
 
 // Toggle like on any content type
 export const toggleContentLike = async (
@@ -257,9 +259,53 @@ export const getContentMetadata = async (
       contentType
     );
 
+    // Fetch bookmark count if content type supports it
+    let bookmarkCount = 0;
+    if (["media", "ebook", "podcast", "merch"].includes(contentType)) {
+      try {
+        bookmarkCount = await Bookmark.countDocuments({
+          media: new Types.ObjectId(contentId),
+        });
+      } catch (error) {
+        // Ignore bookmark count errors
+      }
+    }
+
+    // Check hasViewed status if user is authenticated
+    let hasViewed = false;
+    if (userId && Types.ObjectId.isValid(userId) && Types.ObjectId.isValid(contentId)) {
+      try {
+        const view = await MediaInteraction.findOne({
+          user: new Types.ObjectId(userId),
+          media: new Types.ObjectId(contentId),
+          interactionType: "view",
+          isRemoved: { $ne: true },
+        })
+          .select("_id")
+          .lean();
+        hasViewed = !!view;
+      } catch (error) {
+        // Ignore view check errors
+      }
+    }
+
+    // Transform nested structure to flat structure matching frontend spec
+    const flatMetadata = {
+      id: metadata.id,
+      likeCount: metadata.stats?.likes || 0,
+      bookmarkCount: bookmarkCount,
+      shareCount: metadata.stats?.shares || 0,
+      viewCount: metadata.stats?.views || 0,
+      commentCount: metadata.stats?.comments || 0,
+      hasLiked: metadata.userInteraction?.hasLiked || false,
+      hasBookmarked: metadata.userInteraction?.hasBookmarked || false,
+      hasShared: metadata.userInteraction?.hasShared || false,
+      hasViewed: hasViewed,
+    };
+
     res.status(200).json({
       success: true,
-      data: metadata,
+      data: flatMetadata,
     });
   } catch (error: any) {
     logger.error("Get content metadata error", {

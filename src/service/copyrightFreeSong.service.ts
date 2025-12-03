@@ -153,6 +153,53 @@ export class CopyrightFreeSongService {
     }
   }
 
+  /**
+   * Track playback and increment view count if threshold is met (30 seconds)
+   * This is called when playback ends
+   */
+  async trackPlayback(
+    songId: string,
+    playbackDuration: number,
+    thresholdSeconds: number = 30
+  ): Promise<{ viewCountIncremented: boolean; newViewCount: number }> {
+    try {
+      const song = await CopyrightFreeSong.findById(songId);
+      if (!song) {
+        throw new Error("Song not found");
+      }
+
+      let viewCountIncremented = false;
+
+      // Only increment view count if user listened for at least threshold seconds
+      if (playbackDuration >= thresholdSeconds) {
+        await CopyrightFreeSong.findByIdAndUpdate(songId, {
+          $inc: { viewCount: 1 },
+        });
+        viewCountIncremented = true;
+      }
+
+      // Get updated view count
+      const updatedSong = await CopyrightFreeSong.findById(songId).select("viewCount").lean() as { viewCount?: number } | null;
+      const newViewCount = updatedSong?.viewCount ?? song.viewCount;
+
+      logger.info("Playback tracked for copyright-free song", {
+        songId,
+        playbackDuration,
+        thresholdSeconds,
+        viewCountIncremented,
+        newViewCount,
+      });
+
+      return {
+        viewCountIncremented,
+        newViewCount,
+      };
+    } catch (error: any) {
+      logger.error("Error tracking playback:", error);
+      throw error;
+    }
+  }
+
   async searchSongs(query: string, page: number = 1, limit: number = 20): Promise<{
     songs: ICopyrightFreeSong[];
     total: number;

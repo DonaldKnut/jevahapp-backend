@@ -771,11 +771,15 @@ class MediaService {
             if (!media) {
                 throw new Error("Media not found");
             }
-            if ((media.contentType === "videos" && data.interactionType !== "view") ||
-                (media.contentType === "music" && data.interactionType !== "listen") ||
-                (media.contentType === "books" &&
-                    !["read", "download"].includes(data.interactionType))) {
-                throw new Error(`Invalid interaction type ${data.interactionType} for ${media.contentType} media`);
+            // Allow "download" interaction for all content types
+            // Other interaction types have specific restrictions per content type
+            if (data.interactionType !== "download") {
+                if ((media.contentType === "videos" && data.interactionType !== "view") ||
+                    (media.contentType === "music" && data.interactionType !== "listen") ||
+                    (media.contentType === "ebook" &&
+                        !["read", "download"].includes(data.interactionType))) {
+                    throw new Error(`Invalid interaction type ${data.interactionType} for ${media.contentType} media`);
+                }
             }
             const session = yield media_model_1.Media.startSession();
             try {
@@ -1358,7 +1362,7 @@ class MediaService {
             try {
                 const { User } = yield Promise.resolve().then(() => __importStar(require("../models/user.model")));
                 const user = yield User.findById(userId)
-                    .populate("offlineDownloads.mediaId", "title description thumbnailUrl contentType duration")
+                    .populate("offlineDownloads.mediaId", "title description thumbnailUrl contentType duration isPublicDomain speaker year category tags fileUrl")
                     .lean();
                 if (!user) {
                     throw new Error("User not found");

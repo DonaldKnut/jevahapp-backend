@@ -50,11 +50,8 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Increment view count when song is viewed
-    await songService.incrementViewCount(songId);
-
-    // Get updated song with new view count
-    const updatedSong = await songService.getSongById(songId);
+    // Don't increment view count on GET - only count on actual playback (≥30 seconds)
+    // View count is now tracked via playback sessions (POST /playback/track)
 
     let isLiked = false;
     if (userId) {
@@ -64,7 +61,7 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
     res.status(200).json({
       success: true,
       data: {
-        ...updatedSong,
+        ...song,
         isLiked,
       },
     });
@@ -276,6 +273,51 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({
       success: false,
       message: "Failed to search songs",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Track playback end and increment view count if threshold is met
+ * Called when user stops or completes playback
+ */
+export const trackPlayback = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { songId } = req.params;
+    const { playbackDuration, thresholdSeconds } = req.body;
+
+    if (!playbackDuration || typeof playbackDuration !== "number" || playbackDuration < 0) {
+      res.status(400).json({
+        success: false,
+        message: "playbackDuration is required and must be a positive number",
+      });
+      return;
+    }
+
+    const threshold = thresholdSeconds && typeof thresholdSeconds === "number" 
+      ? thresholdSeconds 
+      : 30; // Default 30 seconds
+
+    const result = await songService.trackPlayback(songId, playbackDuration, threshold);
+
+    res.status(200).json({
+      success: true,
+      message: result.viewCountIncremented
+        ? "View count incremented"
+        : "Playback tracked (did not meet threshold)",
+      data: {
+        viewCountIncremented: result.viewCountIncremented,
+        newViewCount: result.newViewCount,
+        playbackDuration,
+        thresholdSeconds: threshold,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error tracking playback:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to track playback",
       error: error.message,
     });
   }
