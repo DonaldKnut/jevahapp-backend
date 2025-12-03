@@ -65,6 +65,7 @@ router.post("/prayer-wall/:id/comments", auth_middleware_1.verifyToken, (0, rate
 // Forum (New Structure)
 router.post("/forum/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), forum_controller_1.createForum); // Authenticated users
 router.get("/forum", forum_controller_1.listForums);
+router.put("/forum/:forumId", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(10, 60 * 60 * 1000), forum_controller_1.updateForum); // Admin only
 router.get("/forum/:forumId/posts", forum_controller_1.getForumPosts);
 router.post("/forum/:forumId/posts", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), forum_controller_1.createForumPost);
 router.put("/forum/posts/:postId", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), forum_controller_1.updateForumPost);
@@ -74,6 +75,7 @@ router.post("/forum/posts/:postId/like", auth_middleware_1.verifyToken, (0, rate
 router.get("/forum/posts/:postId/comments", forumInteraction_controller_1.getForumPostComments);
 router.post("/forum/posts/:postId/comments", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 60 * 1000), forumInteraction_controller_1.commentOnForumPost);
 router.post("/forum/comments/:commentId/like", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(60, 5 * 60 * 1000), forumInteraction_controller_1.likeForumComment);
+router.delete("/forum/comments/:commentId", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 60 * 1000), forumInteraction_controller_1.deleteForumComment);
 // Legacy Forum Threads (for backward compatibility)
 router.post("/forum/threads", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createForumThread);
 router.get("/forum/threads", communityContent_controller_1.listForumThreads);

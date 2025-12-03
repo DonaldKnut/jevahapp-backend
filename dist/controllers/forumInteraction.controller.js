@@ -12,11 +12,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.likeForumComment = exports.commentOnForumPost = exports.getForumPostComments = exports.likeForumPost = void 0;
+exports.likeForumComment = exports.deleteForumComment = exports.commentOnForumPost = exports.getForumPostComments = exports.likeForumPost = void 0;
 const forumPost_model_1 = require("../models/forumPost.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
+/**
+ * Helper function to get comment nesting depth
+ * Returns the depth level (0 = top-level, 1 = reply, 2 = reply to reply, etc.)
+ */
+function getCommentDepth(commentId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let depth = 0;
+        let currentId = commentId;
+        const maxIterations = 10; // Safety limit to prevent infinite loops
+        let iterations = 0;
+        while (currentId && iterations < maxIterations) {
+            const comment = yield mediaInteraction_model_1.MediaInteraction.findById(currentId).lean();
+            if (!comment || !comment.parentCommentId) {
+                break;
+            }
+            currentId = comment.parentCommentId ? String(comment.parentCommentId) : null;
+            depth++;
+            iterations++;
+        }
+        return depth;
+    });
+}
 /**
  * Like/Unlike Forum Post
  */
@@ -268,6 +290,15 @@ const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, funct
                 res.status(404).json({ success: false, error: "Parent comment not found" });
                 return;
             }
+            // Check nesting depth (max 3 levels)
+            const depth = yield getCommentDepth(parentCommentId);
+            if (depth >= 3) {
+                res.status(400).json({
+                    success: false,
+                    error: "Maximum nesting depth reached (3 levels). Cannot reply to this comment.",
+                });
+                return;
+            }
         }
         // Create comment
         const comment = yield mediaInteraction_model_1.MediaInteraction.create({
@@ -316,6 +347,55 @@ const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.commentOnForumPost = commentOnForumPost;
+/**
+ * Delete Forum Comment (Creator Only)
+ */
+const deleteForumComment = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { commentId } = req.params;
+        const userId = req.userId;
+        if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
+            res.status(400).json({ success: false, error: "Invalid comment or user ID" });
+            return;
+        }
+        // Find the comment
+        const comment = yield mediaInteraction_model_1.MediaInteraction.findOne({
+            _id: new mongoose_1.Types.ObjectId(commentId),
+            interactionType: "comment",
+            isRemoved: { $ne: true },
+        });
+        if (!comment) {
+            res.status(404).json({ success: false, error: "Comment not found" });
+            return;
+        }
+        // Check if user is the comment creator
+        if (String(comment.user) !== String(userId)) {
+            res.status(403).json({ success: false, error: "Forbidden: Only comment creator can delete" });
+            return;
+        }
+        // Get the post to update commentsCount
+        const postId = String(comment.media);
+        const post = yield forumPost_model_1.ForumPost.findById(postId);
+        if (post) {
+            // Decrement commentsCount
+            post.commentsCount = Math.max(0, (post.commentsCount || 0) - 1);
+            yield post.save();
+        }
+        // Mark comment as removed (soft delete)
+        comment.isRemoved = true;
+        yield comment.save();
+        logger_1.default.info("Forum comment deleted", { commentId, userId, postId });
+        res.status(200).json({
+            success: true,
+            message: "Comment deleted successfully",
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error deleting forum comment", { error: error.message, commentId: req.params.commentId });
+        res.status(500).json({ success: false, error: "Failed to delete comment" });
+    }
+});
+exports.deleteForumComment = deleteForumComment;
 /**
  * Like/Unlike Forum Comment
  */

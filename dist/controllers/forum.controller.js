@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteForumPost = exports.updateForumPost = exports.getForumPosts = exports.createForumPost = exports.listForums = exports.createForum = void 0;
+exports.deleteForumPost = exports.updateForum = exports.updateForumPost = exports.getForumPosts = exports.createForumPost = exports.listForums = exports.createForum = void 0;
 const forum_model_1 = require("../models/forum.model");
 const forumPost_model_1 = require("../models/forumPost.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
@@ -177,7 +177,7 @@ exports.listForums = listForums;
 const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { forumId } = req.params;
-        const { content, embeddedLinks } = req.body || {};
+        const { content, embeddedLinks, tags } = req.body || {};
         if (!mongoose_1.Types.ObjectId.isValid(forumId)) {
             res.status(400).json({ success: false, error: "Invalid forum ID" });
             return;
@@ -233,11 +233,33 @@ const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
                 }
             }
         }
+        // Validate tags if provided
+        if (tags !== undefined) {
+            if (!Array.isArray(tags)) {
+                res.status(400).json({ success: false, error: "Validation error: tags must be an array" });
+                return;
+            }
+            if (tags.length > 10) {
+                res.status(400).json({ success: false, error: "Validation error: maximum 10 tags allowed" });
+                return;
+            }
+            for (const tag of tags) {
+                if (typeof tag !== "string" || tag.trim().length === 0) {
+                    res.status(400).json({ success: false, error: "Validation error: each tag must be a non-empty string" });
+                    return;
+                }
+                if (tag.length > 50) {
+                    res.status(400).json({ success: false, error: "Validation error: each tag must be less than 50 characters" });
+                    return;
+                }
+            }
+        }
         const post = yield forumPost_model_1.ForumPost.create({
             forumId: new mongoose_1.default.Types.ObjectId(forumId),
             userId: req.userId,
             content: content.trim(),
             embeddedLinks: Array.isArray(embeddedLinks) ? embeddedLinks : undefined,
+            tags: Array.isArray(tags) ? tags.map((tag) => tag.trim()) : undefined,
             likesCount: 0,
             commentsCount: 0,
         });
@@ -256,7 +278,7 @@ const createForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
         logger_1.default.info("Forum post created", { postId: post._id, forumId: forum._id, userId: req.userId });
         res.status(201).json({
             success: true,
-            post: yield serializeForumPost(post, req.userId),
+            data: yield serializeForumPost(post, req.userId),
         });
     }
     catch (error) {
@@ -329,7 +351,7 @@ exports.getForumPosts = getForumPosts;
 const updateForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { postId } = req.params;
-        const { content, embeddedLinks } = req.body || {};
+        const { content, embeddedLinks, tags } = req.body || {};
         if (!mongoose_1.Types.ObjectId.isValid(postId)) {
             res.status(400).json({ success: false, error: "Invalid post ID" });
             return;
@@ -388,6 +410,32 @@ const updateForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
                 return;
             }
         }
+        if (tags !== undefined) {
+            if (tags === null) {
+                post.tags = undefined;
+            }
+            else if (Array.isArray(tags)) {
+                if (tags.length > 10) {
+                    res.status(400).json({ success: false, error: "Validation error: maximum 10 tags allowed" });
+                    return;
+                }
+                for (const tag of tags) {
+                    if (typeof tag !== "string" || tag.trim().length === 0) {
+                        res.status(400).json({ success: false, error: "Validation error: each tag must be a non-empty string" });
+                        return;
+                    }
+                    if (tag.length > 50) {
+                        res.status(400).json({ success: false, error: "Validation error: each tag must be less than 50 characters" });
+                        return;
+                    }
+                }
+                post.tags = tags.map((tag) => tag.trim());
+            }
+            else {
+                res.status(400).json({ success: false, error: "Validation error: tags must be an array or null" });
+                return;
+            }
+        }
         yield post.save();
         yield post.populate("userId", "firstName lastName username avatar");
         logger_1.default.info("Forum post updated", { postId: post._id, userId: req.userId });
@@ -402,6 +450,73 @@ const updateForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
 });
 exports.updateForumPost = updateForumPost;
+/**
+ * Update Forum (Admin Only)
+ */
+const updateForum = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { forumId } = req.params;
+        const { title, description } = req.body || {};
+        if (!mongoose_1.Types.ObjectId.isValid(forumId)) {
+            res.status(400).json({ success: false, error: "Invalid forum ID" });
+            return;
+        }
+        if (!req.userId) {
+            res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
+            return;
+        }
+        // Check if user is admin
+        const user = yield user_model_1.User.findById(req.userId);
+        if (!user || user.role !== "admin") {
+            res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+            return;
+        }
+        const forum = yield forum_model_1.Forum.findById(forumId);
+        if (!forum) {
+            res.status(404).json({ success: false, error: "Forum not found" });
+            return;
+        }
+        // Validate and update title if provided
+        if (title !== undefined) {
+            if (typeof title !== "string" || title.trim().length < 3) {
+                res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
+                return;
+            }
+            if (title.length > 100) {
+                res.status(400).json({ success: false, error: "Validation error: title must be less than 100 characters" });
+                return;
+            }
+            forum.title = title.trim();
+        }
+        // Validate and update description if provided
+        if (description !== undefined) {
+            if (typeof description !== "string" || description.trim().length < 10) {
+                res.status(400).json({ success: false, error: "Validation error: description must be at least 10 characters" });
+                return;
+            }
+            if (description.length > 500) {
+                res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
+                return;
+            }
+            forum.description = description.trim();
+        }
+        yield forum.save();
+        yield forum.populate([
+            { path: "createdBy", select: "firstName lastName username avatar" },
+            { path: "categoryId", select: "title description" },
+        ]);
+        logger_1.default.info("Forum updated", { forumId: forum._id, updatedBy: req.userId });
+        res.status(200).json({
+            success: true,
+            data: serializeForum(forum),
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error updating forum", { error: error.message, forumId: req.params.forumId, userId: req.userId });
+        res.status(500).json({ success: false, error: "Failed to update forum" });
+    }
+});
+exports.updateForum = updateForum;
 /**
  * Delete Forum Post
  */

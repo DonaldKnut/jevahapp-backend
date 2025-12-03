@@ -5,6 +5,29 @@ import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 
 /**
+ * Helper function to get comment nesting depth
+ * Returns the depth level (0 = top-level, 1 = reply, 2 = reply to reply, etc.)
+ */
+async function getCommentDepth(commentId: string): Promise<number> {
+  let depth = 0;
+  let currentId: string | null = commentId;
+  const maxIterations = 10; // Safety limit to prevent infinite loops
+  let iterations = 0;
+
+  while (currentId && iterations < maxIterations) {
+    const comment: any = await MediaInteraction.findById(currentId).lean();
+    if (!comment || !comment.parentCommentId) {
+      break;
+    }
+    currentId = comment.parentCommentId ? String(comment.parentCommentId) : null;
+    depth++;
+    iterations++;
+  }
+
+  return depth;
+}
+
+/**
  * Like/Unlike Forum Post
  */
 export const likeForumPost = async (req: Request, res: Response): Promise<void> => {
@@ -272,6 +295,16 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
         res.status(404).json({ success: false, error: "Parent comment not found" });
         return;
       }
+
+      // Check nesting depth (max 3 levels)
+      const depth = await getCommentDepth(parentCommentId);
+      if (depth >= 3) {
+        res.status(400).json({
+          success: false,
+          error: "Maximum nesting depth reached (3 levels). Cannot reply to this comment.",
+        });
+        return;
+      }
     }
 
     // Create comment
@@ -321,6 +354,63 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
   } catch (error: any) {
     logger.error("Error creating forum post comment", { error: error.message, postId: req.params.postId });
     res.status(500).json({ success: false, error: "Failed to create comment" });
+  }
+};
+
+/**
+ * Delete Forum Comment (Creator Only)
+ */
+export const deleteForumComment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.userId;
+
+    if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId!)) {
+      res.status(400).json({ success: false, error: "Invalid comment or user ID" });
+      return;
+    }
+
+    // Find the comment
+    const comment = await MediaInteraction.findOne({
+      _id: new Types.ObjectId(commentId),
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+    });
+
+    if (!comment) {
+      res.status(404).json({ success: false, error: "Comment not found" });
+      return;
+    }
+
+    // Check if user is the comment creator
+    if (String(comment.user) !== String(userId)) {
+      res.status(403).json({ success: false, error: "Forbidden: Only comment creator can delete" });
+      return;
+    }
+
+    // Get the post to update commentsCount
+    const postId = String(comment.media);
+    const post = await ForumPost.findById(postId);
+
+    if (post) {
+      // Decrement commentsCount
+      post.commentsCount = Math.max(0, (post.commentsCount || 0) - 1);
+      await post.save();
+    }
+
+    // Mark comment as removed (soft delete)
+    comment.isRemoved = true;
+    await comment.save();
+
+    logger.info("Forum comment deleted", { commentId, userId, postId });
+
+    res.status(200).json({
+      success: true,
+      message: "Comment deleted successfully",
+    });
+  } catch (error: any) {
+    logger.error("Error deleting forum comment", { error: error.message, commentId: req.params.commentId });
+    res.status(500).json({ success: false, error: "Failed to delete comment" });
   }
 };
 

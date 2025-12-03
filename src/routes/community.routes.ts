@@ -37,12 +37,14 @@ import {
   getForumPosts,
   updateForumPost,
   deleteForumPost,
+  updateForum,
 } from "../controllers/forum.controller";
 import {
   likeForumPost,
   getForumPostComments,
   commentOnForumPost,
   likeForumComment,
+  deleteForumComment,
 } from "../controllers/forumInteraction.controller";
 import {
   uploadGroupImage,
@@ -114,6 +116,7 @@ router.post("/prayer-wall/:id/comments", verifyToken, rateLimiter(20, 60 * 1000)
 // Forum (New Structure)
 router.post("/forum/create", verifyToken, rateLimiter(10, 60 * 60 * 1000), createForum); // Authenticated users
 router.get("/forum", listForums);
+router.put("/forum/:forumId", verifyToken, rateLimiter(10, 60 * 60 * 1000), updateForum); // Admin only
 router.get("/forum/:forumId/posts", getForumPosts);
 router.post("/forum/:forumId/posts", verifyToken, rateLimiter(20, 15 * 60 * 1000), createForumPost);
 router.put("/forum/posts/:postId", verifyToken, rateLimiter(20, 15 * 60 * 1000), updateForumPost);
@@ -123,6 +126,7 @@ router.post("/forum/posts/:postId/like", verifyToken, rateLimiter(60, 5 * 60 * 1
 router.get("/forum/posts/:postId/comments", getForumPostComments);
 router.post("/forum/posts/:postId/comments", verifyToken, rateLimiter(20, 60 * 1000), commentOnForumPost);
 router.post("/forum/comments/:commentId/like", verifyToken, rateLimiter(60, 5 * 60 * 1000), likeForumComment);
+router.delete("/forum/comments/:commentId", verifyToken, rateLimiter(20, 60 * 1000), deleteForumComment);
 // Legacy Forum Threads (for backward compatibility)
 router.post("/forum/threads", verifyToken, rateLimiter(20, 15 * 60 * 1000), createForumThread);
 router.get("/forum/threads", listForumThreads);

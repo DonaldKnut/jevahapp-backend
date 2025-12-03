@@ -142,7 +142,7 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
 export const createForumPost = async (req: Request, res: Response): Promise<void> => {
   try {
     const { forumId } = req.params;
-    const { content, embeddedLinks } = req.body || {};
+    const { content, embeddedLinks, tags } = req.body || {};
 
     if (!Types.ObjectId.isValid(forumId)) {
       res.status(400).json({ success: false, error: "Invalid forum ID" });
@@ -204,11 +204,34 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
       }
     }
 
+    // Validate tags if provided
+    if (tags !== undefined) {
+      if (!Array.isArray(tags)) {
+        res.status(400).json({ success: false, error: "Validation error: tags must be an array" });
+        return;
+      }
+      if (tags.length > 10) {
+        res.status(400).json({ success: false, error: "Validation error: maximum 10 tags allowed" });
+        return;
+      }
+      for (const tag of tags) {
+        if (typeof tag !== "string" || tag.trim().length === 0) {
+          res.status(400).json({ success: false, error: "Validation error: each tag must be a non-empty string" });
+          return;
+        }
+        if (tag.length > 50) {
+          res.status(400).json({ success: false, error: "Validation error: each tag must be less than 50 characters" });
+          return;
+        }
+      }
+    }
+
     const post = await ForumPost.create({
       forumId: new mongoose.Types.ObjectId(forumId),
       userId: req.userId,
       content: content.trim(),
       embeddedLinks: Array.isArray(embeddedLinks) ? embeddedLinks : undefined,
+      tags: Array.isArray(tags) ? tags.map((tag: string) => tag.trim()) : undefined,
       likesCount: 0,
       commentsCount: 0,
     });
@@ -233,7 +256,7 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
 
     res.status(201).json({
       success: true,
-      post: await serializeForumPost(post, req.userId),
+      data: await serializeForumPost(post, req.userId),
     });
   } catch (error: any) {
     logger.error("Error creating forum post", { error: error.message, forumId: req.params.forumId });
@@ -309,7 +332,7 @@ export const getForumPosts = async (req: Request, res: Response): Promise<void> 
 export const updateForumPost = async (req: Request, res: Response): Promise<void> => {
   try {
     const { postId } = req.params;
-    const { content, embeddedLinks } = req.body || {};
+    const { content, embeddedLinks, tags } = req.body || {};
 
     if (!Types.ObjectId.isValid(postId)) {
       res.status(400).json({ success: false, error: "Invalid post ID" });
@@ -371,6 +394,31 @@ export const updateForumPost = async (req: Request, res: Response): Promise<void
       }
     }
 
+    if (tags !== undefined) {
+      if (tags === null) {
+        post.tags = undefined;
+      } else if (Array.isArray(tags)) {
+        if (tags.length > 10) {
+          res.status(400).json({ success: false, error: "Validation error: maximum 10 tags allowed" });
+          return;
+        }
+        for (const tag of tags) {
+          if (typeof tag !== "string" || tag.trim().length === 0) {
+            res.status(400).json({ success: false, error: "Validation error: each tag must be a non-empty string" });
+            return;
+          }
+          if (tag.length > 50) {
+            res.status(400).json({ success: false, error: "Validation error: each tag must be less than 50 characters" });
+            return;
+          }
+        }
+        post.tags = tags.map((tag: string) => tag.trim());
+      } else {
+        res.status(400).json({ success: false, error: "Validation error: tags must be an array or null" });
+        return;
+      }
+    }
+
     await post.save();
     await post.populate("userId", "firstName lastName username avatar");
 
@@ -383,6 +431,81 @@ export const updateForumPost = async (req: Request, res: Response): Promise<void
   } catch (error: any) {
     logger.error("Error updating forum post", { error: error.message, postId: req.params.postId });
     res.status(500).json({ success: false, error: "Failed to update forum post" });
+  }
+};
+
+/**
+ * Update Forum (Admin Only)
+ */
+export const updateForum = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { forumId } = req.params;
+    const { title, description } = req.body || {};
+
+    if (!Types.ObjectId.isValid(forumId)) {
+      res.status(400).json({ success: false, error: "Invalid forum ID" });
+      return;
+    }
+
+    if (!req.userId) {
+      res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
+      return;
+    }
+
+    // Check if user is admin
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "admin") {
+      res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+      return;
+    }
+
+    const forum = await Forum.findById(forumId);
+    if (!forum) {
+      res.status(404).json({ success: false, error: "Forum not found" });
+      return;
+    }
+
+    // Validate and update title if provided
+    if (title !== undefined) {
+      if (typeof title !== "string" || title.trim().length < 3) {
+        res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
+        return;
+      }
+      if (title.length > 100) {
+        res.status(400).json({ success: false, error: "Validation error: title must be less than 100 characters" });
+        return;
+      }
+      forum.title = title.trim();
+    }
+
+    // Validate and update description if provided
+    if (description !== undefined) {
+      if (typeof description !== "string" || description.trim().length < 10) {
+        res.status(400).json({ success: false, error: "Validation error: description must be at least 10 characters" });
+        return;
+      }
+      if (description.length > 500) {
+        res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
+        return;
+      }
+      forum.description = description.trim();
+    }
+
+    await forum.save();
+    await forum.populate([
+      { path: "createdBy", select: "firstName lastName username avatar" },
+      { path: "categoryId", select: "title description" },
+    ]);
+
+    logger.info("Forum updated", { forumId: forum._id, updatedBy: req.userId });
+
+    res.status(200).json({
+      success: true,
+      data: serializeForum(forum),
+    });
+  } catch (error: any) {
+    logger.error("Error updating forum", { error: error.message, forumId: req.params.forumId, userId: req.userId });
+    res.status(500).json({ success: false, error: "Failed to update forum" });
   }
 };
 
