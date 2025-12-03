@@ -756,17 +756,25 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
             });
             return;
         }
-        if (typeof fileSize !== "number" || fileSize <= 0) {
-            response.status(400).json({
+        // Fetch media to get fileSize if not provided in request
+        const media = yield media_model_1.Media.findById(id).select("fileSize fileUrl contentType title");
+        if (!media) {
+            response.status(404).json({
                 success: false,
-                message: "File size must be a positive number",
+                message: "Media not found",
             });
             return;
         }
+        // Use provided fileSize, or fallback to media.fileSize, or 0 as default
+        const finalFileSize = fileSize && typeof fileSize === "number" && fileSize > 0
+            ? fileSize
+            : (media.fileSize && typeof media.fileSize === "number" && media.fileSize > 0
+                ? media.fileSize
+                : 0); // Default to 0 if neither available
         const result = yield media_service_1.mediaService.downloadMedia({
             userId: userIdentifier,
             mediaId: id,
-            fileSize,
+            fileSize: finalFileSize,
         });
         // Notify content owner about the download (if not self)
         try {
@@ -779,6 +787,9 @@ const downloadMedia = (request, response) => __awaiter(void 0, void 0, void 0, f
             success: true,
             message: "Download recorded successfully",
             downloadUrl: result.downloadUrl,
+            fileName: result.fileName,
+            fileSize: result.fileSize,
+            contentType: result.contentType,
         });
     }
     catch (error) {
