@@ -89,12 +89,14 @@ router.get("/modules", getCommunityModules);
  */
 // Prayer Wall
 router.post("/prayer-wall/posts", verifyToken, rateLimiter(20, 15 * 60 * 1000), createPrayerPost);
-router.post("/prayer-wall/create", verifyToken, rateLimiter(20, 15 * 60 * 1000), createPrayerPost); // Alias for frontend compatibility
+router.post("/prayer-wall/create", verifyToken, rateLimiter(20, 15 * 60 * 1000), createPrayerPost); // Spec endpoint
 router.get("/prayer-wall/posts", listPrayerPosts);
 router.get("/prayer-wall", listPrayerPosts); // Alias for frontend compatibility
 router.get("/prayer-wall/search", searchPrayers);
 router.get("/prayer-wall/posts/:id", getPrayerPost);
+router.get("/prayer-wall/:prayerId", getPrayerPost); // Spec endpoint (maps prayerId to id in controller)
 router.put("/prayer-wall/posts/:id", verifyToken, updatePrayerPost);
+router.put("/prayer-wall/:prayerId", verifyToken, updatePrayerPost); // Spec endpoint (maps prayerId to id in controller)
 router.put("/prayer-wall/:id", verifyToken, updatePrayerPost); // Alias for frontend compatibility
 router.delete("/prayer-wall/posts/:id", verifyToken, deletePrayerPost);
 router.delete("/prayer-wall/:id", verifyToken, deletePrayerPost); // Alias for frontend compatibility

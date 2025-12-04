@@ -4,28 +4,77 @@ import { ForumThread } from "../models/forumThread.model";
 import { Poll } from "../models/poll.model";
 import { Group } from "../models/group.model";
 import { User } from "../models/user.model";
+import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Types } from "mongoose";
+import { validatePrayerData, validatePrayerUpdateData } from "../validators/prayer.validator";
 import logger from "../utils/logger";
 import cacheService from "../service/cache.service";
 
 // ===== Prayer Wall =====
 export const createPrayerPost = async (req: Request, res: Response): Promise<void> => {
-  const { content, anonymous, media } = req.body || {};
-  if (!content || typeof content !== "string") {
-    res.status(400).json({ success: false, message: "Validation error: content is required" });
-    return;
+  try {
+    // Validate request body
+    const validation = validatePrayerData(req.body);
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors[0],
+        code: "VALIDATION_ERROR",
+        details: validation.details,
+      });
+      return;
+    }
+
+    // Extract and prepare data
+    const { prayerText, content, verse, color, shape, anonymous, media } = req.body;
+    const prayerTextValue = prayerText || content; // Support both fields
+
+    // Prepare verse data
+    let verseData = null;
+    if (verse && (verse.text || verse.reference)) {
+      verseData = {
+        text: verse.text?.trim() || null,
+        reference: verse.reference?.trim() || null,
+      };
+    }
+
+    // Create prayer document
+    const prayer = await PrayerPost.create({
+      prayerText: prayerTextValue.trim(),
+      content: prayerTextValue.trim(), // Keep for backward compatibility
+      verse: verseData,
+      color: color,
+      shape: shape,
+      anonymous: anonymous || false,
+      media: Array.isArray(media) ? media : [],
+      authorId: req.userId,
+      likesCount: 0,
+      commentsCount: 0,
+    });
+
+    // Populate author information
+    await prayer.populate("authorId", "firstName lastName avatar email");
+
+    // Check if current user liked (should be false for new prayer)
+    const userLiked = false;
+
+    // Serialize response according to spec
+    const response = serializePrayer(prayer, userLiked);
+
+    logger.info("Prayer post created", { postId: prayer._id, authorId: req.userId });
+    res.status(200).json({
+      success: true,
+      data: response,
+      message: "Prayer created successfully",
+    });
+  } catch (error: any) {
+    logger.error("Error creating prayer:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create prayer",
+      code: "INTERNAL_ERROR",
+    });
   }
-  if (media && !Array.isArray(media)) {
-    res.status(400).json({ success: false, message: "Validation error: media must be an array of strings" });
-    return;
-  }
-  const doc = await PrayerPost.create({
-    content,
-    anonymous: Boolean(anonymous),
-    media: Array.isArray(media) ? media : [],
-    authorId: req.userId,
-  });
-  logger.info("Prayer post created", { postId: doc._id, authorId: req.userId });
-  res.status(201).json({ success: true, post: serialize(doc) });
 };
 
 export const listPrayerPosts = async (req: Request, res: Response): Promise<void> => {
@@ -64,37 +113,190 @@ export const listPrayerPosts = async (req: Request, res: Response): Promise<void
 };
 
 export const getPrayerPost = async (req: Request, res: Response): Promise<void> => {
-  const doc = await PrayerPost.findById(req.params.id).populate("authorId", "firstName lastName avatar");
-  if (!doc) {
-    res.status(404).json({ success: false, message: "Not Found" });
-    return;
+  try {
+    // Support both :id and :prayerId parameter names
+    const { id, prayerId } = req.params;
+    const prayerIdParam = id || prayerId;
+    const userId = req.userId; // Optional auth
+
+    // Validate ObjectId
+    if (!Types.ObjectId.isValid(prayerIdParam)) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid prayer ID",
+        code: "VALIDATION_ERROR",
+      });
+      return;
+    }
+
+    // Find prayer and populate author
+    const prayer = await PrayerPost.findById(prayerIdParam).populate("authorId", "firstName lastName avatar email");
+    
+    if (!prayer) {
+      res.status(404).json({
+        success: false,
+        error: "Prayer not found",
+        code: "NOT_FOUND",
+      });
+      return;
+    }
+
+    // Check if user liked (if authenticated)
+    let userLiked = false;
+    if (userId && Types.ObjectId.isValid(userId)) {
+      const like = await MediaInteraction.findOne({
+        user: new Types.ObjectId(userId),
+        media: new Types.ObjectId(prayerIdParam),
+        interactionType: "like",
+      });
+      userLiked = !!like;
+    }
+
+    // Serialize response according to spec
+    const response = serializePrayer(prayer, userLiked);
+
+    res.status(200).json({
+      success: true,
+      data: response,
+    });
+  } catch (error: any) {
+    logger.error("Error getting prayer:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch prayer",
+      code: "INTERNAL_ERROR",
+    });
   }
-  res.status(200).json({ success: true, post: serialize(doc) });
 };
 
 export const updatePrayerPost = async (req: Request, res: Response): Promise<void> => {
-  const post = await PrayerPost.findById(req.params.id);
-  if (!post) {
-    res.status(404).json({ success: false, message: "Not Found" });
-    return;
-  }
-  if (String(post.authorId) !== String(req.userId)) {
-    res.status(403).json({ success: false, message: "Forbidden: Only author can edit" });
-    return;
-  }
-  const { content, anonymous, media } = req.body || {};
-  if (content !== undefined) post.content = content;
-  if (anonymous !== undefined) post.anonymous = Boolean(anonymous);
-  if (media !== undefined) {
-    if (!Array.isArray(media)) {
-      res.status(400).json({ success: false, message: "Validation error: media must be an array" });
+  try {
+    // Support both :id and :prayerId parameter names
+    const { id, prayerId } = req.params;
+    const prayerIdParam = id || prayerId;
+    const userId = req.userId;
+
+    // Validate ObjectId
+    if (!Types.ObjectId.isValid(prayerIdParam)) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid prayer ID",
+        code: "VALIDATION_ERROR",
+      });
       return;
     }
-    post.media = media;
+
+    // Find prayer
+    const prayer = await PrayerPost.findById(prayerIdParam);
+    if (!prayer) {
+      res.status(404).json({
+        success: false,
+        error: "Prayer not found",
+        code: "NOT_FOUND",
+      });
+      return;
+    }
+
+    // Check ownership
+    if (String(prayer.authorId) !== String(userId)) {
+      res.status(403).json({
+        success: false,
+        error: "You can only update your own prayers",
+        code: "FORBIDDEN",
+      });
+      return;
+    }
+
+    // Validate update data
+    const validation = validatePrayerUpdateData(req.body);
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors[0],
+        code: "VALIDATION_ERROR",
+        details: validation.details,
+      });
+      return;
+    }
+
+    // Update fields
+    const { prayerText, content, verse, color, shape, anonymous, media } = req.body;
+
+    if (prayerText !== undefined || content !== undefined) {
+      const prayerTextValue = prayerText || content;
+      const trimmed = prayerTextValue.trim();
+      prayer.prayerText = trimmed;
+      prayer.content = trimmed; // Keep for backward compatibility
+    }
+
+    if (color !== undefined) {
+      prayer.color = color;
+    }
+
+    if (shape !== undefined) {
+      prayer.shape = shape;
+    }
+
+    if (verse !== undefined) {
+      if (verse === null) {
+        prayer.verse = null;
+      } else if (verse.text || verse.reference) {
+        prayer.verse = {
+          text: verse.text?.trim() || null,
+          reference: verse.reference?.trim() || null,
+        };
+      }
+    }
+
+    if (anonymous !== undefined) {
+      prayer.anonymous = Boolean(anonymous);
+    }
+
+    if (media !== undefined) {
+      if (!Array.isArray(media)) {
+        res.status(400).json({
+          success: false,
+          error: "Media must be an array",
+          code: "VALIDATION_ERROR",
+        });
+        return;
+      }
+      prayer.media = media;
+    }
+
+    // Save prayer
+    await prayer.save();
+
+    // Populate author
+    await prayer.populate("authorId", "firstName lastName avatar email");
+
+    // Check if user liked
+    let userLiked = false;
+    if (userId && Types.ObjectId.isValid(userId)) {
+      const like = await MediaInteraction.findOne({
+        user: new Types.ObjectId(userId),
+        media: new Types.ObjectId(prayerIdParam),
+        interactionType: "like",
+      });
+      userLiked = !!like;
+    }
+
+    // Serialize response according to spec
+    const response = serializePrayer(prayer, userLiked);
+
+    logger.info("Prayer post updated", { postId: prayer._id, authorId: userId });
+    res.status(200).json({
+      success: true,
+      data: response,
+    });
+  } catch (error: any) {
+    logger.error("Error updating prayer:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to update prayer",
+      code: "INTERNAL_ERROR",
+    });
   }
-  await post.save();
-  logger.info("Prayer post updated", { postId: post._id, authorId: req.userId });
-  res.status(200).json({ success: true, post: serialize(post) });
 };
 
 export const deletePrayerPost = async (req: Request, res: Response): Promise<void> => {
@@ -546,6 +748,60 @@ function serializePoll(doc: any, userId?: string) {
     isActive,
     userVoted,
     author,
+  };
+}
+
+/**
+ * Serialize Prayer according to spec format
+ */
+function serializePrayer(doc: any, userLiked: boolean = false) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+
+  // Format author
+  let author = null;
+  if (obj.authorId && typeof obj.authorId === "object" && obj.authorId._id) {
+    // Generate username from email or firstName/lastName
+    const email = obj.authorId.email || "";
+    const username = email.split("@")[0] || 
+                     [obj.authorId.firstName, obj.authorId.lastName].filter(Boolean).join("_").toLowerCase() ||
+                     "user";
+    
+    author = {
+      _id: String(obj.authorId._id),
+      username: username,
+      firstName: obj.authorId.firstName || undefined,
+      lastName: obj.authorId.lastName || undefined,
+      avatarUrl: obj.authorId.avatar || obj.authorId.avatarUpload || undefined,
+    };
+  } else if (obj.authorId) {
+    author = {
+      _id: String(obj.authorId),
+    };
+  }
+
+  // Format verse (null if empty)
+  let verse = null;
+  if (obj.verse && (obj.verse.text || obj.verse.reference)) {
+    verse = {
+      text: obj.verse.text || undefined,
+      reference: obj.verse.reference || undefined,
+    };
+  }
+
+  return {
+    _id: String(obj._id),
+    userId: String(obj.authorId?._id || obj.authorId),
+    prayerText: obj.prayerText || obj.content,
+    verse: verse,
+    color: obj.color,
+    shape: obj.shape,
+    createdAt: obj.createdAt ? (obj.createdAt instanceof Date ? obj.createdAt.toISOString() : obj.createdAt) : new Date().toISOString(),
+    updatedAt: obj.updatedAt ? (obj.updatedAt instanceof Date ? obj.updatedAt.toISOString() : obj.updatedAt) : new Date().toISOString(),
+    likesCount: obj.likesCount || 0,
+    commentsCount: obj.commentsCount || 0,
+    userLiked: userLiked,
+    author: author,
+    anonymous: obj.anonymous || false,
   };
 }
 

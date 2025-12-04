@@ -36,14 +36,34 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrayerPost = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const prayerPostSchema = new mongoose_1.Schema({
-    content: { type: String, required: true },
-    prayerText: { type: String }, // Alias, will sync with content
+    content: { type: String, required: true, trim: true, minlength: 1, maxlength: 2000 },
+    prayerText: {
+        type: String,
+        trim: true,
+        minlength: 1,
+        maxlength: 2000
+    }, // Alias, will sync with content
     verse: {
-        text: { type: String },
-        reference: { type: String },
+        type: {
+            text: {
+                type: String,
+                trim: true,
+                maxlength: 500,
+                default: null
+            },
+            reference: {
+                type: String,
+                trim: true,
+                maxlength: 50,
+                default: null
+            },
+        },
+        default: null,
+        _id: false
     },
     color: {
         type: String,
+        required: true,
         default: "#A16CE5",
         validate: {
             validator: function (v) {
@@ -54,22 +74,32 @@ const prayerPostSchema = new mongoose_1.Schema({
     },
     shape: {
         type: String,
+        required: true,
         default: "square",
         enum: ["rectangle", "circle", "scalloped", "square", "square2", "square3", "square4"]
     },
     anonymous: { type: Boolean, default: false },
     media: { type: [String], default: [] },
     authorId: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-    likesCount: { type: Number, default: 0 },
-    commentsCount: { type: Number, default: 0 },
+    likesCount: { type: Number, default: 0, min: 0 },
+    commentsCount: { type: Number, default: 0, min: 0 },
 }, { timestamps: true });
-// Sync prayerText with content
+// Sync prayerText with content and validate verse
 prayerPostSchema.pre("save", function (next) {
+    // Sync prayerText with content
     if (this.prayerText && !this.content) {
         this.content = this.prayerText;
     }
     else if (this.content && !this.prayerText) {
         this.prayerText = this.content;
+    }
+    // Validate verse: if verse object exists, at least one field must be present
+    if (this.verse && !this.verse.text && !this.verse.reference) {
+        return next(new Error("If verse is provided, at least text or reference must be included"));
+    }
+    // If verse is empty, set to null
+    if (this.verse && !this.verse.text && !this.verse.reference) {
+        this.verse = null;
     }
     next();
 });

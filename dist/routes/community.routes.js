@@ -38,12 +38,14 @@ router.get("/modules", community_controller_1.getCommunityModules);
  */
 // Prayer Wall
 router.post("/prayer-wall/posts", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createPrayerPost);
-router.post("/prayer-wall/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createPrayerPost); // Alias for frontend compatibility
+router.post("/prayer-wall/create", auth_middleware_1.verifyToken, (0, rateLimiter_1.rateLimiter)(20, 15 * 60 * 1000), communityContent_controller_1.createPrayerPost); // Spec endpoint
 router.get("/prayer-wall/posts", communityContent_controller_1.listPrayerPosts);
 router.get("/prayer-wall", communityContent_controller_1.listPrayerPosts); // Alias for frontend compatibility
 router.get("/prayer-wall/search", prayerSearch_controller_1.searchPrayers);
 router.get("/prayer-wall/posts/:id", communityContent_controller_1.getPrayerPost);
+router.get("/prayer-wall/:prayerId", communityContent_controller_1.getPrayerPost); // Spec endpoint (maps prayerId to id in controller)
 router.put("/prayer-wall/posts/:id", auth_middleware_1.verifyToken, communityContent_controller_1.updatePrayerPost);
+router.put("/prayer-wall/:prayerId", auth_middleware_1.verifyToken, communityContent_controller_1.updatePrayerPost); // Spec endpoint (maps prayerId to id in controller)
 router.put("/prayer-wall/:id", auth_middleware_1.verifyToken, communityContent_controller_1.updatePrayerPost); // Alias for frontend compatibility
 router.delete("/prayer-wall/posts/:id", auth_middleware_1.verifyToken, communityContent_controller_1.deletePrayerPost);
 router.delete("/prayer-wall/:id", auth_middleware_1.verifyToken, communityContent_controller_1.deletePrayerPost); // Alias for frontend compatibility
