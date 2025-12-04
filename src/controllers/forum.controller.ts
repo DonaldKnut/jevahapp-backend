@@ -485,6 +485,43 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
 };
 
 /**
+ * Get Single Forum Post by ID
+ */
+export const getSingleForumPost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { postId } = req.params;
+
+    if (!Types.ObjectId.isValid(postId)) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    // Find post and populate author and forum
+    const post = await ForumPost.findById(postId)
+      .populate("userId", "firstName lastName username avatar")
+      .populate("forumId", "title description");
+
+    if (!post) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    // Serialize post (includes userLiked check)
+    const serializedPost = await serializeForumPost(post, req.userId);
+
+    logger.info("Single forum post fetched", { postId, userId: req.userId });
+
+    res.status(200).json({
+      success: true,
+      data: serializedPost,
+    });
+  } catch (error: any) {
+    logger.error("Error getting single forum post", { error: error.message, postId: req.params.postId });
+    res.status(500).json({ success: false, error: "Failed to fetch post" });
+  }
+};
+
+/**
  * Get Forum Posts
  */
 export const getForumPosts = async (req: Request, res: Response): Promise<void> => {

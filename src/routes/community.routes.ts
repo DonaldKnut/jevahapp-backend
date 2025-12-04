@@ -34,6 +34,7 @@ import {
   createForum,
   listForums,
   createForumPost,
+  getSingleForumPost,
   getForumPosts,
   updateForumPost,
   deleteForumPost,
@@ -117,7 +118,8 @@ router.post("/prayer-wall/:id/comments", verifyToken, rateLimiter(20, 60 * 1000)
 router.post("/forum/create", verifyToken, rateLimiter(10, 60 * 60 * 1000), createForum); // Authenticated users
 router.get("/forum", listForums);
 router.put("/forum/:forumId", verifyToken, rateLimiter(10, 60 * 60 * 1000), updateForum); // Admin only
-router.get("/forum/:forumId/posts", getForumPosts);
+router.get("/forum/posts/:postId", getSingleForumPost); // Get single post by ID
+router.get("/forum/:forumId/posts", getForumPosts); // Get posts in a forum
 router.post("/forum/:forumId/posts", verifyToken, rateLimiter(20, 15 * 60 * 1000), createForumPost);
 router.put("/forum/posts/:postId", verifyToken, rateLimiter(20, 15 * 60 * 1000), updateForumPost);
 router.delete("/forum/posts/:postId", verifyToken, rateLimiter(20, 15 * 60 * 1000), deleteForumPost);

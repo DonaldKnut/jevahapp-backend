@@ -121,6 +121,7 @@ const getForumPostComments = (req, res) => __awaiter(void 0, void 0, void 0, fun
             return;
         }
         // Get top-level comments (no parentCommentId)
+        // Sort by createdAt ascending (oldest first) as per spec
         const comments = yield mediaInteraction_model_1.MediaInteraction.find({
             media: new mongoose_1.Types.ObjectId(postId),
             interactionType: "comment",
@@ -131,7 +132,7 @@ const getForumPostComments = (req, res) => __awaiter(void 0, void 0, void 0, fun
             ],
         })
             .populate("user", "firstName lastName username avatar")
-            .sort({ createdAt: -1 })
+            .sort({ createdAt: 1 }) // ✅ Ascending (oldest first) as per spec
             .skip((page - 1) * limit)
             .limit(limit)
             .lean();
@@ -184,43 +185,67 @@ const getForumPostComments = (req, res) => __awaiter(void 0, void 0, void 0, fun
                 }))
                 : false;
             const commentData = {
-                _id: comment._id,
+                _id: String(comment._id),
+                id: String(comment._id), // ✅ Include id field as per spec
                 postId: String(comment.media),
-                userId: (_a = comment.user) === null || _a === void 0 ? void 0 : _a._id,
+                userId: ((_a = comment.user) === null || _a === void 0 ? void 0 : _a._id) ? String(comment.user._id) : String(comment.user),
                 content: comment.content,
-                parentCommentId: comment.parentCommentId || null,
-                createdAt: comment.createdAt,
+                parentCommentId: comment.parentCommentId ? String(comment.parentCommentId) : null,
+                createdAt: comment.createdAt ? (comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt) : new Date().toISOString(),
+                updatedAt: comment.updatedAt ? (comment.updatedAt instanceof Date ? comment.updatedAt.toISOString() : comment.updatedAt) : new Date().toISOString(),
                 likesCount,
                 userLiked,
                 author: comment.user
                     ? {
-                        _id: comment.user._id,
+                        _id: String(comment.user._id),
                         username: comment.user.username,
+                        firstName: comment.user.firstName || "", // ✅ Include firstName
+                        lastName: comment.user.lastName || "", // ✅ Include lastName
                         avatarUrl: comment.user.avatar,
                     }
                     : null,
             };
             if (includeReplies) {
-                commentData.replies = (repliesMap.get(String(comment._id)) || []).map((reply) => {
+                // Process replies with likes count and userLiked
+                const replyList = repliesMap.get(String(comment._id)) || [];
+                commentData.replies = yield Promise.all(replyList.map((reply) => __awaiter(void 0, void 0, void 0, function* () {
                     var _a;
-                    return ({
-                        _id: reply._id,
+                    // Get likes count for reply
+                    const replyLikesCount = yield mediaInteraction_model_1.MediaInteraction.countDocuments({
+                        media: reply._id,
+                        interactionType: "like",
+                    });
+                    // Check if current user liked this reply
+                    const replyUserLiked = userId && mongoose_1.Types.ObjectId.isValid(userId)
+                        ? !!(yield mediaInteraction_model_1.MediaInteraction.findOne({
+                            user: userId,
+                            media: reply._id,
+                            interactionType: "like",
+                        }))
+                        : false;
+                    return {
+                        _id: String(reply._id),
+                        id: String(reply._id), // ✅ Include id field
                         postId: String(reply.media),
-                        userId: (_a = reply.user) === null || _a === void 0 ? void 0 : _a._id,
+                        userId: ((_a = reply.user) === null || _a === void 0 ? void 0 : _a._id) ? String(reply.user._id) : String(reply.user),
                         content: reply.content,
-                        parentCommentId: reply.parentCommentId,
-                        createdAt: reply.createdAt,
-                        likesCount: 0, // Could calculate if needed
-                        userLiked: false,
+                        parentCommentId: reply.parentCommentId ? String(reply.parentCommentId) : null,
+                        createdAt: reply.createdAt ? (reply.createdAt instanceof Date ? reply.createdAt.toISOString() : reply.createdAt) : new Date().toISOString(),
+                        updatedAt: reply.updatedAt ? (reply.updatedAt instanceof Date ? reply.updatedAt.toISOString() : reply.updatedAt) : new Date().toISOString(),
+                        likesCount: replyLikesCount, // ✅ Calculate actual likes count
+                        userLiked: replyUserLiked, // ✅ Calculate actual userLiked
                         author: reply.user
                             ? {
-                                _id: reply.user._id,
+                                _id: String(reply.user._id),
                                 username: reply.user.username,
+                                firstName: reply.user.firstName || "", // ✅ Include firstName
+                                lastName: reply.user.lastName || "", // ✅ Include lastName
                                 avatarUrl: reply.user.avatar,
                             }
                             : null,
-                    });
-                });
+                        replies: [], // ✅ Replies don't have nested replies (as per spec)
+                    };
+                })));
             }
             else {
                 commentData.replies = [];
@@ -317,28 +342,32 @@ const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, funct
         // Populate user info
         yield comment.populate("user", "firstName lastName username avatar");
         logger_1.default.info("Forum post comment created", { postId, userId, commentId: comment._id });
+        // Format response to match spec
+        const responseData = {
+            _id: String(comment._id),
+            id: String(comment._id), // ✅ Include id field as per spec
+            postId: String(comment.media),
+            userId: ((_a = comment.user) === null || _a === void 0 ? void 0 : _a._id) ? String(comment.user._id) : String(comment.user),
+            content: comment.content,
+            parentCommentId: comment.parentCommentId ? String(comment.parentCommentId) : null,
+            createdAt: comment.createdAt ? (comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt) : new Date().toISOString(),
+            updatedAt: comment.updatedAt ? (comment.updatedAt instanceof Date ? comment.updatedAt.toISOString() : comment.updatedAt) : new Date().toISOString(),
+            likesCount: 0,
+            userLiked: false,
+            author: comment.user && typeof comment.user === "object" && comment.user._id
+                ? {
+                    _id: String(comment.user._id),
+                    username: comment.user.username,
+                    firstName: comment.user.firstName || "", // ✅ Include firstName
+                    lastName: comment.user.lastName || "", // ✅ Include lastName
+                    avatarUrl: comment.user.avatar,
+                }
+                : null,
+            replies: [], // ✅ Empty replies array as per spec
+        };
         res.status(201).json({
             success: true,
-            data: {
-                _id: comment._id,
-                postId: String(comment.media),
-                userId: (_a = comment.user) === null || _a === void 0 ? void 0 : _a._id,
-                content: comment.content,
-                parentCommentId: comment.parentCommentId || null,
-                createdAt: comment.createdAt,
-                likesCount: 0,
-                userLiked: false,
-                author: comment.user
-                    ? {
-                        _id: comment.user._id,
-                        username: comment.user.username,
-                        firstName: comment.user.firstName,
-                        lastName: comment.user.lastName,
-                        avatarUrl: comment.user.avatar,
-                    }
-                    : null,
-                replies: [],
-            },
+            data: responseData,
         });
     }
     catch (error) {
