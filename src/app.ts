@@ -56,6 +56,7 @@ import SocketService from "./service/socket.service";
 import logger from "./utils/logger";
 import swaggerSpec from "./config/swagger.config";
 import swaggerUi from "swagger-ui-express";
+import socketManager from "./socket/socketManager";
 
 // Create Express app
 const app = express();
@@ -63,6 +64,9 @@ const server = createServer(app);
 
 // Initialize Socket.IO service
 const socketService = new SocketService(server);
+
+// Initialize socket manager with io instance
+socketManager.setIO(socketService.getIO());
 
 // Production-grade middleware setup
 app.use(

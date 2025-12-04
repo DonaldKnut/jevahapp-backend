@@ -12,6 +12,7 @@ interface UserProfile {
   email: string;
   avatar?: string;
   avatarUpload?: string;
+  bio?: string | null;
   section?: string;
   role?: string;
   age?: number;
@@ -68,7 +69,7 @@ class UserService {
 
     try {
       const user = await User.findById(userId).select(
-        "firstName lastName email avatar avatarUpload section role isProfileComplete isEmailVerified createdAt updatedAt"
+        "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt"
       );
 
       if (!user) {
@@ -85,6 +86,7 @@ class UserService {
         email: user.email,
         avatar,
         avatarUpload: user.avatarUpload,
+        bio: user.bio || null,
         section: user.section,
         role: user.role,
         isProfileComplete: user.isProfileComplete,
@@ -296,11 +298,18 @@ class UserService {
       // Remove fields that shouldn't be updated directly
       const { id, email, createdAt, updatedAt, ...allowedUpdates } = updateData;
 
+      // Validate bio length if provided
+      if (allowedUpdates.bio !== undefined) {
+        if (allowedUpdates.bio && allowedUpdates.bio.length > 500) {
+          throw new Error("Bio must be less than 500 characters");
+        }
+      }
+
       const user = await User.findByIdAndUpdate(userId, allowedUpdates, {
         new: true,
         runValidators: true,
       }).select(
-        "firstName lastName email avatar avatarUpload section role isProfileComplete isEmailVerified createdAt updatedAt"
+        "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt"
       );
 
       if (!user) {
@@ -316,6 +325,7 @@ class UserService {
         email: user.email,
         avatar,
         avatarUpload: user.avatarUpload,
+        bio: user.bio || null,
         section: user.section,
         role: user.role,
         isProfileComplete: user.isProfileComplete,

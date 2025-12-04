@@ -125,5 +125,47 @@ class CopyrightFreeSongInteractionService {
             }
         });
     }
+    getInteraction(userId, songId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const interaction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
+                    userId: new mongoose_1.Types.ObjectId(userId),
+                    songId: new mongoose_1.Types.ObjectId(songId),
+                });
+                return interaction;
+            }
+            catch (error) {
+                logger_1.default.error("Error getting interaction:", error);
+                return null;
+            }
+        });
+    }
+    markAsViewed(userId, songId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                let interaction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
+                    userId: new mongoose_1.Types.ObjectId(userId),
+                    songId: new mongoose_1.Types.ObjectId(songId),
+                });
+                if (!interaction) {
+                    yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.create({
+                        userId: new mongoose_1.Types.ObjectId(userId),
+                        songId: new mongoose_1.Types.ObjectId(songId),
+                        hasLiked: false,
+                        hasShared: false,
+                        hasViewed: true,
+                    });
+                }
+                else {
+                    interaction.hasViewed = true;
+                    yield interaction.save();
+                }
+            }
+            catch (error) {
+                logger_1.default.error("Error marking as viewed:", error);
+                throw error;
+            }
+        });
+    }
 }
 exports.CopyrightFreeSongInteractionService = CopyrightFreeSongInteractionService;

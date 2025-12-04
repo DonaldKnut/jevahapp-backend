@@ -4,9 +4,14 @@ import {
   getAllUsers,
   getUserById,
   updateUserProfile,
+  updateMyProfile,
   deleteUser,
   getUserStats,
   completeUserProfile,
+  getUserPosts,
+  getUserMedia,
+  getUserVideos,
+  getUserAnalytics,
 } from "../controllers/user.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
@@ -41,6 +46,25 @@ const router = Router();
  *         description: Internal server error
  */
 router.get("/me", verifyToken, apiRateLimiter, getCurrentUser);
+
+/**
+ * @swagger
+ * /api/users/me:
+ *   patch:
+ *     summary: Update current user profile
+ *     description: Update the authenticated user's own profile information including bio
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *       400:
+ *         description: Invalid request data
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch("/me", verifyToken, apiRateLimiter, updateMyProfile);
 
 /**
  * @swagger
@@ -303,5 +327,53 @@ router.post(
   apiRateLimiter,
   completeUserProfile
 );
+
+/**
+ * @swagger
+ * /api/users/{userId}/posts:
+ *   get:
+ *     summary: Get user's posts
+ *     description: Retrieve paginated list of user's posts
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/:userId/posts", verifyToken, apiRateLimiter, getUserPosts);
+
+/**
+ * @swagger
+ * /api/users/{userId}/media:
+ *   get:
+ *     summary: Get user's media (images)
+ *     description: Retrieve paginated list of user's uploaded images/photos
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/:userId/media", verifyToken, apiRateLimiter, getUserMedia);
+
+/**
+ * @swagger
+ * /api/users/{userId}/videos:
+ *   get:
+ *     summary: Get user's videos
+ *     description: Retrieve paginated list of user's uploaded videos
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/:userId/videos", verifyToken, apiRateLimiter, getUserVideos);
+
+/**
+ * @swagger
+ * /api/users/{userId}/analytics:
+ *   get:
+ *     summary: Get user analytics
+ *     description: Retrieve aggregated analytics metrics for the user
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/:userId/analytics", verifyToken, apiRateLimiter, getUserAnalytics);
 
 export default router;

@@ -1,1657 +1,1420 @@
-# Frontend Integration Guide - Community API
+# Frontend Integration Guide - Account & Profile Settings
 
-**Version:** 1.0  
-**Last Updated:** 2024-01-15  
-**Status:** Production Ready
+**Complete guide for consuming Account & Profile Settings API endpoints**
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [Getting Started](#getting-started)
-2. [Authentication](#authentication)
-3. [Base URL & Configuration](#base-url--configuration)
-4. [Error Handling Strategy](#error-handling-strategy)
-5. [Prayer Wall API](#prayer-wall-api)
-6. [Forum API](#forum-api)
-7. [Groups API](#groups-api)
-8. [Polls API](#polls-api)
-9. [Best Practices](#best-practices)
-10. [Common Patterns](#common-patterns)
-11. [Troubleshooting](#troubleshooting)
+1. [API Client Setup](#api-client-setup)
+2. [TypeScript Types](#typescript-types)
+3. [API Client Methods](#api-client-methods)
+4. [React Hooks](#react-hooks)
+5. [Component Integration](#component-integration)
+6. [Error Handling](#error-handling)
+7. [Complete Examples](#complete-examples)
+8. [Testing Guide](#testing-guide)
 
 ---
 
-## Getting Started
+## API Client Setup
 
-### Prerequisites
+### Base Configuration
 
-- Authentication token (JWT) stored in AsyncStorage/SecureStore
-- Base API URL: `https://your-api-domain.com/api/community`
-- Network request library (axios, fetch, etc.)
-
-### Response Format Standard
-
-All endpoints return responses in this format:
+**File:** `app/utils/apiClient.ts`
 
 ```typescript
-// Success Response
-{
-  success: true,
-  data: { ... },
-  message?: string
-}
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Error Response
-{
-  success: false,
-  error: string,
-  code?: string,
-  details?: any
-}
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://your-api-domain.com';
 
-// List Response with Pagination
-{
-  success: true,
-  data: {
-    items: [...],
-    pagination: {
-      page: number,
-      limit: number,
-      total: number,
-      totalPages: number,
-      hasMore: boolean
-    }
-  }
-}
-```
-
----
-
-## Authentication
-
-### Token Storage
-
-Store JWT token securely:
-
-```typescript
-// React Native - SecureStore
-import * as SecureStore from 'expo-secure-store';
-
-// Store token
-await SecureStore.setItemAsync('authToken', token);
-
-// Retrieve token
-const token = await SecureStore.getItemAsync('authToken');
-
-// Remove token
-await SecureStore.deleteItemAsync('authToken');
-```
-
-### Adding Authentication Header
-
-```typescript
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
-
-// Create axios instance
-const apiClient = axios.create({
-  baseURL: 'https://your-api-domain.com/api/community',
-  timeout: 30000,
-});
-
-// Add request interceptor for authentication
-apiClient.interceptors.request.use(
-  async (config) => {
-    const token = await SecureStore.getItemAsync('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Add response interceptor for error handling
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized - redirect to login
-      await SecureStore.deleteItemAsync('authToken');
-      // Navigate to login screen
-    }
-    return Promise.reject(error);
-  }
-);
-```
-
----
-
-## Base URL & Configuration
-
-### Environment Configuration
-
-```typescript
-// config/api.ts
-const API_CONFIG = {
-  baseURL: __DEV__ 
-    ? 'http://localhost:3000/api/community'
-    : 'https://api.jevahapp.com/api/community',
-  timeout: 30000,
-  retryAttempts: 3,
-  retryDelay: 1000,
-};
-```
-
----
-
-## Error Handling Strategy
-
-### Comprehensive Error Handler
-
-```typescript
-// utils/apiErrorHandler.ts
-export interface ApiError {
-  success: false;
-  error: string;
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  user?: T; // For profile endpoints
+  error?: string;
   code?: string;
-  details?: any;
+  message?: string;
 }
 
-export class ApiErrorHandler {
-  static handle(error: any): ApiError {
-    // Network error
-    if (!error.response) {
-      return {
-        success: false,
-        error: 'Network error. Please check your connection.',
-        code: 'NETWORK_ERROR',
-      };
-    }
-
-    // Server error response
-    const { status, data } = error.response;
-
-    // Handle specific status codes
-    switch (status) {
-      case 400:
-        return {
-          success: false,
-          error: data.error || 'Invalid request. Please check your input.',
-          code: data.code || 'VALIDATION_ERROR',
-          details: data.details,
-        };
-      
-      case 401:
-        return {
-          success: false,
-          error: 'Unauthorized. Please login again.',
-          code: 'UNAUTHORIZED',
-        };
-      
-      case 403:
-        return {
-          success: false,
-          error: data.error || 'You do not have permission to perform this action.',
-          code: 'FORBIDDEN',
-        };
-      
-      case 404:
-        return {
-          success: false,
-          error: data.error || 'Resource not found.',
-          code: 'NOT_FOUND',
-        };
-      
-      case 429:
-        return {
-          success: false,
-          error: 'Too many requests. Please try again later.',
-          code: 'RATE_LIMIT_EXCEEDED',
-        };
-      
-      case 500:
-      case 502:
-      case 503:
-        return {
-          success: false,
-          error: 'Server error. Please try again later.',
-          code: 'SERVER_ERROR',
-        };
-      
-      default:
-        return {
-          success: false,
-          error: data.error || 'An unexpected error occurred.',
-          code: data.code || 'UNKNOWN_ERROR',
-          details: data.details,
-        };
-    }
-  }
-
-  static showError(error: ApiError, showToast?: (message: string) => void) {
-    if (showToast) {
-      showToast(error.error);
-    } else {
-      console.error('API Error:', error);
-    }
-  }
-}
-```
-
-### Graceful Error Handling in Components
-
-```typescript
-// hooks/useApiCall.ts
-import { useState, useCallback } from 'react';
-import { ApiErrorHandler, ApiError } from '../utils/apiErrorHandler';
-
-export function useApiCall<T>() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  const execute = useCallback(
-    async (apiCall: () => Promise<T>): Promise<T | null> => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await apiCall();
-        return result;
-      } catch (err: any) {
-        const apiError = ApiErrorHandler.handle(err);
-        setError(apiError);
-        ApiErrorHandler.showError(apiError);
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
-
-  return { execute, loading, error };
-}
-```
-
----
-
-## Prayer Wall API
-
-### 1. Create Prayer Request
-
-**Endpoint:** `POST /api/community/prayer-wall/create`
-
-**Request:**
-```typescript
-interface CreatePrayerRequest {
-  prayerText: string; // Required, 1-2000 characters
-  verse?: {
-    text: string;
-    reference: string; // e.g., "John 3:16"
-  };
-  color: string; // Hex color code, e.g., "#A16CE5"
-  shape: "rectangle" | "circle" | "scalloped" | "square" | "square2" | "square3" | "square4";
-  anonymous?: boolean;
-  media?: string[]; // Array of media URLs
-}
-
-// Example
-const createPrayer = async (prayerData: CreatePrayerRequest) => {
-  try {
-    const response = await apiClient.post('/prayer-wall/create', prayerData);
-    if (response.data.success) {
-      return response.data.data; // Prayer object
-    }
-    throw new Error('Failed to create prayer');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    _id: string;
-    userId: string;
-    prayerText: string;
-    verse?: {
-      text: string;
-      reference: string;
-    };
-    color: string;
-    shape: string;
-    createdAt: string; // ISO timestamp
-    updatedAt: string;
-    likesCount: number;
-    commentsCount: number;
-    userLiked: boolean;
-    author: {
-      _id: string;
-      username: string;
-      firstName?: string;
-      lastName?: string;
-      avatarUrl?: string;
-    };
-    anonymous: boolean;
-    media: string[];
-  }
-}
-```
-
-**Error Handling:**
-```typescript
-try {
-  const prayer = await createPrayer({
-    prayerText: "Prayer for my job interview...",
-    verse: {
-      text: "For I know the plans I have for you...",
-      reference: "Jeremiah 29:11"
-    },
-    color: "#A16CE5",
-    shape: "square"
-  });
-  
-  if (prayer) {
-    // Success - navigate or show success message
-    showToast('Prayer created successfully!');
-  }
-} catch (error: any) {
-  // Error already handled by useApiCall
-  // Additional custom handling if needed
-  if (error.code === 'VALIDATION_ERROR') {
-    // Show specific validation errors
-    showValidationErrors(error.details);
-  }
-}
-```
-
-### 2. Get Prayer Requests (Paginated)
-
-**Endpoint:** `GET /api/community/prayer-wall`
-
-**Request:**
-```typescript
-interface GetPrayersParams {
-  page?: number; // Default: 1
-  limit?: number; // Default: 20, max: 100
-  sortBy?: "createdAt" | "likesCount" | "commentsCount"; // Default: "createdAt"
-  sortOrder?: "asc" | "desc"; // Default: "desc"
-}
-
-const getPrayers = async (params?: GetPrayersParams) => {
-  try {
-    const response = await apiClient.get('/prayer-wall', { params });
-    if (response.data.success) {
-      return response.data.data; // { prayers: [], pagination: {} }
-    }
-    throw new Error('Failed to fetch prayers');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    prayers: Array<{
-      _id: string;
-      userId: string;
-      prayerText: string;
-      verse?: { text: string; reference: string };
-      color: string;
-      shape: string;
-      createdAt: string;
-      likesCount: number;
-      commentsCount: number;
-      userLiked: boolean;
-      author: {
-        _id: string;
-        username: string;
-        firstName?: string;
-        lastName?: string;
-        avatarUrl?: string;
-      };
-    }>;
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-      hasMore: boolean;
-    };
-  }
-}
-```
-
-**Usage with Infinite Scroll:**
-```typescript
-// hooks/usePrayers.ts
-import { useState, useEffect, useCallback } from 'react';
-
-export function usePrayers() {
-  const [prayers, setPrayers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  const loadPrayers = useCallback(async (reset = false) => {
-    if (loading || (!hasMore && !reset)) return;
-
+class ApiClient {
+  private async getAuthToken(): Promise<string | null> {
     try {
-      setLoading(true);
-      const currentPage = reset ? 1 : page;
-      const response = await getPrayers({
-        page: currentPage,
-        limit: 20,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
+      return await AsyncStorage.getItem('authToken');
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
+    try {
+      const token = await this.getAuthToken();
+      
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...options.headers,
+      };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
       });
 
-      if (response && response.prayers) {
-        if (reset) {
-          setPrayers(response.prayers);
-        } else {
-          setPrayers(prev => [...prev, ...response.prayers]);
-        }
-        
-        setHasMore(response.pagination.hasMore);
-        setPage(currentPage + 1);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
       }
-    } catch (err: any) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, loading, hasMore]);
 
-  const refresh = useCallback(() => {
-    setPage(1);
-    setHasMore(true);
-    loadPrayers(true);
-  }, [loadPrayers]);
-
-  useEffect(() => {
-    loadPrayers(true);
-  }, []);
-
-  return { prayers, loading, error, loadMore: () => loadPrayers(false), refresh };
-}
-```
-
-### 3. Search Prayer Requests (AI-Enhanced)
-
-**Endpoint:** `GET /api/community/prayer-wall/search`
-
-**Request:**
-```typescript
-interface SearchPrayersParams {
-  query: string; // Required - search query
-  page?: number;
-  limit?: number;
-}
-
-const searchPrayers = async (params: SearchPrayersParams) => {
-  try {
-    const response = await apiClient.get('/prayer-wall/search', { params });
-    if (response.data.success) {
-      return response.data.data; // { prayers: [], pagination: {} }
-    }
-    throw new Error('Failed to search prayers');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    prayers: Array<{
-      // Same as prayer object above
-      relevanceScore: number; // 0-1, how relevant this prayer is to the query
-    }>;
-    pagination: { ... };
-  }
-}
-```
-
-**Usage with Debouncing:**
-```typescript
-// hooks/useSearchPrayers.ts
-import { useState, useEffect } from 'react';
-import { debounce } from 'lodash';
-
-export function useSearchPrayers() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  const debouncedSearch = debounce(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      setResults([]);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await searchPrayers({ query: searchQuery, page: 1, limit: 20 });
-      if (response && response.prayers) {
-        setResults(response.prayers);
-      }
-    } catch (err: any) {
-      setError(err);
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  }, 500); // 500ms debounce
-
-  useEffect(() => {
-    debouncedSearch(query);
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [query]);
-
-  return { query, setQuery, results, loading, error };
-}
-```
-
-### 4. Like/Unlike Prayer
-
-**Endpoint:** `POST /api/community/prayer-wall/:id/like`
-
-**Request:**
-```typescript
-const likePrayer = async (prayerId: string) => {
-  try {
-    const response = await apiClient.post(`/prayer-wall/${prayerId}/like`);
-    if (response.data.success) {
-      return response.data.data; // { liked: boolean, likesCount: number }
-    }
-    throw new Error('Failed to toggle like');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    liked: boolean;
-    likesCount: number;
-  }
-}
-```
-
-**Optimistic Update Pattern:**
-```typescript
-// Optimistic update for better UX
-const handleLikePrayer = async (prayerId: string, currentLiked: boolean, currentLikesCount: number) => {
-  // Optimistically update UI
-  updatePrayerInList(prayerId, {
-    userLiked: !currentLiked,
-    likesCount: currentLiked ? currentLikesCount - 1 : currentLikesCount + 1,
-  });
-
-  try {
-    const result = await likePrayer(prayerId);
-    if (result) {
-      // Update with actual server response
-      updatePrayerInList(prayerId, {
-        userLiked: result.liked,
-        likesCount: result.likesCount,
-      });
-    }
-  } catch (error) {
-    // Revert optimistic update on error
-    updatePrayerInList(prayerId, {
-      userLiked: currentLiked,
-      likesCount: currentLikesCount,
-    });
-    ApiErrorHandler.showError(error);
-  }
-};
-```
-
-### 5. Get Prayer Comments
-
-**Endpoint:** `GET /api/community/prayer-wall/:id/comments`
-
-**Request:**
-```typescript
-interface GetCommentsParams {
-  page?: number;
-  limit?: number;
-}
-
-const getPrayerComments = async (prayerId: string, params?: GetCommentsParams) => {
-  try {
-    const response = await apiClient.get(`/prayer-wall/${prayerId}/comments`, { params });
-    if (response.data.success) {
-      return response.data.data; // { comments: [], pagination: {} }
-    }
-    throw new Error('Failed to fetch comments');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    comments: Array<{
-      _id: string;
-      userId: string;
-      content: string;
-      createdAt: string;
-      likesCount: number;
-      userLiked: boolean;
-      author: {
-        _id: string;
-        username: string;
-        firstName?: string;
-        lastName?: string;
-        avatarUrl?: string;
-      };
-      replies: Array<{
-        // Same structure as comment
-        parentCommentId: string;
-      }>;
-    }>;
-    pagination: { ... };
-  }
-}
-```
-
-### 6. Add Comment to Prayer
-
-**Endpoint:** `POST /api/community/prayer-wall/:id/comments`
-
-**Request:**
-```typescript
-interface CreateCommentRequest {
-  content: string; // Required, 1-2000 characters
-  parentCommentId?: string; // For nested replies
-}
-
-const commentOnPrayer = async (prayerId: string, commentData: CreateCommentRequest) => {
-  try {
-    const response = await apiClient.post(`/prayer-wall/${prayerId}/comments`, commentData);
-    if (response.data.success) {
-      return response.data.data; // Comment object
-    }
-    throw new Error('Failed to create comment');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
----
-
-## Forum API
-
-### 1. Create Forum (Admin Only)
-
-**Endpoint:** `POST /api/community/forum/create`
-
-**Request:**
-```typescript
-interface CreateForumRequest {
-  title: string; // Required, 3-100 characters
-  description: string; // Required, 10-500 characters
-}
-
-const createForum = async (forumData: CreateForumRequest) => {
-  try {
-    const response = await apiClient.post('/forum/create', forumData);
-    if (response.data.success) {
-      return response.data.data; // Forum object
-    }
-    throw new Error('Failed to create forum');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    if (apiError.code === 'FORBIDDEN') {
-      showToast('Only admins can create forums');
-    }
-    throw apiError;
-  }
-};
-```
-
-### 2. Get All Forums
-
-**Endpoint:** `GET /api/community/forum`
-
-**Request:**
-```typescript
-const getForums = async () => {
-  try {
-    const response = await apiClient.get('/forum');
-    if (response.data.success) {
-      return response.data.data.forums; // Array of forums
-    }
-    throw new Error('Failed to fetch forums');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 3. Create Forum Post
-
-**Endpoint:** `POST /api/community/forum/:forumId/posts`
-
-**Request:**
-```typescript
-interface CreateForumPostRequest {
-  content: string; // Required, 1-5000 characters
-  embeddedLinks?: Array<{
-    url: string; // Required, valid URL
-    title?: string; // Max 200 characters
-    description?: string; // Max 500 characters
-    thumbnail?: string; // Valid URL
-    type: "video" | "article" | "resource" | "other"; // Required
-  }>; // Max 5 links
-}
-
-const createForumPost = async (forumId: string, postData: CreateForumPostRequest) => {
-  try {
-    const response = await apiClient.post(`/forum/${forumId}/posts`, postData);
-    if (response.data.success) {
-      return response.data.data; // Post object
-    }
-    throw new Error('Failed to create post');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Link Embedding Helper:**
-```typescript
-// utils/linkEmbedder.ts
-export const extractLinkMetadata = async (url: string): Promise<{
-  title?: string;
-  description?: string;
-  thumbnail?: string;
-  type: "video" | "article" | "resource" | "other";
-}> => {
-  // Detect link type
-  const isVideo = /youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com/i.test(url);
-  const isArticle = /medium\.com|blog|article|news/i.test(url);
-  
-  let type: "video" | "article" | "resource" | "other" = "other";
-  if (isVideo) type = "video";
-  else if (isArticle) type = "article";
-  else type = "resource";
-
-  // You can fetch OG tags here if needed
-  // For now, return basic detection
-  return {
-    type,
-    // title, description, thumbnail would come from OG tag fetching
-  };
-};
-```
-
-### 4. Get Forum Posts
-
-**Endpoint:** `GET /api/community/forum/:forumId/posts`
-
-**Request:**
-```typescript
-interface GetForumPostsParams {
-  page?: number;
-  limit?: number;
-  sortBy?: "createdAt" | "likesCount" | "commentsCount";
-  sortOrder?: "asc" | "desc";
-}
-
-const getForumPosts = async (forumId: string, params?: GetForumPostsParams) => {
-  try {
-    const response = await apiClient.get(`/forum/${forumId}/posts`, { params });
-    if (response.data.success) {
-      return response.data.data; // { posts: [], pagination: {} }
-    }
-    throw new Error('Failed to fetch posts');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 5. Like/Unlike Forum Post
-
-**Endpoint:** `POST /api/community/forum/posts/:postId/like`
-
-Same pattern as prayer like endpoint.
-
-### 6. Add Comment to Forum Post
-
-**Endpoint:** `POST /api/community/forum/posts/:postId/comments`
-
-**Request:**
-```typescript
-interface CreateForumCommentRequest {
-  content: string; // Required, 1-2000 characters
-  parentCommentId?: string; // For nested replies (max 3 levels)
-}
-
-const commentOnForumPost = async (postId: string, commentData: CreateForumCommentRequest) => {
-  try {
-    const response = await apiClient.post(`/forum/posts/${postId}/comments`, commentData);
-    if (response.data.success) {
-      return response.data.data; // Comment object
-    }
-    throw new Error('Failed to create comment');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
----
-
-## Groups API
-
-### 1. Create Group
-
-**Endpoint:** `POST /api/community/groups/create`
-
-**Request:**
-```typescript
-interface CreateGroupRequest {
-  name: string; // Required, 3-100 characters
-  description: string; // Required, 10-500 characters
-  isPublic: boolean; // Required
-  profileImage?: File | Blob; // Optional, max 5MB, JPEG/PNG/WebP
-}
-
-const createGroup = async (groupData: CreateGroupRequest) => {
-  try {
-    const formData = new FormData();
-    formData.append('name', groupData.name);
-    formData.append('description', groupData.description);
-    formData.append('isPublic', String(groupData.isPublic));
-    
-    if (groupData.profileImage) {
-      formData.append('profileImage', {
-        uri: groupData.profileImage.uri, // For React Native
-        type: groupData.profileImage.type || 'image/jpeg',
-        name: 'profileImage.jpg',
-      } as any);
-    }
-
-    const response = await apiClient.post('/groups/create', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    if (response.data.success) {
-      return response.data.data; // Group object
-    }
-    throw new Error('Failed to create group');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    _id: string;
-    name: string;
-    description: string;
-    profileImageUrl?: string;
-    createdBy: string;
-    isPublic: boolean;
-    membersCount: number;
-    createdAt: string;
-    members: Array<{
-      _id: string;
-      userId: string;
-      role: "admin" | "member";
-      joinedAt: string;
-      user: {
-        _id: string;
-        username: string;
-        firstName?: string;
-        lastName?: string;
-        avatarUrl?: string;
-      };
-    }>;
-    creator: {
-      _id: string;
-      username: string;
-      avatarUrl?: string;
-    };
-    isMember: boolean;
-    userRole?: "admin" | "member";
-  }
-}
-```
-
-### 2. Get My Groups
-
-**Endpoint:** `GET /api/community/groups/my-groups`
-
-**Request:**
-```typescript
-const getMyGroups = async (params?: { page?: number; limit?: number }) => {
-  try {
-    const response = await apiClient.get('/groups/my-groups', { params });
-    if (response.data.success) {
-      return response.data.data; // { groups: [], pagination: {} }
-    }
-    throw new Error('Failed to fetch my groups');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 3. Explore Public Groups
-
-**Endpoint:** `GET /api/community/groups/explore`
-
-**Request:**
-```typescript
-interface ExploreGroupsParams {
-  page?: number;
-  limit?: number;
-  search?: string; // Search by name or description
-  sortBy?: "membersCount" | "createdAt" | "name";
-  sortOrder?: "asc" | "desc";
-}
-
-const exploreGroups = async (params?: ExploreGroupsParams) => {
-  try {
-    const response = await apiClient.get('/groups/explore', { params });
-    if (response.data.success) {
-      return response.data.data; // { groups: [], pagination: {} }
-    }
-    throw new Error('Failed to explore groups');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 4. Upload Group Image
-
-**Endpoint:** `POST /api/community/groups/:id/image`
-
-**Request:**
-```typescript
-const uploadGroupImage = async (groupId: string, image: File | Blob) => {
-  try {
-    const formData = new FormData();
-    formData.append('profileImage', {
-      uri: image.uri, // React Native
-      type: image.type || 'image/jpeg',
-      name: 'profileImage.jpg',
-    } as any);
-
-    const response = await apiClient.post(`/groups/${groupId}/image`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
-    if (response.data.success) {
-      return response.data.data.profileImageUrl;
-    }
-    throw new Error('Failed to upload image');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 5. Add Members to Group
-
-**Endpoint:** `POST /api/community/groups/:id/members`
-
-**Request:**
-```typescript
-interface AddMembersRequest {
-  userIds: string[]; // Array of user IDs, max 50
-}
-
-const addGroupMembers = async (groupId: string, userIds: string[]) => {
-  try {
-    if (userIds.length > 50) {
-      throw new Error('Maximum 50 users per request');
-    }
-
-    const response = await apiClient.post(`/groups/${groupId}/members`, { userIds });
-    if (response.data.success) {
-      return response.data.data; // { addedMembers: [], failedUsers: [] }
-    }
-    throw new Error('Failed to add members');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    addedMembers: Array<{
-      _id: string;
-      userId: string;
-      role: "member";
-      joinedAt: string;
-      user: { ... };
-    }>;
-    failedUsers: Array<{
-      userId: string;
-      reason: string;
-    }>;
-  }
-}
-```
-
-### 6. Remove Member from Group
-
-**Endpoint:** `DELETE /api/community/groups/:id/members/:userId`
-
-**Request:**
-```typescript
-const removeGroupMember = async (groupId: string, userId: string) => {
-  try {
-    const response = await apiClient.delete(`/groups/${groupId}/members/${userId}`);
-    if (response.data.success) {
-      return true;
-    }
-    throw new Error('Failed to remove member');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
----
-
-## Polls API
-
-### 1. Create Poll (Admin Only)
-
-**Endpoint:** `POST /api/community/polls/create`
-
-**Request:**
-```typescript
-interface CreatePollRequest {
-  title: string; // Required, 5-200 characters (or use "question")
-  description?: string; // Optional, max 500 characters
-  options: string[]; // Required, 2-10 options, each max 200 characters
-  expiresAt?: string; // ISO date string, must be future date
-}
-
-const createPoll = async (pollData: CreatePollRequest) => {
-  try {
-    const response = await apiClient.post('/polls/create', pollData);
-    if (response.data.success) {
-      return response.data.data; // Poll object
-    }
-    throw new Error('Failed to create poll');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    if (apiError.code === 'FORBIDDEN') {
-      showToast('Only admins can create polls');
-    }
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    _id: string;
-    title: string;
-    question: string; // Same as title
-    description?: string;
-    createdBy: string;
-    options: Array<{
-      _id: string; // Format: "pollId_optionIndex"
-      text: string;
-      votesCount: number;
-      percentage: number; // 0-100
-    }>;
-    totalVotes: number;
-    expiresAt?: string;
-    createdAt: string;
-    isActive: boolean;
-    userVoted: boolean;
-    userVoteOptionId?: string;
-    createdByUser: {
-      _id: string;
-      username: string;
-      avatarUrl?: string;
-    };
-  }
-}
-```
-
-### 2. Get All Polls
-
-**Endpoint:** `GET /api/community/polls`
-
-**Request:**
-```typescript
-interface GetPollsParams {
-  page?: number;
-  limit?: number;
-  status?: "active" | "expired" | "all"; // Default: "active"
-  sortBy?: "createdAt" | "totalVotes";
-  sortOrder?: "asc" | "desc";
-}
-
-const getPolls = async (params?: GetPollsParams) => {
-  try {
-    const response = await apiClient.get('/polls', { params });
-    if (response.data.success) {
-      return response.data.data; // { polls: [], pagination: {} }
-    }
-    throw new Error('Failed to fetch polls');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 3. Vote on Poll
-
-**Endpoint:** `POST /api/community/polls/:id/vote`
-
-**Request:**
-```typescript
-interface VotePollRequest {
-  optionId: string; // Format: "pollId_optionIndex", e.g., "507f1f77bcf86cd799439040_0"
-  // OR
-  optionIndex?: number; // Alternative format
-}
-
-const voteOnPoll = async (pollId: string, voteData: VotePollRequest) => {
-  try {
-    const response = await apiClient.post(`/polls/${pollId}/vote`, voteData);
-    if (response.data.success) {
-      return response.data.data; // Updated poll object with percentages
-    }
-    throw new Error('Failed to vote');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    if (apiError.code === 'VALIDATION_ERROR' && apiError.error.includes('expired')) {
-      showToast('This poll has expired');
-    }
-    throw apiError;
-  }
-};
-```
-
-**Response:**
-```typescript
-{
-  success: true,
-  data: {
-    // Same as poll object above, but with updated percentages
-    // Percentages are only visible after user votes
-    options: Array<{
-      _id: string;
-      text: string;
-      votesCount: number;
-      percentage: number; // Now visible
-    }>;
-    userVoted: true;
-    userVoteOptionId: string;
-  }
-}
-```
-
-**Important Poll UI Logic:**
-```typescript
-// PollsScreen.tsx
-const PollCard = ({ poll }) => {
-  const [localPoll, setLocalPoll] = useState(poll);
-  const { execute, loading } = useApiCall();
-
-  const handleVote = async (optionId: string) => {
-    // Check if already voted
-    if (localPoll.userVoted) {
-      showToast('You have already voted on this poll');
-      return;
-    }
-
-    // Check if poll is active
-    if (!localPoll.isActive) {
-      showToast('This poll has expired');
-      return;
-    }
-
-    // Optimistically update UI
-    const optimisticPoll = {
-      ...localPoll,
-      userVoted: true,
-      userVoteOptionId: optionId,
-      totalVotes: localPoll.totalVotes + 1,
-    };
-    setLocalPoll(optimisticPoll);
-
-    // Submit vote
-    const result = await execute(() => voteOnPoll(localPoll._id, { optionId }));
-    
-    if (result) {
-      // Update with server response (includes percentages)
-      setLocalPoll(result);
-    } else {
-      // Revert on error
-      setLocalPoll(poll);
-    }
-  };
-
-  return (
-    <View>
-      <Text>{localPoll.title}</Text>
-      {localPoll.options.map(option => (
-        <TouchableOpacity
-          key={option._id}
-          onPress={() => handleVote(option._id)}
-          disabled={localPoll.userVoted || !localPoll.isActive}
-        >
-          <Text>{option.text}</Text>
-          {/* Show percentages only if user voted */}
-          {localPoll.userVoted && (
-            <Text>{option.percentage}% ({option.votesCount} votes)</Text>
-          )}
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-};
-```
-
-### 4. Update Poll (Admin Only)
-
-**Endpoint:** `PUT /api/community/polls/:id`
-
-**Request:**
-```typescript
-interface UpdatePollRequest {
-  title?: string;
-  description?: string;
-  expiresAt?: string | null; // null to remove expiry
-  isActive?: boolean;
-  // Note: Cannot update options after poll is created
-}
-
-const updatePoll = async (pollId: string, updates: UpdatePollRequest) => {
-  try {
-    const response = await apiClient.put(`/polls/${pollId}`, updates);
-    if (response.data.success) {
-      return response.data.data; // Updated poll object
-    }
-    throw new Error('Failed to update poll');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
-### 5. Delete Poll (Admin Only)
-
-**Endpoint:** `DELETE /api/community/polls/:id`
-
-**Request:**
-```typescript
-const deletePoll = async (pollId: string) => {
-  try {
-    const response = await apiClient.delete(`/polls/${pollId}`);
-    if (response.data.success) {
-      return true;
-    }
-    throw new Error('Failed to delete poll');
-  } catch (error) {
-    const apiError = ApiErrorHandler.handle(error);
-    throw apiError;
-  }
-};
-```
-
----
-
-## Best Practices
-
-### 1. Loading States
-
-Always show loading indicators:
-
-```typescript
-const PrayerList = () => {
-  const { prayers, loading, error, loadMore } = usePrayers();
-
-  if (loading && prayers.length === 0) {
-    return <LoadingSpinner />;
-  }
-
-  return (
-    <FlatList
-      data={prayers}
-      renderItem={({ item }) => <PrayerCard prayer={item} />}
-      onEndReached={loadMore}
-      ListFooterComponent={loading ? <LoadingSpinner /> : null}
-      refreshing={loading}
-      onRefresh={loadMore}
-    />
-  );
-};
-```
-
-### 2. Error Boundaries
-
-Wrap components with error boundaries:
-
-```typescript
-class ErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return <ErrorScreen error={this.state.error} />;
-    }
-    return this.props.children;
-  }
-}
-```
-
-### 3. Retry Logic
-
-Implement retry for failed requests:
-
-```typescript
-const retryApiCall = async (apiCall: () => Promise<any>, maxRetries = 3) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await apiCall();
-    } catch (error) {
-      if (i === maxRetries - 1) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-    }
-  }
-};
-```
-
-### 4. Offline Support
-
-Handle offline scenarios:
-
-```typescript
-import NetInfo from '@react-native-community/netinfo';
-
-const checkNetworkAndCall = async (apiCall: () => Promise<any>) => {
-  const netInfo = await NetInfo.fetch();
-  if (!netInfo.isConnected) {
-    throw {
-      success: false,
-      error: 'No internet connection',
-      code: 'OFFLINE',
-    };
-  }
-  return await apiCall();
-};
-```
-
-### 5. Caching Strategy
-
-Implement caching for better performance:
-
-```typescript
-// Simple in-memory cache
-const cache = new Map();
-
-const getCachedOrFetch = async (key: string, fetchFn: () => Promise<any>, ttl = 60000) => {
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.timestamp < ttl) {
-    return cached.data;
-  }
-  
-  const data = await fetchFn();
-  cache.set(key, { data, timestamp: Date.now() });
-  return data;
-};
-```
-
----
-
-## Common Patterns
-
-### 1. Optimistic Updates
-
-Always update UI immediately, then sync with server:
-
-```typescript
-const handleLike = async (itemId: string) => {
-  // Immediate UI update
-  const currentItem = items.find(i => i._id === itemId);
-  updateItemInState(itemId, {
-    userLiked: !currentItem.userLiked,
-    likesCount: currentItem.userLiked 
-      ? currentItem.likesCount - 1 
-      : currentItem.likesCount + 1,
-  });
-
-  try {
-    await likeItem(itemId);
-  } catch (error) {
-    // Revert on error
-    updateItemInState(itemId, currentItem);
-    ApiErrorHandler.showError(error);
-  }
-};
-```
-
-### 2. Form Validation
-
-Validate before submitting:
-
-```typescript
-const validatePrayerForm = (data: CreatePrayerRequest): { valid: boolean; errors: string[] } => {
-  const errors: string[] = [];
-
-  if (!data.prayerText || data.prayerText.trim().length === 0) {
-    errors.push('Prayer text is required');
-  } else if (data.prayerText.length > 2000) {
-    errors.push('Prayer text must be less than 2000 characters');
-  }
-
-  if (data.color && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(data.color)) {
-    errors.push('Invalid color format');
-  }
-
-  const validShapes = ["rectangle", "circle", "scalloped", "square", "square2", "square3", "square4"];
-  if (data.shape && !validShapes.includes(data.shape)) {
-    errors.push('Invalid shape');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-};
-```
-
-### 3. Image Upload Helper
-
-```typescript
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-
-const pickAndResizeImage = async (maxWidth = 800, maxHeight = 800, quality = 0.8) => {
-  // Request permission
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== 'granted') {
-    throw new Error('Permission denied');
-  }
-
-  // Pick image
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 1,
-  });
-
-  if (result.cancelled) {
-    return null;
-  }
-
-  // Resize if needed
-  const manipulated = await ImageManipulator.manipulateAsync(
-    result.uri,
-    [{ resize: { width: maxWidth, height: maxHeight } }],
-    { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
-  );
-
-  return {
-    uri: manipulated.uri,
-    type: 'image/jpeg',
-    name: 'image.jpg',
-  };
-};
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. 401 Unauthorized
-**Problem:** Token expired or invalid  
-**Solution:**
-```typescript
-// Refresh token or redirect to login
-if (error.response?.status === 401) {
-  await SecureStore.deleteItemAsync('authToken');
-  navigation.navigate('Login');
-}
-```
-
-#### 2. 429 Rate Limit Exceeded
-**Problem:** Too many requests  
-**Solution:**
-```typescript
-// Implement exponential backoff
-const retryWithBackoff = async (apiCall, retries = 3) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await apiCall();
-    } catch (error) {
-      if (error.response?.status === 429) {
-        const delay = Math.pow(2, i) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
+      return data;
+    } catch (error: any) {
+      console.error(`API Error (${endpoint}):`, error);
       throw error;
     }
   }
+
+  // GET request
+  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'GET' });
+  }
+
+  // POST request
+  async post<T>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  // PATCH request
+  async patch<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // PUT request
+  async put<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // DELETE request
+  async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
+  }
+}
+
+export const apiClient = new ApiClient();
+```
+
+---
+
+## TypeScript Types
+
+### User & Profile Types
+
+**File:** `app/types/user.types.ts`
+
+```typescript
+export interface User {
+  _id?: string;
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  avatar?: string | null;
+  avatarUpload?: string | null;
+  bio?: string | null;
+  section?: string; // "adults" | "kids"
+  role?: string;
+  isProfileComplete?: boolean;
+  isEmailVerified?: boolean;
+  isOnline?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UpdateProfileData {
+  firstName?: string;
+  lastName?: string;
+  bio?: string;
+  section?: string;
+}
+```
+
+### Content Types
+
+**File:** `app/types/content.types.ts`
+
+```typescript
+export interface Post {
+  _id: string;
+  userId: string;
+  content?: string;
+  media: MediaItem[];
+  likesCount: number;
+  commentsCount: number;
+  sharesCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MediaItem {
+  _id: string;
+  userId: string;
+  url: string;
+  thumbnail: string;
+  type: "image" | "video";
+  width?: number;
+  height?: number;
+  size?: number;
+  duration?: number; // For videos
+  title?: string; // For videos
+  description?: string; // For videos
+  viewsCount?: number; // For videos
+  likesCount?: number; // For videos
+  createdAt: string;
+}
+
+export interface Video extends MediaItem {
+  type: "video";
+  duration: number;
+  title: string;
+  description?: string;
+  viewsCount: number;
+  likesCount: number;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface PostsResponse {
+  posts: Post[];
+  pagination: Pagination;
+}
+
+export interface MediaResponse {
+  media: MediaItem[];
+  pagination: Pagination;
+}
+
+export interface VideosResponse {
+  videos: Video[];
+  pagination: Pagination;
+}
+```
+
+### Analytics Types
+
+**File:** `app/types/analytics.types.ts`
+
+```typescript
+export interface UserAnalytics {
+  posts: {
+    total: number;
+    published: number;
+    drafts: number;
+  };
+  likes: {
+    total: number;
+    received: number;
+  };
+  liveSessions: {
+    total: number;
+    totalDuration: number; // in seconds
+  };
+  comments: {
+    total: number;
+    received: number;
+  };
+  drafts: {
+    total: number;
+    posts: number;
+    videos: number;
+  };
+  shares: {
+    total: number;
+    received: number;
+  };
+}
+```
+
+---
+
+## API Client Methods
+
+### Profile Endpoints
+
+**File:** `app/utils/profileApi.ts`
+
+```typescript
+import { apiClient } from './apiClient';
+import { User, UpdateProfileData } from '../types/user.types';
+
+export const profileApi = {
+  /**
+   * Get current user profile
+   * GET /api/auth/me
+   */
+  async getCurrentUser(): Promise<User> {
+    const response = await apiClient.get<{ user: User }>('/api/auth/me');
+    if (!response.success || !response.user) {
+      throw new Error(response.error || 'Failed to fetch user profile');
+    }
+    return response.user;
+  },
+
+  /**
+   * Update current user profile
+   * PATCH /api/users/me
+   */
+  async updateProfile(data: UpdateProfileData): Promise<User> {
+    const response = await apiClient.patch<{ user: User; message: string }>(
+      '/api/users/me',
+      data
+    );
+    if (!response.success || !response.user) {
+      throw new Error(response.error || 'Failed to update profile');
+    }
+    return response.user;
+  },
+
+  /**
+   * Logout user
+   * POST /api/auth/logout
+   */
+  async logout(): Promise<void> {
+    const response = await apiClient.post('/api/auth/logout');
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to logout');
+    }
+  },
 };
 ```
 
-#### 3. Network Timeout
-**Problem:** Slow network or server timeout  
-**Solution:**
+### Content Endpoints
+
+**File:** `app/utils/contentApi.ts`
+
 ```typescript
-// Increase timeout for slow connections
-const apiClient = axios.create({
-  timeout: 60000, // 60 seconds
+import { apiClient } from './apiClient';
+import {
+  PostsResponse,
+  MediaResponse,
+  VideosResponse,
+} from '../types/content.types';
+
+export const contentApi = {
+  /**
+   * Get user's posts
+   * GET /api/users/:userId/posts
+   */
+  async getUserPosts(
+    userId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<PostsResponse> {
+    const response = await apiClient.get<{ data: PostsResponse }>(
+      `/api/users/${userId}/posts?page=${page}&limit=${limit}`
+    );
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch posts');
+    }
+    return response.data;
+  },
+
+  /**
+   * Get user's media (images)
+   * GET /api/users/:userId/media
+   */
+  async getUserMedia(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    type?: 'image' | 'video'
+  ): Promise<MediaResponse> {
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+    if (type) {
+      queryParams.append('type', type);
+    }
+    
+    const response = await apiClient.get<{ data: MediaResponse }>(
+      `/api/users/${userId}/media?${queryParams.toString()}`
+    );
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch media');
+    }
+    return response.data;
+  },
+
+  /**
+   * Get user's videos
+   * GET /api/users/:userId/videos
+   */
+  async getUserVideos(
+    userId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<VideosResponse> {
+    const response = await apiClient.get<{ data: VideosResponse }>(
+      `/api/users/${userId}/videos?page=${page}&limit=${limit}`
+    );
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch videos');
+    }
+    return response.data;
+  },
+};
+```
+
+### Analytics Endpoint
+
+**File:** `app/utils/analyticsApi.ts`
+
+```typescript
+import { apiClient } from './apiClient';
+import { UserAnalytics } from '../types/analytics.types';
+
+export const analyticsApi = {
+  /**
+   * Get user analytics
+   * GET /api/users/:userId/analytics
+   */
+  async getUserAnalytics(userId: string): Promise<UserAnalytics> {
+    const response = await apiClient.get<{ data: UserAnalytics }>(
+      `/api/users/${userId}/analytics`
+    );
+    if (!response.success || !response.data) {
+      throw new Error(response.error || 'Failed to fetch analytics');
+    }
+    return response.data;
+  },
+};
+```
+
+---
+
+## React Hooks
+
+### User Profile Hook
+
+**File:** `app/hooks/useUserProfile.ts`
+
+```typescript
+import { useState, useEffect, useCallback } from 'react';
+import { User, UpdateProfileData } from '../types/user.types';
+import { profileApi } from '../utils/profileApi';
+
+interface UseUserProfileResult {
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  updateProfile: (data: UpdateProfileData) => Promise<void>;
+}
+
+export function useUserProfile(): UseUserProfileResult {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const userData = await profileApi.getCurrentUser();
+      setUser(userData);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load profile');
+      console.error('Error loading profile:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const updateProfile = useCallback(async (data: UpdateProfileData) => {
+    try {
+      setError(null);
+      const updatedUser = await profileApi.updateProfile(data);
+      setUser(updatedUser);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
+      throw err; // Re-throw so caller can handle
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  return {
+    user,
+    loading,
+    error,
+    refresh: loadProfile,
+    updateProfile,
+  };
+}
+
+/**
+ * Helper function to get full name
+ */
+export function getFullName(user: User | null): string {
+  if (!user) return 'User';
+  const firstName = user.firstName || '';
+  const lastName = user.lastName || '';
+  return `${firstName} ${lastName}`.trim() || 'User';
+}
+
+/**
+ * Helper function to get avatar URL
+ */
+export function getAvatarUrl(user: User | null): string | undefined {
+  if (!user) return undefined;
+  return user.avatarUpload || user.avatar || undefined;
+}
+```
+
+### Account Content Hook
+
+**File:** `app/hooks/useAccountContent.ts`
+
+```typescript
+import { useState, useEffect, useCallback } from 'react';
+import { Post, MediaItem, Video } from '../types/content.types';
+import { UserAnalytics } from '../types/analytics.types';
+import { contentApi } from '../utils/contentApi';
+import { analyticsApi } from '../utils/analyticsApi';
+import { profileApi } from '../utils/profileApi';
+
+interface UseAccountContentResult {
+  posts: Post[];
+  media: MediaItem[];
+  videos: Video[];
+  analytics: UserAnalytics | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  loadMorePosts: () => Promise<void>;
+  loadMoreMedia: () => Promise<void>;
+  loadMoreVideos: () => Promise<void>;
+}
+
+export function useAccountContent(): UseAccountContentResult {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [analytics, setAnalytics] = useState<UserAnalytics | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Pagination state
+  const [postsPage, setPostsPage] = useState(1);
+  const [mediaPage, setMediaPage] = useState(1);
+  const [videosPage, setVideosPage] = useState(1);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [hasMoreMedia, setHasMoreMedia] = useState(true);
+  const [hasMoreVideos, setHasMoreVideos] = useState(true);
+
+  const loadContent = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Get user ID first
+      const userProfile = await profileApi.getCurrentUser();
+      const userId = userProfile._id || userProfile.id;
+
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+
+      // Fetch all data in parallel
+      const [postsData, mediaData, videosData, analyticsData] =
+        await Promise.all([
+          contentApi.getUserPosts(userId, 1, 20),
+          contentApi.getUserMedia(userId, 1, 20, 'image'),
+          contentApi.getUserVideos(userId, 1, 20),
+          analyticsApi.getUserAnalytics(userId),
+        ]);
+
+      setPosts(postsData.posts);
+      setMedia(mediaData.media);
+      setVideos(videosData.videos);
+      setAnalytics(analyticsData);
+
+      // Update pagination state
+      setHasMorePosts(postsData.pagination.hasMore);
+      setHasMoreMedia(mediaData.pagination.hasMore);
+      setHasMoreVideos(videosData.pagination.hasMore);
+      setPostsPage(1);
+      setMediaPage(1);
+      setVideosPage(1);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load content');
+      console.error('Error loading account content:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadMorePosts = useCallback(async () => {
+    if (!hasMorePosts || loading) return;
+
+    try {
+      const userProfile = await profileApi.getCurrentUser();
+      const userId = userProfile._id || userProfile.id;
+      if (!userId) return;
+
+      const nextPage = postsPage + 1;
+      const postsData = await contentApi.getUserPosts(userId, nextPage, 20);
+
+      setPosts((prev) => [...prev, ...postsData.posts]);
+      setHasMorePosts(postsData.pagination.hasMore);
+      setPostsPage(nextPage);
+    } catch (err: any) {
+      console.error('Error loading more posts:', err);
+    }
+  }, [postsPage, hasMorePosts, loading]);
+
+  const loadMoreMedia = useCallback(async () => {
+    if (!hasMoreMedia || loading) return;
+
+    try {
+      const userProfile = await profileApi.getCurrentUser();
+      const userId = userProfile._id || userProfile.id;
+      if (!userId) return;
+
+      const nextPage = mediaPage + 1;
+      const mediaData = await contentApi.getUserMedia(
+        userId,
+        nextPage,
+        20,
+        'image'
+      );
+
+      setMedia((prev) => [...prev, ...mediaData.media]);
+      setHasMoreMedia(mediaData.pagination.hasMore);
+      setMediaPage(nextPage);
+    } catch (err: any) {
+      console.error('Error loading more media:', err);
+    }
+  }, [mediaPage, hasMoreMedia, loading]);
+
+  const loadMoreVideos = useCallback(async () => {
+    if (!hasMoreVideos || loading) return;
+
+    try {
+      const userProfile = await profileApi.getCurrentUser();
+      const userId = userProfile._id || userProfile.id;
+      if (!userId) return;
+
+      const nextPage = videosPage + 1;
+      const videosData = await contentApi.getUserVideos(userId, nextPage, 20);
+
+      setVideos((prev) => [...prev, ...videosData.videos]);
+      setHasMoreVideos(videosData.pagination.hasMore);
+      setVideosPage(nextPage);
+    } catch (err: any) {
+      console.error('Error loading more videos:', err);
+    }
+  }, [videosPage, hasMoreVideos, loading]);
+
+  useEffect(() => {
+    loadContent();
+  }, [loadContent]);
+
+  return {
+    posts,
+    media,
+    videos,
+    analytics,
+    loading,
+    error,
+    refresh: loadContent,
+    loadMorePosts,
+    loadMoreMedia,
+    loadMoreVideos,
+  };
+}
+```
+
+---
+
+## Component Integration
+
+### Profile Summary Component
+
+**File:** `app/components/account/ProfileSummary.tsx`
+
+```typescript
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useUserProfile, getFullName, getAvatarUrl } from '../../hooks/useUserProfile';
+import { profileApi } from '../../utils/profileApi';
+
+interface ProfileSummaryProps {
+  onEdit: () => void;
+  onLogout: () => void;
+}
+
+export default function ProfileSummary({
+  onEdit,
+  onLogout,
+}: ProfileSummaryProps) {
+  const { user, loading, updateProfile } = useUserProfile();
+  const [updatingBio, setUpdatingBio] = useState(false);
+
+  const handleAddBio = () => {
+    Alert.prompt(
+      'Add Bio',
+      'Enter your bio (max 500 characters)',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Save',
+          onPress: async (bioText) => {
+            if (!bioText) return;
+
+            if (bioText.length > 500) {
+              Alert.alert('Error', 'Bio must be less than 500 characters');
+              return;
+            }
+
+            try {
+              setUpdatingBio(true);
+              await updateProfile({ bio: bioText });
+              Alert.alert('Success', 'Bio updated successfully');
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to update bio');
+            } finally {
+              setUpdatingBio(false);
+            }
+          },
+        },
+      ],
+      'plain-text',
+      user?.bio || ''
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await profileApi.logout();
+              // Clear local storage
+              // Navigate to login
+              onLogout();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to logout');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View className="items-center justify-center py-8">
+        <ActivityIndicator size="large" color="#FEA74E" />
+      </View>
+    );
+  }
+
+  const avatarUrl = getAvatarUrl(user);
+  const fullName = getFullName(user);
+
+  return (
+    <View className="items-center py-6">
+      {/* Large Avatar */}
+      <View className="mb-4">
+        {avatarUrl ? (
+          <Image
+            source={{ uri: avatarUrl }}
+            className="w-24 h-24 rounded-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="w-24 h-24 rounded-full bg-gray-300 items-center justify-center">
+            <Text className="text-2xl font-bold text-gray-600">
+              {fullName.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Edit Button */}
+      <TouchableOpacity
+        onPress={onEdit}
+        className="mb-4 px-4 py-2 bg-[#FEA74E] rounded-lg"
+      >
+        <Text className="text-white font-medium">Edit</Text>
+      </TouchableOpacity>
+
+      {/* User Name */}
+      <Text className="text-2xl font-bold text-[#3B3B3B] mb-2">
+        {fullName}
+      </Text>
+
+      {/* Bio Section */}
+      {user?.bio ? (
+        <View className="px-4 mb-2">
+          <Text className="text-[#3B3B3B] text-sm text-center">
+            {user.bio}
+          </Text>
+        </View>
+      ) : (
+        <TouchableOpacity
+          onPress={handleAddBio}
+          disabled={updatingBio}
+          className="mb-2"
+        >
+          {updatingBio ? (
+            <ActivityIndicator size="small" color="#FEA74E" />
+          ) : (
+            <Text className="text-[#FEA74E] font-medium">+ Add bio</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* Logout Button */}
+      <TouchableOpacity
+        onPress={handleLogout}
+        className="mt-4 px-6 py-2 border border-red-500 rounded-lg"
+      >
+        <Text className="text-red-500 font-medium">Logout</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+```
+
+### Content Section Component
+
+**File:** `app/components/account/ContentSection.tsx`
+
+```typescript
+import React from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useAccountContent } from '../../hooks/useAccountContent';
+import { Post, MediaItem, Video } from '../../types/content.types';
+import { UserAnalytics } from '../../types/analytics.types';
+
+interface ContentSectionProps {
+  selectedIndex: number;
+}
+
+export default function ContentSection({ selectedIndex }: ContentSectionProps) {
+  const {
+    posts,
+    media,
+    videos,
+    analytics,
+    loading,
+    error,
+    loadMorePosts,
+    loadMoreMedia,
+    loadMoreVideos,
+  } = useAccountContent();
+
+  // Format number for display (e.g., 16800 -> "16.8k")
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`;
+    }
+    if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}k`;
+    }
+    return num.toString();
+  };
+
+  // Format duration (seconds to MM:SS)
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (loading && selectedIndex !== 3) {
+    return (
+      <View className="flex-1 items-center justify-center py-8">
+        <ActivityIndicator size="large" color="#FEA74E" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View className="flex-1 items-center justify-center py-8">
+        <Text className="text-red-500">{error}</Text>
+      </View>
+    );
+  }
+
+  // Posts Tab (Index 0)
+  if (selectedIndex === 0) {
+    const renderPostItem = ({ item }: { item: Post }) => {
+      const thumbnailUrl =
+        item.media?.[0]?.thumbnail || item.media?.[0]?.url;
+
+      return (
+        <TouchableOpacity
+          className="w-[32%] mb-2 aspect-square"
+          onPress={() => {
+            // Navigate to post detail
+            // navigation.navigate('PostDetail', { postId: item._id });
+          }}
+        >
+          {thumbnailUrl ? (
+            <Image
+              source={{ uri: thumbnailUrl }}
+              className="w-full h-full rounded-lg"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="w-full h-full rounded-lg bg-gray-200 items-center justify-center">
+              <Ionicons name="image-outline" size={32} color="#999" />
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <FlatList
+        data={posts}
+        renderItem={renderPostItem}
+        keyExtractor={(item) => item._id}
+        numColumns={3}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        onEndReached={loadMorePosts}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          <View className="items-center justify-center py-8">
+            <Text className="text-gray-500">No posts yet</Text>
+          </View>
+        }
+      />
+    );
+  }
+
+  // Media Tab (Index 1)
+  if (selectedIndex === 1) {
+      const renderMediaItem = ({ item }: { item: MediaItem }) => {
+        return (
+          <TouchableOpacity
+            className="w-[32%] mb-2 aspect-square"
+            onPress={() => {
+              // Navigate to media detail
+            }}
+          >
+            <Image
+              source={{ uri: item.thumbnail || item.url }}
+              className="w-full h-full rounded-lg"
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        );
+      };
+
+    return (
+      <FlatList
+        data={media}
+        renderItem={renderMediaItem}
+        keyExtractor={(item) => item._id}
+        numColumns={3}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        onEndReached={loadMoreMedia}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          <View className="items-center justify-center py-8">
+            <Text className="text-gray-500">No media yet</Text>
+          </View>
+        }
+      />
+    );
+  }
+
+  // Videos Tab (Index 2)
+  if (selectedIndex === 2) {
+      const renderVideoItem = ({ item }: { item: Video }) => {
+        return (
+          <TouchableOpacity
+            className="w-[32%] mb-2 aspect-square relative"
+            onPress={() => {
+              // Navigate to video player
+            }}
+          >
+            <Image
+              source={{ uri: item.thumbnail || item.url }}
+              className="w-full h-full rounded-lg"
+              resizeMode="cover"
+            />
+            <View className="absolute inset-0 items-center justify-center">
+              <Ionicons name="play-circle" size={40} color="white" />
+            </View>
+            {item.duration && (
+              <View className="absolute bottom-2 right-2 bg-black/70 px-2 py-1 rounded">
+                <Text className="text-white text-xs">
+                  {formatDuration(item.duration)}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      };
+
+    return (
+      <FlatList
+        data={videos}
+        renderItem={renderVideoItem}
+        keyExtractor={(item) => item._id}
+        numColumns={3}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        onEndReached={loadMoreVideos}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          <View className="items-center justify-center py-8">
+            <Text className="text-gray-500">No videos yet</Text>
+          </View>
+        }
+      />
+    );
+  }
+
+  // Analytics Tab (Index 3)
+  if (selectedIndex === 3) {
+      if (!analytics) {
+        return (
+          <View className="flex-1 items-center justify-center py-8">
+            <ActivityIndicator size="large" color="#FEA74E" />
+          </View>
+        );
+      }
+
+      const analyticsMetrics = [
+        {
+          icon: 'albums-outline',
+          label: 'Posts',
+          value: formatNumber(analytics.posts.published),
+          sub: 'Total published posts',
+        },
+        {
+          icon: 'heart-outline',
+          label: 'Likes',
+          value: formatNumber(analytics.likes.total),
+          sub: 'Number of "Like" engagements on all posts',
+        },
+        {
+          icon: 'radio-outline',
+          label: 'Live Sessions',
+          value: analytics.liveSessions.total.toString(),
+          sub: 'Number of times you went Live',
+        },
+        {
+          icon: 'chatbubble-outline',
+          label: 'Comments',
+          value: formatNumber(analytics.comments.total),
+          sub: 'Number of "comments" on all posts',
+        },
+        {
+          icon: 'document-text-outline',
+          label: 'Drafts',
+          value: analytics.drafts.total.toString(),
+          sub: 'Unpublished posts',
+        },
+        {
+          icon: 'share-outline',
+          label: 'Shares',
+          value: formatNumber(analytics.shares.total),
+          sub: 'Number of times people shared your contents',
+        },
+      ];
+
+      return (
+        <View className="px-4 py-4">
+          {analyticsMetrics.map((metric, index) => (
+            <View
+              key={index}
+              className="bg-white rounded-lg p-4 mb-4 shadow-sm"
+            >
+              <View className="flex-row items-center mb-2">
+                <Ionicons name={metric.icon as any} size={24} color="#FEA74E" />
+                <Text className="ml-3 text-lg font-semibold text-[#3B3B3B]">
+                  {metric.label}
+                </Text>
+                <Text className="ml-auto text-lg font-bold text-[#3B3B3B]">
+                  {metric.value}
+                </Text>
+              </View>
+              <Text className="text-sm text-gray-500 ml-9">
+                {metric.sub}
+              </Text>
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+  return null;
+}
+```
+
+### Account Screen (Main Container)
+
+**File:** `app/screens/AccountScreen.tsx`
+
+```typescript
+import React, { useState } from 'react';
+import { View, ScrollView } from 'react-native';
+import AccountHeader from '../components/account/AccountHeader';
+import ProfileSummary from '../components/account/ProfileSummary';
+import ContentTabs from '../components/account/ContentTabs';
+import ContentSection from '../components/account/ContentSection';
+
+export default function AccountScreen() {
+  const [selectedTab, setSelectedTab] = useState<number>(0);
+
+  const handleEdit = () => {
+    // Open edit profile modal
+    // navigation.navigate('EditProfile');
+  };
+
+  const handleLogout = () => {
+    // Handle logout
+    // navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+  };
+
+  return (
+    <View className="flex-1 bg-white">
+      <AccountHeader />
+      <ScrollView className="flex-1">
+        <ProfileSummary onEdit={handleEdit} onLogout={handleLogout} />
+        <ContentTabs
+          selectedIndex={selectedTab}
+          onTabChange={setSelectedTab}
+        />
+        <ContentSection selectedIndex={selectedTab} />
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+---
+
+## Error Handling
+
+### Error Handler Utility
+
+**File:** `app/utils/errorHandler.ts`
+
+```typescript
+import { Alert } from 'react-native';
+
+export function handleApiError(error: any): void {
+  const errorMessage = error.message || 'An error occurred';
+
+  if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+    // Handle authentication error
+    Alert.alert('Session Expired', 'Please login again', [
+      {
+        text: 'OK',
+        onPress: () => {
+          // Navigate to login
+          // navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
+      },
+    ]);
+  } else if (errorMessage.includes('403')) {
+    Alert.alert('Error', "You don't have permission to view this content");
+  } else if (errorMessage.includes('Network') || errorMessage.includes('fetch')) {
+    Alert.alert('Network Error', 'Please check your internet connection');
+  } else if (errorMessage.includes('500')) {
+    Alert.alert('Server Error', 'Something went wrong. Please try again later.');
+  } else if (errorMessage.includes('VALIDATION_ERROR')) {
+    Alert.alert('Validation Error', errorMessage);
+  } else {
+    Alert.alert('Error', errorMessage);
+  }
+}
+```
+
+### Usage in Components
+
+```typescript
+import { handleApiError } from '../utils/errorHandler';
+
+try {
+  await updateProfile({ bio: bioText });
+} catch (error) {
+  handleApiError(error);
+}
+```
+
+---
+
+## Complete Examples
+
+### Example: Complete Account Screen Integration
+
+**File:** `app/screens/AccountScreen.tsx` (Complete)
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Text,
+} from 'react-native';
+import AccountHeader from '../components/account/AccountHeader';
+import ProfileSummary from '../components/account/ProfileSummary';
+import ContentTabs from '../components/account/ContentTabs';
+import ContentSection from '../components/account/ContentSection';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { useAccountContent } from '../hooks/useAccountContent';
+
+export default function AccountScreen() {
+  const [selectedTab, setSelectedTab] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { user, loading: profileLoading, refresh: refreshProfile } =
+    useUserProfile();
+  const {
+    loading: contentLoading,
+    refresh: refreshContent,
+  } = useAccountContent();
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshProfile(), refreshContent()]);
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleEdit = () => {
+    // Navigate to edit profile screen
+    // navigation.navigate('EditProfile');
+  };
+
+  const handleLogout = async () => {
+    // Handle logout logic
+    // await profileApi.logout();
+    // navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+  };
+
+  if (profileLoading) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color="#FEA74E" />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-white">
+      <AccountHeader user={user} />
+      <ScrollView
+        className="flex-1"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#FEA74E"
+          />
+        }
+      >
+        <ProfileSummary onEdit={handleEdit} onLogout={handleLogout} />
+        <ContentTabs
+          selectedIndex={selectedTab}
+          onTabChange={setSelectedTab}
+        />
+        <ContentSection selectedIndex={selectedTab} />
+      </ScrollView>
+    </View>
+  );
+}
+```
+
+---
+
+## Testing Guide
+
+### Unit Tests Example
+
+**File:** `__tests__/hooks/useUserProfile.test.ts`
+
+```typescript
+import { renderHook, waitFor } from '@testing-library/react-native';
+import { useUserProfile } from '../../app/hooks/useUserProfile';
+import { profileApi } from '../../app/utils/profileApi';
+
+jest.mock('../../app/utils/profileApi');
+
+describe('useUserProfile', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should load user profile on mount', async () => {
+    const mockUser = {
+      _id: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+    };
+
+    (profileApi.getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
+    const { result } = renderHook(() => useUserProfile());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.user).toEqual(mockUser);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('should handle profile update', async () => {
+    const mockUser = {
+      _id: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+    };
+
+    const updatedUser = {
+      ...mockUser,
+      bio: 'New bio',
+    };
+
+    (profileApi.getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+    (profileApi.updateProfile as jest.Mock).mockResolvedValue(updatedUser);
+
+    const { result } = renderHook(() => useUserProfile());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await result.current.updateProfile({ bio: 'New bio' });
+
+    expect(profileApi.updateProfile).toHaveBeenCalledWith({ bio: 'New bio' });
+    expect(result.current.user?.bio).toBe('New bio');
+  });
 });
 ```
 
-#### 4. FormData Not Working
-**Problem:** Image upload failing  
-**Solution:**
-```typescript
-// Ensure proper FormData format for React Native
-const formData = new FormData();
-formData.append('profileImage', {
-  uri: image.uri,
-  type: 'image/jpeg',
-  name: 'profileImage.jpg',
-} as any);
-```
+---
+
+## Summary Checklist
+
+### ✅ Implementation Checklist
+
+- [ ] **API Client Setup**
+  - [ ] Base API client with authentication
+  - [ ] Error handling
+  - [ ] Request/response interceptors
+
+- [ ] **TypeScript Types**
+  - [ ] User types
+  - [ ] Content types
+  - [ ] Analytics types
+  - [ ] API response types
+
+- [ ] **API Methods**
+  - [ ] Profile API methods
+  - [ ] Content API methods
+  - [ ] Analytics API methods
+
+- [ ] **React Hooks**
+  - [ ] `useUserProfile` hook
+  - [ ] `useAccountContent` hook
+  - [ ] Helper functions
+
+- [ ] **Components**
+  - [ ] ProfileSummary component
+  - [ ] ContentSection component
+  - [ ] AccountScreen integration
+
+- [ ] **Error Handling**
+  - [ ] Error handler utility
+  - [ ] User-friendly error messages
+  - [ ] Network error handling
+
+- [ ] **Testing**
+  - [ ] Unit tests for hooks
+  - [ ] Component tests
+  - [ ] Integration tests
 
 ---
 
-## Testing Checklist
+## Quick Start
 
-- [ ] All endpoints tested with valid data
-- [ ] Error handling tested (400, 401, 403, 404, 500)
-- [ ] Loading states working correctly
-- [ ] Pagination working (infinite scroll)
-- [ ] Optimistic updates working
-- [ ] Image upload working
-- [ ] Offline handling implemented
-- [ ] Rate limiting handled gracefully
-- [ ] Token refresh working
-- [ ] Form validation working
+1. **Copy API client setup** (`apiClient.ts`)
+2. **Copy TypeScript types** (`user.types.ts`, `content.types.ts`, `analytics.types.ts`)
+3. **Copy API methods** (`profileApi.ts`, `contentApi.ts`, `analyticsApi.ts`)
+4. **Copy React hooks** (`useUserProfile.ts`, `useAccountContent.ts`)
+5. **Integrate components** using the examples provided
+6. **Add error handling** using the error handler utility
+7. **Test** using the testing guide
 
 ---
 
-**Last Updated:** 2024-01-15  
-**Status:** Production Ready for Frontend Integration
+**Status:** ✅ **READY FOR FRONTEND INTEGRATION**
 
+All endpoints are implemented and ready to consume. Follow this guide step-by-step for seamless integration.

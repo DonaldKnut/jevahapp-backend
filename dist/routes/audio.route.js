@@ -143,6 +143,23 @@ router.post("/copyright-free/:songId/download", auth_middleware_1.verifyToken, r
  * @returns { success: boolean, data: { viewCountIncremented: boolean, newViewCount: number, playbackDuration: number, thresholdSeconds: number } }
  */
 router.post("/copyright-free/:songId/playback/track", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.trackPlayback);
+/**
+ * @route   POST /api/audio/copyright-free/:songId/view
+ * @desc    Record view for a copyright-free song (one view per user per song)
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @body    { durationMs?: number, progressPct?: number, isComplete?: boolean }
+ * @returns { success: boolean, data: { viewCount: number, hasViewed: boolean } }
+ */
+router.post("/copyright-free/:songId/view", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.recordView);
+/**
+ * @route   POST /api/audio/copyright-free/:songId/save
+ * @desc    Toggle save/bookmark for a copyright-free song
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @returns { success: boolean, data: { bookmarked: boolean, bookmarkCount: number } }
+ */
+router.post("/copyright-free/:songId/save", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.toggleSave);
 // ============================================================================
 // AUDIO PLAYLIST ROUTES (Wrapper for existing playlist routes)
 // ============================================================================

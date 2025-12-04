@@ -626,7 +626,7 @@ class AuthService {
     }
     getCurrentUser(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const user = yield user_model_1.User.findById(userId).select("firstName lastName avatar avatarUpload section");
+            const user = yield user_model_1.User.findById(userId).select("firstName lastName avatar avatarUpload bio section");
             if (!user) {
                 throw new Error("User not found");
             }
@@ -635,6 +635,7 @@ class AuthService {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 avatar,
+                bio: user.bio || null,
                 section: user.section || "adults",
             };
         });

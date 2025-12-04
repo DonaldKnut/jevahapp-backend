@@ -119,5 +119,43 @@ export class CopyrightFreeSongInteractionService {
       throw error;
     }
   }
+
+  async getInteraction(userId: string, songId: string) {
+    try {
+      const interaction = await CopyrightFreeSongInteraction.findOne({
+        userId: new Types.ObjectId(userId),
+        songId: new Types.ObjectId(songId),
+      });
+      return interaction;
+    } catch (error: any) {
+      logger.error("Error getting interaction:", error);
+      return null;
+    }
+  }
+
+  async markAsViewed(userId: string, songId: string): Promise<void> {
+    try {
+      let interaction = await CopyrightFreeSongInteraction.findOne({
+        userId: new Types.ObjectId(userId),
+        songId: new Types.ObjectId(songId),
+      });
+
+      if (!interaction) {
+        await CopyrightFreeSongInteraction.create({
+          userId: new Types.ObjectId(userId),
+          songId: new Types.ObjectId(songId),
+          hasLiked: false,
+          hasShared: false,
+          hasViewed: true,
+        });
+      } else {
+        interaction.hasViewed = true;
+        await interaction.save();
+      }
+    } catch (error: any) {
+      logger.error("Error marking as viewed:", error);
+      throw error;
+    }
+  }
 }
 

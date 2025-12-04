@@ -188,13 +188,47 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
 
     const { liked, likeCount, shareCount, viewCount } = await interactionService.toggleLike(userId, songId);
 
+    // Get updated song to ensure we have latest counts
+    const updatedSong = await songService.getSongById(songId);
+
+    // listenCount doesn't exist in CopyrightFreeSong model, return 0 (optional field)
+    const listenCount = 0;
+
+    // Emit realtime update to all clients viewing this song
+    try {
+      const { getIO } = await import("../socket/socketManager");
+      const io = getIO();
+      if (io) {
+        const roomKey = `content:audio:${songId}`;
+        io.to(roomKey).emit("copyright-free-song-interaction-updated", {
+          songId,
+          likeCount: updatedSong?.likeCount || likeCount,
+          viewCount: updatedSong?.viewCount || viewCount,
+          liked,
+          listenCount,
+        });
+
+        logger.debug("Emitted realtime like update", {
+          songId,
+          roomKey,
+          likeCount: updatedSong?.likeCount || likeCount,
+        });
+      }
+    } catch (socketError: any) {
+      // Don't fail the request if socket emission fails
+      logger.warn("Failed to emit realtime like update", {
+        error: socketError?.message,
+        songId,
+      });
+    }
+
     res.status(200).json({
       success: true,
       data: {
         liked,
-        likeCount,
-        shareCount,
-        viewCount,
+        likeCount: updatedSong?.likeCount || likeCount,
+        viewCount: updatedSong?.viewCount || viewCount,
+        listenCount,
       },
     });
   } catch (error: any) {
@@ -318,6 +352,150 @@ export const trackPlayback = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({
       success: false,
       message: "Failed to track playback",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Record view for a copyright-free song (matches frontend expectations)
+ * Frontend calls this when user views/listens to a song
+ */
+export const recordView = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { songId } = req.params;
+    const userId = req.userId;
+    const { durationMs, progressPct, isComplete } = req.body;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    // Check if user already viewed this song (one view per user per song)
+    const interaction = await interactionService.getInteraction(userId, songId);
+    const hasViewed = interaction?.hasViewed || false;
+
+    let viewCount: number;
+    if (!hasViewed) {
+      // First view - increment count
+      await songService.incrementViewCount(songId);
+      // Mark as viewed
+      await interactionService.markAsViewed(userId, songId);
+    }
+    
+    // Get updated song with latest counts
+    const updatedSong = await songService.getSongById(songId);
+    viewCount = updatedSong?.viewCount || 0;
+
+    // Emit realtime update to all clients viewing this song
+    try {
+      const { getIO } = await import("../socket/socketManager");
+      const io = getIO();
+      if (io) {
+        const roomKey = `content:audio:${songId}`;
+        io.to(roomKey).emit("copyright-free-song-interaction-updated", {
+          songId,
+          viewCount,
+          likeCount: updatedSong?.likeCount || 0,
+        });
+
+        logger.debug("Emitted realtime view update", {
+          songId,
+          roomKey,
+          viewCount,
+        });
+      }
+    } catch (socketError: any) {
+      // Don't fail the request if socket emission fails
+      logger.warn("Failed to emit realtime view update", {
+        error: socketError?.message,
+        songId,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        viewCount,
+        hasViewed: true, // Always true after this call
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error recording view:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to record view",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Toggle save/bookmark for a copyright-free song
+ */
+export const toggleSave = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { songId } = req.params;
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+      return;
+    }
+
+    const { UnifiedBookmarkService } = await import("../service/unifiedBookmark.service");
+    const result = await UnifiedBookmarkService.toggleBookmark(userId, songId);
+
+    // Get updated song to include all counts
+    const updatedSong = await songService.getSongById(songId);
+
+    // Emit realtime update to all clients viewing this song
+    try {
+      const { getIO } = await import("../socket/socketManager");
+      const io = getIO();
+      if (io) {
+        const roomKey = `content:audio:${songId}`;
+        io.to(roomKey).emit("copyright-free-song-interaction-updated", {
+          songId,
+          bookmarkCount: result.bookmarkCount,
+          bookmarked: result.bookmarked,
+          likeCount: updatedSong?.likeCount || 0,
+          viewCount: updatedSong?.viewCount || 0,
+        });
+
+        logger.debug("Emitted realtime save update", {
+          songId,
+          roomKey,
+          bookmarkCount: result.bookmarkCount,
+        });
+      }
+    } catch (socketError: any) {
+      // Don't fail the request if socket emission fails
+      logger.warn("Failed to emit realtime save update", {
+        error: socketError?.message,
+        songId,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        bookmarked: result.bookmarked,
+        bookmarkCount: result.bookmarkCount,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error toggling save:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to toggle save",
       error: error.message,
     });
   }

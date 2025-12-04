@@ -41,7 +41,7 @@ class UserService {
         return __awaiter(this, void 0, void 0, function* () {
             const startTime = Date.now();
             try {
-                const user = yield user_model_1.User.findById(userId).select("firstName lastName email avatar avatarUpload section role isProfileComplete isEmailVerified createdAt updatedAt");
+                const user = yield user_model_1.User.findById(userId).select("firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt");
                 if (!user) {
                     throw new Error("User not found");
                 }
@@ -54,6 +54,7 @@ class UserService {
                     email: user.email,
                     avatar,
                     avatarUpload: user.avatarUpload,
+                    bio: user.bio || null,
                     section: user.section,
                     role: user.role,
                     isProfileComplete: user.isProfileComplete,
@@ -236,10 +237,16 @@ class UserService {
             try {
                 // Remove fields that shouldn't be updated directly
                 const { id, email, createdAt, updatedAt } = updateData, allowedUpdates = __rest(updateData, ["id", "email", "createdAt", "updatedAt"]);
+                // Validate bio length if provided
+                if (allowedUpdates.bio !== undefined) {
+                    if (allowedUpdates.bio && allowedUpdates.bio.length > 500) {
+                        throw new Error("Bio must be less than 500 characters");
+                    }
+                }
                 const user = yield user_model_1.User.findByIdAndUpdate(userId, allowedUpdates, {
                     new: true,
                     runValidators: true,
-                }).select("firstName lastName email avatar avatarUpload section role isProfileComplete isEmailVerified createdAt updatedAt");
+                }).select("firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt");
                 if (!user) {
                     throw new Error("User not found");
                 }
@@ -251,6 +258,7 @@ class UserService {
                     email: user.email,
                     avatar,
                     avatarUpload: user.avatarUpload,
+                    bio: user.bio || null,
                     section: user.section,
                     role: user.role,
                     isProfileComplete: user.isProfileComplete,

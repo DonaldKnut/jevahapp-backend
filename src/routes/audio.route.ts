@@ -10,6 +10,8 @@ import {
   toggleLike as toggleLikeCopyrightFreeSongNew,
   shareSong as shareCopyrightFreeSongNew,
   trackPlayback as trackCopyrightFreeSongPlayback,
+  recordView as recordViewCopyrightFreeSong,
+  toggleSave as toggleSaveCopyrightFreeSong,
 } from "../controllers/copyrightFreeSong.controller";
 import {
   getUserAudioLibrary,
@@ -178,6 +180,35 @@ router.post(
   verifyToken,
   apiRateLimiter,
   trackCopyrightFreeSongPlayback
+);
+
+/**
+ * @route   POST /api/audio/copyright-free/:songId/view
+ * @desc    Record view for a copyright-free song (one view per user per song)
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @body    { durationMs?: number, progressPct?: number, isComplete?: boolean }
+ * @returns { success: boolean, data: { viewCount: number, hasViewed: boolean } }
+ */
+router.post(
+  "/copyright-free/:songId/view",
+  verifyToken,
+  apiRateLimiter,
+  recordViewCopyrightFreeSong
+);
+
+/**
+ * @route   POST /api/audio/copyright-free/:songId/save
+ * @desc    Toggle save/bookmark for a copyright-free song
+ * @access  Protected (Authenticated users only)
+ * @param   { songId: string } - MongoDB ObjectId of the song
+ * @returns { success: boolean, data: { bookmarked: boolean, bookmarkCount: number } }
+ */
+router.post(
+  "/copyright-free/:songId/save",
+  verifyToken,
+  apiRateLimiter,
+  toggleSaveCopyrightFreeSong
 );
 
 

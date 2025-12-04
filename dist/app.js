@@ -68,6 +68,7 @@ const socket_service_1 = __importDefault(require("./service/socket.service"));
 const logger_1 = __importDefault(require("./utils/logger"));
 const swagger_config_1 = __importDefault(require("./config/swagger.config"));
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const socketManager_1 = __importDefault(require("./socket/socketManager"));
 // Create Express app
 const app = (0, express_1.default)();
 exports.app = app;
@@ -76,6 +77,8 @@ exports.server = server;
 // Initialize Socket.IO service
 const socketService = new socket_service_1.default(server);
 exports.socketService = socketService;
+// Initialize socket manager with io instance
+socketManager_1.default.setIO(socketService.getIO());
 // Production-grade middleware setup
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {

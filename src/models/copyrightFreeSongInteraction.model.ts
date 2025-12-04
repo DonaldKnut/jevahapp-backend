@@ -5,6 +5,7 @@ export interface ICopyrightFreeSongInteraction extends Document {
   songId: mongoose.Types.ObjectId;
   hasLiked: boolean;
   hasShared: boolean;
+  hasViewed: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +29,10 @@ const interactionSchema = new Schema<ICopyrightFreeSongInteraction>(
       default: false,
     },
     hasShared: {
+      type: Boolean,
+      default: false,
+    },
+    hasViewed: {
       type: Boolean,
       default: false,
     },

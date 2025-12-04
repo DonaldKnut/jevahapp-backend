@@ -56,6 +56,10 @@ const interactionSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    hasViewed: {
+        type: Boolean,
+        default: false,
+    },
 }, {
     timestamps: true,
 });

@@ -778,7 +778,7 @@ class AuthService {
 
   async getCurrentUser(userId: string) {
     const user = await User.findById(userId).select(
-      "firstName lastName avatar avatarUpload section"
+      "firstName lastName avatar avatarUpload bio section"
     );
 
     if (!user) {
@@ -791,6 +791,7 @@ class AuthService {
       firstName: user.firstName,
       lastName: user.lastName,
       avatar,
+      bio: user.bio || null,
       section: user.section || "adults",
     };
   }
