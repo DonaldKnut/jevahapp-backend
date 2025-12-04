@@ -78,21 +78,36 @@ const createForum = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             res.status(400).json({ success: false, error: "Validation error: categoryId is required" });
             return;
         }
-        // Verify category exists (legacy categories may not have isCategory flag yet)
+        // Verify category exists - MUST be a valid category
         // A category is valid if:
-        // 1. isCategory is explicitly true, OR
-        // 2. categoryId is null/undefined (legacy categories)
+        // 1. isCategory is explicitly true AND categoryId is null/undefined
         const category = yield forum_model_1.Forum.findOne({
             _id: new mongoose_1.Types.ObjectId(categoryId),
             isActive: true,
+            isCategory: true, // ✅ MUST be explicitly a category
             $or: [
-                { isCategory: true },
                 { categoryId: null },
                 { categoryId: { $exists: false } }
             ],
         }).select("title description isCategory");
         if (!category) {
-            res.status(400).json({ success: false, error: "Validation error: category not found" });
+            // Log what was found (if anything) for debugging
+            const foundItem = yield forum_model_1.Forum.findById(categoryId);
+            logger_1.default.warn("Category validation failed", {
+                categoryId,
+                foundItem: foundItem ? {
+                    _id: String(foundItem._id),
+                    title: foundItem.title,
+                    isCategory: foundItem.isCategory,
+                    categoryId: foundItem.categoryId ? String(foundItem.categoryId) : null,
+                    isActive: foundItem.isActive,
+                } : null,
+                userId: req.userId,
+            });
+            res.status(400).json({
+                success: false,
+                error: "Validation error: category not found or invalid. Category must have isCategory: true and categoryId: null"
+            });
             return;
         }
         if (!req.userId) {
@@ -162,6 +177,18 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             }
             query.isCategory = false;
             query.categoryId = new mongoose_1.Types.ObjectId(categoryFilter);
+            // Verify category exists before querying
+            const categoryExists = yield forum_model_1.Forum.findOne({
+                _id: new mongoose_1.Types.ObjectId(categoryFilter),
+                isCategory: true,
+                isActive: true
+            });
+            if (!categoryExists) {
+                logger_1.default.warn("Category not found for discussions query", {
+                    categoryId: categoryFilter,
+                    query: JSON.stringify(query)
+                });
+            }
         }
         // Handle all view - return all active forums
         else if (viewParam === "all") {
@@ -176,11 +203,15 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             ];
         }
         // Log query for debugging
-        if (viewParam === "discussions") {
+        if (viewParam === "discussions" && categoryFilter && typeof categoryFilter === "string") {
             logger_1.default.info("Querying discussions", {
                 view: viewParam,
                 categoryId: categoryFilter,
-                query: JSON.stringify(query),
+                categoryIdObjectId: String(new mongoose_1.Types.ObjectId(categoryFilter)),
+                query: JSON.stringify(query, null, 2),
+                queryIsCategory: query.isCategory,
+                queryCategoryId: query.categoryId ? String(query.categoryId) : null,
+                queryIsActive: query.isActive,
             });
         }
         const [forums, total] = yield Promise.all([
@@ -198,8 +229,33 @@ const listForums = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 categoryId: categoryFilter,
                 count: forums.length,
                 total,
-                forumIds: forums.map((f) => f._id),
+                forumIds: forums.map((f) => String(f._id)),
+                forums: forums.map((f) => ({
+                    _id: String(f._id),
+                    title: f.title,
+                    isCategory: f.isCategory,
+                    categoryId: f.categoryId ? String(f.categoryId._id || f.categoryId) : null,
+                    isActive: f.isActive,
+                })),
             });
+            // Also log ALL forums in database for this category (for debugging)
+            if (categoryFilter && typeof categoryFilter === "string") {
+                const allForumsForCategory = yield forum_model_1.Forum.find({
+                    isActive: true,
+                    categoryId: new mongoose_1.Types.ObjectId(categoryFilter)
+                }).select("_id title isCategory categoryId isActive");
+                logger_1.default.info("All forums in database for category (debug)", {
+                    categoryId: categoryFilter,
+                    count: allForumsForCategory.length,
+                    forums: allForumsForCategory.map((f) => ({
+                        _id: String(f._id),
+                        title: f.title,
+                        isCategory: f.isCategory,
+                        categoryId: f.categoryId ? String(f.categoryId) : null,
+                        isActive: f.isActive,
+                    })),
+                });
+            }
         }
         res.status(200).json({
             success: true,

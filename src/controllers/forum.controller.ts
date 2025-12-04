@@ -38,22 +38,38 @@ export const createForum = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Verify category exists (legacy categories may not have isCategory flag yet)
+    // Verify category exists - MUST be a valid category
     // A category is valid if:
-    // 1. isCategory is explicitly true, OR
-    // 2. categoryId is null/undefined (legacy categories)
+    // 1. isCategory is explicitly true AND categoryId is null/undefined
     const category = await Forum.findOne({
       _id: new Types.ObjectId(categoryId),
       isActive: true,
+      isCategory: true,  // ✅ MUST be explicitly a category
       $or: [
-        { isCategory: true },
         { categoryId: null },
         { categoryId: { $exists: false } }
       ],
     }).select("title description isCategory");
 
     if (!category) {
-      res.status(400).json({ success: false, error: "Validation error: category not found" });
+      // Log what was found (if anything) for debugging
+      const foundItem = await Forum.findById(categoryId);
+      logger.warn("Category validation failed", {
+        categoryId,
+        foundItem: foundItem ? {
+          _id: String(foundItem._id),
+          title: foundItem.title,
+          isCategory: foundItem.isCategory,
+          categoryId: foundItem.categoryId ? String(foundItem.categoryId) : null,
+          isActive: foundItem.isActive,
+        } : null,
+        userId: req.userId,
+      });
+      
+      res.status(400).json({ 
+        success: false, 
+        error: "Validation error: category not found or invalid. Category must have isCategory: true and categoryId: null" 
+      });
       return;
     }
 
@@ -129,6 +145,20 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
       }
       query.isCategory = false;
       query.categoryId = new Types.ObjectId(categoryFilter);
+      
+      // Verify category exists before querying
+      const categoryExists = await Forum.findOne({
+        _id: new Types.ObjectId(categoryFilter),
+        isCategory: true,
+        isActive: true
+      });
+      
+      if (!categoryExists) {
+        logger.warn("Category not found for discussions query", {
+          categoryId: categoryFilter,
+          query: JSON.stringify(query)
+        });
+      }
     }
     // Handle all view - return all active forums
     else if (viewParam === "all") {
@@ -144,11 +174,15 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Log query for debugging
-    if (viewParam === "discussions") {
+    if (viewParam === "discussions" && categoryFilter && typeof categoryFilter === "string") {
       logger.info("Querying discussions", {
         view: viewParam,
         categoryId: categoryFilter,
-        query: JSON.stringify(query),
+        categoryIdObjectId: String(new Types.ObjectId(categoryFilter)),
+        query: JSON.stringify(query, null, 2),
+        queryIsCategory: query.isCategory,
+        queryCategoryId: query.categoryId ? String(query.categoryId) : null,
+        queryIsActive: query.isActive,
       });
     }
 
@@ -168,8 +202,35 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
         categoryId: categoryFilter,
         count: forums.length,
         total,
-        forumIds: forums.map((f) => f._id),
+        forumIds: forums.map((f) => String(f._id)),
+        forums: forums.map((f) => ({
+          _id: String(f._id),
+          title: f.title,
+          isCategory: f.isCategory,
+          categoryId: f.categoryId ? String(f.categoryId._id || f.categoryId) : null,
+          isActive: f.isActive,
+        })),
       });
+      
+      // Also log ALL forums in database for this category (for debugging)
+      if (categoryFilter && typeof categoryFilter === "string") {
+        const allForumsForCategory = await Forum.find({
+          isActive: true,
+          categoryId: new Types.ObjectId(categoryFilter)
+        }).select("_id title isCategory categoryId isActive");
+        
+        logger.info("All forums in database for category (debug)", {
+          categoryId: categoryFilter,
+          count: allForumsForCategory.length,
+          forums: allForumsForCategory.map((f) => ({
+            _id: String(f._id),
+            title: f.title,
+            isCategory: f.isCategory,
+            categoryId: f.categoryId ? String(f.categoryId) : null,
+            isActive: f.isActive,
+          })),
+        });
+      }
     }
 
     res.status(200).json({
