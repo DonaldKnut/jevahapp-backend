@@ -25,9 +25,11 @@ class ContentModerationService {
         }
         else {
             this.genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-            // Use gemini-1.5-pro for better multimodal analysis
+            // Use gemini-1.5-pro for better multimodal analysis and accuracy
+            // Pro model has better detection rates for inappropriate content
+            const useProModel = process.env.USE_GEMINI_PRO_MODEL === "true" || process.env.NODE_ENV === "production";
             this.model = this.genAI.getGenerativeModel({
-                model: "gemini-1.5-flash", // Using flash for faster processing, can switch to pro for better accuracy
+                model: useProModel ? "gemini-1.5-pro" : "gemini-1.5-flash", // Use Pro for production for better accuracy
             });
         }
     }
@@ -82,8 +84,12 @@ class ContentModerationService {
         const transcriptText = hasTranscript && input.transcript
             ? `- Transcript: "${input.transcript.substring(0, 1000)}${input.transcript.length > 1000 ? "..." : ""}"`
             : "";
+        const hasThumbnail = !!input.thumbnail;
         const framesText = hasFrames && input.videoFrames
             ? `- Video Frames: ${input.videoFrames.length} frames provided for visual analysis`
+            : "";
+        const thumbnailText = hasThumbnail
+            ? `- Thumbnail Image: Provided for visual analysis (CRITICAL - check for inappropriate content)`
             : "";
         return `You are a content moderation system for a Christian gospel media platform called Jevah. Your task is to determine if uploaded content is appropriate for a gospel/Christian platform.
 
@@ -92,6 +98,7 @@ class ContentModerationService {
 - Description: "${input.description || "N/A"}"
 - Content Type: ${input.contentType}
 ${transcriptText}
+${thumbnailText}
 ${framesText}
 
 **Your Task:**
@@ -108,6 +115,12 @@ Analyze this content and determine if it is:
    - Anti-Christian or blasphemous content
    - Illegal activities
    - Non-gospel content (secular music, non-Christian teachings, etc.)
+
+**CRITICAL - Thumbnail Moderation:**
+- The thumbnail image is the FIRST thing users see - it MUST be appropriate
+- If the thumbnail contains ANY inappropriate content (nudity, explicit content, violence), REJECT immediately
+- Thumbnail must align with gospel/Christian values
+- Even if other content is acceptable, an inappropriate thumbnail requires REJECTION
 
 **Output Format (CRITICAL - Follow exactly):**
 Respond in this exact JSON format:

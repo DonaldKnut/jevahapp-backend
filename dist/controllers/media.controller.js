@@ -59,6 +59,8 @@ const user_model_1 = require("../models/user.model");
 const contentModeration_service_1 = require("../service/contentModeration.service");
 const mediaProcessing_service_1 = require("../service/mediaProcessing.service");
 const transcription_service_1 = require("../service/transcription.service");
+const optimizedVerification_service_1 = require("../service/optimizedVerification.service");
+const uploadProgress_service_1 = require("../service/uploadProgress.service");
 const logger_1 = __importDefault(require("../utils/logger"));
 const resendEmail_service_1 = __importDefault(require("../service/resendEmail.service"));
 const mediaReport_model_1 = require("../models/mediaReport.model");
@@ -230,21 +232,46 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             });
             return;
         }
+        // Generate upload ID for progress tracking (used for all content types)
+        const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+        const userId = request.userId || "";
         // PRE-UPLOAD VERIFICATION: Verify content before uploading to storage
         // Skip verification for "live" content type as it doesn't require file uploads
         let verificationResult = null;
         if (contentType !== "live") {
-            logger_1.default.info("Starting pre-upload content verification");
+            logger_1.default.info("Starting optimized pre-upload content verification with progress", {
+                uploadId,
+                contentType,
+            });
+            // Register upload session for progress tracking
+            uploadProgress_service_1.uploadProgressService.registerUploadSession(uploadId, userId);
             try {
-                verificationResult = yield verifyContentBeforeUpload(file.buffer, file.mimetype, contentType, title, description);
+                // Use optimized verification service with progress updates
+                // Include thumbnail moderation (CRITICAL - first thing users see)
+                verificationResult = yield optimizedVerification_service_1.optimizedVerificationService.verifyContentWithProgress(file.buffer, file.mimetype, contentType, title, description, uploadId, (progress) => {
+                    // Send progress update via Socket.IO
+                    uploadProgress_service_1.uploadProgressService.sendProgress(progress, userId);
+                }, thumbnail.buffer, // Include thumbnail for moderation
+                thumbnail.mimetype);
             }
             catch (error) {
                 logger_1.default.error("Pre-upload verification error:", error);
+                // Send error progress
+                uploadProgress_service_1.uploadProgressService.sendProgress({
+                    uploadId,
+                    progress: 0,
+                    stage: "error",
+                    message: `Verification failed: ${error.message}`,
+                    timestamp: new Date().toISOString(),
+                }, userId);
+                // Cleanup session
+                uploadProgress_service_1.uploadProgressService.clearUploadSession(uploadId);
                 // If verification fails, reject the upload for safety
                 response.status(400).json({
                     success: false,
                     message: "Content verification failed. Please try again or contact support.",
                     error: error.message,
+                    uploadId, // Include uploadId in response for frontend tracking
                 });
                 return;
             }
@@ -257,7 +284,18 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                     status,
                     reason: verificationResult.moderationResult.reason,
                     flags: verificationResult.moderationResult.flags,
+                    uploadId,
                 });
+                // Send rejection progress
+                uploadProgress_service_1.uploadProgressService.sendProgress({
+                    uploadId,
+                    progress: 0,
+                    stage: "rejected",
+                    message: "Content does not meet community guidelines",
+                    timestamp: new Date().toISOString(),
+                }, userId);
+                // Cleanup session
+                uploadProgress_service_1.uploadProgressService.clearUploadSession(uploadId);
                 // Return appropriate error response
                 response.status(403).json({
                     success: false,
@@ -270,11 +308,20 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                         flags: verificationResult.moderationResult.flags,
                         confidence: verificationResult.moderationResult.confidence,
                     },
+                    uploadId,
                 });
                 return;
             }
+            // Content is approved - send completion progress
+            uploadProgress_service_1.uploadProgressService.sendProgress({
+                uploadId,
+                progress: 100,
+                stage: "complete",
+                message: "Content verified and approved!",
+                timestamp: new Date().toISOString(),
+            }, userId);
             // Content is approved - proceed with upload
-            logger_1.default.info("Content approved, proceeding with upload to storage");
+            logger_1.default.info("Content approved, proceeding with upload to storage", { uploadId });
         }
         else {
             logger_1.default.info("Skipping verification for live content type");
@@ -318,6 +365,10 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
         // Invalidate cache for media lists
         yield cache_service_1.default.delPattern("media:public:*");
         yield cache_service_1.default.delPattern("media:all:*");
+        // Cleanup upload session
+        if (contentType !== "live") {
+            uploadProgress_service_1.uploadProgressService.clearUploadSession(uploadId);
+        }
         // Return success response
         response.status(201).json({
             success: true,
@@ -325,10 +376,26 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                 ? "Media uploaded successfully. Content has been verified and approved."
                 : "Media uploaded successfully.",
             media: Object.assign(Object.assign({}, media.toObject()), { fileUrl: media.fileUrl, thumbnailUrl: media.thumbnailUrl, moderationStatus: media.moderationStatus || "pending", moderationResult: media.moderationResult }),
+            uploadId: contentType !== "live" ? uploadId : undefined, // Include uploadId for tracking
         });
     }
     catch (error) {
         console.error("Upload media error:", error);
+        // Cleanup upload session on error (only if variables are available)
+        if (request.body && request.body.contentType && request.body.contentType !== "live") {
+            const errorUploadId = request.headers['x-upload-id'] || undefined;
+            const errorUserId = request.userId || "";
+            if (errorUploadId && errorUserId) {
+                uploadProgress_service_1.uploadProgressService.sendProgress({
+                    uploadId: errorUploadId,
+                    progress: 0,
+                    stage: "error",
+                    message: `Upload failed: ${error.message}`,
+                    timestamp: new Date().toISOString(),
+                }, errorUserId);
+                uploadProgress_service_1.uploadProgressService.clearUploadSession(errorUploadId);
+            }
+        }
         response.status(500).json({
             success: false,
             message: `Failed to upload media: ${error.message}`,

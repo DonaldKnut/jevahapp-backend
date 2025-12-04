@@ -79,6 +79,9 @@ const socketService = new socket_service_1.default(server);
 exports.socketService = socketService;
 // Initialize socket manager with io instance
 socketManager_1.default.setIO(socketService.getIO());
+// Initialize upload progress service with Socket.IO
+const uploadProgress_service_1 = require("./service/uploadProgress.service");
+uploadProgress_service_1.uploadProgressService.initialize(socketService.getIO());
 // Production-grade middleware setup
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: {

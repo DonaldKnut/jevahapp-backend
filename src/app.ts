@@ -68,6 +68,10 @@ const socketService = new SocketService(server);
 // Initialize socket manager with io instance
 socketManager.setIO(socketService.getIO());
 
+// Initialize upload progress service with Socket.IO
+import { uploadProgressService } from "./service/uploadProgress.service";
+uploadProgressService.initialize(socketService.getIO());
+
 // Production-grade middleware setup
 app.use(
   helmet({
