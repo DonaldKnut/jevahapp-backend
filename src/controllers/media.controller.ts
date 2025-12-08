@@ -525,7 +525,33 @@ export const getAllContentForAllTab = async (
   response: Response
 ): Promise<void> => {
   try {
-    const result = await mediaService.getAllContentForAllTab();
+    if (
+      (request.query.page &&
+        isNaN(parseInt(request.query.page as string))) ||
+      (request.query.limit &&
+        isNaN(parseInt(request.query.limit as string)))
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid page or limit",
+      });
+      return;
+    }
+
+    // Only pass pagination params if they're explicitly provided (backward compatible)
+    const hasPage = request.query.page !== undefined;
+    const hasLimit = request.query.limit !== undefined;
+    
+    const page = hasPage ? parseInt(request.query.page as string) : undefined;
+    const limitParam = hasLimit ? parseInt(request.query.limit as string) : undefined;
+    
+    // Only pass options if pagination params were provided
+    const options = (hasPage || hasLimit) ? {
+      page: page && page > 0 ? page : undefined,
+      limit: limitParam && limitParam > 0 ? limitParam : undefined,
+    } : undefined;
+
+    const result = await mediaService.getAllContentForAllTab(options);
 
     // Optional personalization: include recommendations when user is authenticated
     let recommendations: any = undefined;
@@ -547,6 +573,7 @@ export const getAllContentForAllTab = async (
       success: true,
       media: result.media,
       total: result.total,
+      ...(result.pagination && { pagination: result.pagination }), // Only include if pagination was used
       recommendations,
     });
   } catch (error: any) {
@@ -1944,13 +1971,39 @@ export const getPublicAllContent = async (
   response: Response
 ): Promise<void> => {
   try {
-    const cacheKey = `media:public:all-content:${request.query.mood || "default"}`;
+    if (
+      (request.query.page &&
+        isNaN(parseInt(request.query.page as string))) ||
+      (request.query.limit &&
+        isNaN(parseInt(request.query.limit as string)))
+    ) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid page or limit",
+      });
+      return;
+    }
+
+    // Only pass pagination params if they're explicitly provided (backward compatible)
+    const hasPage = request.query.page !== undefined;
+    const hasLimit = request.query.limit !== undefined;
+    
+    const page = hasPage ? parseInt(request.query.page as string) : undefined;
+    const limitParam = hasLimit ? parseInt(request.query.limit as string) : undefined;
+    
+    // Only pass options if pagination params were provided
+    const options = (hasPage || hasLimit) ? {
+      page: page && page > 0 ? page : undefined,
+      limit: limitParam && limitParam > 0 ? limitParam : undefined,
+    } : undefined;
+
+    const cacheKey = `media:public:all-content:${request.query.mood || "default"}${options ? `:page=${page || 1}:limit=${limitParam || "default"}` : ""}`;
     
     // Cache for 5 minutes (300 seconds)
     const result = await cacheService.getOrSet(
       cacheKey,
       async () => {
-        const mediaResult = await mediaService.getAllContentForAllTab();
+        const mediaResult = await mediaService.getAllContentForAllTab(options);
 
         // Public endpoint can still include non-personalized recommendations
         let recommendations: any = undefined;
@@ -1970,6 +2023,7 @@ export const getPublicAllContent = async (
           success: true,
           media: mediaResult.media,
           total: mediaResult.total,
+          ...(mediaResult.pagination && { pagination: mediaResult.pagination }), // Only include if pagination was used
           recommendations,
         };
       },

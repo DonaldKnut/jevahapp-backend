@@ -22,9 +22,13 @@ class TrendingService {
                         { role: "artist" },
                         { "artistProfile.isVerifiedArtist": true },
                     ],
-                }).limit(limit);
+                })
+                    .limit(limit)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
-                    const media = yield media_model_1.Media.find({ uploadedBy: user._id });
+                    const media = yield media_model_1.Media.find({ uploadedBy: user._id })
+                        .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd")
+                        .lean();
                     const totalViews = media.reduce((sum, m) => sum + (m.viewCount || 0), 0);
                     const totalLikes = media.reduce((sum, m) => sum + (m.likeCount || 0), 0);
                     return this.formatTrendingUser({
@@ -55,12 +59,16 @@ class TrendingService {
                         { role: "artist" },
                         { "artistProfile.isVerifiedArtist": true },
                     ],
-                }).limit(limit);
+                })
+                    .limit(limit)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const ebooks = yield media_model_1.Media.find({
                         uploadedBy: user._id,
                         contentType: "ebook",
-                    });
+                    })
+                        .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd")
+                        .lean();
                     if (ebooks.length === 0)
                         return null;
                     const totalReads = ebooks.reduce((sum, m) => sum + (m.readCount || 0), 0);
@@ -90,12 +98,16 @@ class TrendingService {
                         { role: "artist" },
                         { "artistProfile.isVerifiedArtist": true },
                     ],
-                }).limit(limit);
+                })
+                    .limit(limit)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const audioContent = yield media_model_1.Media.find({
                         uploadedBy: user._id,
                         contentType: { $in: ["audio", "music", "podcast"] },
-                    });
+                    })
+                        .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd")
+                        .lean();
                     if (audioContent.length === 0)
                         return null;
                     const totalListens = audioContent.reduce((sum, m) => sum + (m.listenCount || 0), 0);
@@ -125,12 +137,16 @@ class TrendingService {
                         { role: "artist" },
                         { "artistProfile.isVerifiedArtist": true },
                     ],
-                }).limit(limit);
+                })
+                    .limit(limit)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const sermons = yield media_model_1.Media.find({
                         uploadedBy: user._id,
                         contentType: "sermon",
-                    });
+                    })
+                        .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd")
+                        .lean();
                     if (sermons.length === 0)
                         return null;
                     const totalSermonViews = sermons.reduce((sum, m) => sum + (m.viewCount || 0), 0);
@@ -161,12 +177,16 @@ class TrendingService {
                         { role: "artist" },
                         { "artistProfile.isVerifiedArtist": true },
                     ],
-                }).limit(limit);
+                })
+                    .limit(limit)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const liveStreams = yield media_model_1.Media.find({
                         uploadedBy: user._id,
                         contentType: "live",
-                    });
+                    })
+                        .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd")
+                        .lean();
                     if (liveStreams.length === 0)
                         return null;
                     const totalLiveViews = liveStreams.reduce((sum, m) => sum + (m.viewCount || 0), 0);
@@ -218,9 +238,11 @@ class TrendingService {
                     contentType: "live",
                     liveStreamStatus: "live",
                     isLive: true,
-                });
+                })
+                    .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd concurrentViewers uploadedBy")
+                    .lean();
                 const userIds = [...new Set(liveStreams.map(ls => ls.uploadedBy))];
-                const users = yield user_model_1.User.find({ _id: { $in: userIds } });
+                const users = yield user_model_1.User.find({ _id: { $in: userIds } }).lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const userLiveStreams = liveStreams.filter(ls => ls.uploadedBy.equals(user._id));
                     const currentLiveViews = userLiveStreams.reduce((sum, ls) => sum + (ls.concurrentViewers || 0), 0);
@@ -245,9 +267,11 @@ class TrendingService {
                     contentType: "live",
                     liveStreamStatus: "ended",
                     actualEnd: { $gte: since },
-                });
+                })
+                    .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy")
+                    .lean();
                 const userIds = [...new Set(recentLiveStreams.map(ls => ls.uploadedBy))];
-                const users = yield user_model_1.User.find({ _id: { $in: userIds } });
+                const users = yield user_model_1.User.find({ _id: { $in: userIds } }).lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const userLiveStreams = recentLiveStreams.filter(ls => ls.uploadedBy.equals(user._id));
                     const totalLiveViews = userLiveStreams.reduce((sum, ls) => sum + (ls.viewCount || 0), 0);
@@ -272,9 +296,11 @@ class TrendingService {
                     contentType: "live",
                     liveStreamStatus: "scheduled",
                     scheduledStart: { $gte: from, $lte: to },
-                });
+                })
+                    .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd scheduledStart uploadedBy")
+                    .lean();
                 const userIds = [...new Set(scheduledStreams.map(ls => ls.uploadedBy))];
-                const users = yield user_model_1.User.find({ _id: { $in: userIds } });
+                const users = yield user_model_1.User.find({ _id: { $in: userIds } }).lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const userScheduledStreams = scheduledStreams.filter(ls => ls.uploadedBy.equals(user._id));
                     const scheduledCount = userScheduledStreams.length;
@@ -295,9 +321,13 @@ class TrendingService {
     getPopularLiveStreamers() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const liveStreams = yield media_model_1.Media.find({ contentType: "live" });
+                const liveStreams = yield media_model_1.Media.find({ contentType: "live" })
+                    .select("contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy")
+                    .lean();
                 const userIds = [...new Set(liveStreams.map(ls => ls.uploadedBy))];
-                const users = yield user_model_1.User.find({ _id: { $in: userIds } }).limit(20);
+                const users = yield user_model_1.User.find({ _id: { $in: userIds } })
+                    .limit(20)
+                    .lean();
                 const results = yield Promise.all(users.map((user) => __awaiter(this, void 0, void 0, function* () {
                     const userLiveStreams = liveStreams.filter(ls => ls.uploadedBy.equals(user._id));
                     const totalLiveViews = userLiveStreams.reduce((sum, ls) => sum + (ls.viewCount || 0), 0);

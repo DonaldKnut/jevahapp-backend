@@ -253,126 +253,38 @@ class MediaService {
             };
         });
     }
-    getAllContentForAllTab() {
+    getAllContentForAllTab(options) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Aggregate media with author information and engagement metrics
-                const mediaList = yield media_model_1.Media.aggregate([
-                    {
-                        $lookup: {
-                            from: "users",
-                            localField: "uploadedBy",
-                            foreignField: "_id",
-                            as: "author",
-                        },
-                    },
-                    {
-                        $unwind: "$author",
-                    },
-                    {
-                        $lookup: {
-                            from: "mediauseractions",
-                            localField: "_id",
-                            foreignField: "media",
-                            as: "userActions",
-                        },
-                    },
-                    {
-                        $lookup: {
-                            from: "mediainteractions",
-                            localField: "_id",
-                            foreignField: "media",
-                            as: "interactions",
-                        },
-                    },
-                    {
-                        $addFields: {
-                            // Calculate engagement metrics
-                            totalLikes: {
-                                $size: {
-                                    $filter: {
-                                        input: "$userActions",
-                                        as: "action",
-                                        cond: { $eq: ["$$action.actionType", "like"] },
-                                    },
-                                },
-                            },
-                            totalShares: {
-                                $size: {
-                                    $filter: {
-                                        input: "$userActions",
-                                        as: "action",
-                                        cond: { $eq: ["$$action.actionType", "share"] },
-                                    },
-                                },
-                            },
-                            totalViews: {
-                                $size: {
-                                    $filter: {
-                                        input: "$interactions",
-                                        as: "interaction",
-                                        cond: { $eq: ["$$interaction.interactionType", "view"] },
-                                    },
-                                },
-                            },
-                            // Author information
-                            authorInfo: {
-                                _id: "$author._id",
-                                firstName: "$author.firstName",
-                                lastName: "$author.lastName",
-                                fullName: {
-                                    $concat: [
-                                        { $ifNull: ["$author.firstName", ""] },
-                                        " ",
-                                        { $ifNull: ["$author.lastName", ""] },
-                                    ],
-                                },
-                                avatar: "$author.avatar",
-                                section: "$author.section",
-                            },
-                            // Format creation date
-                            formattedCreatedAt: {
-                                $dateToString: {
-                                    format: "%Y-%m-%dT%H:%M:%S.%LZ",
-                                    date: "$createdAt",
-                                },
-                            },
-                        },
-                    },
-                    {
-                        $project: {
-                            _id: 1,
-                            title: 1,
-                            description: 1,
-                            contentType: 1,
-                            category: 1,
-                            fileUrl: 1,
-                            thumbnailUrl: 1,
-                            topics: 1,
-                            duration: 1,
-                            authorInfo: 1,
-                            totalLikes: 1,
-                            totalShares: 1,
-                            totalViews: 1,
-                            likeCount: 1,
-                            shareCount: 1,
-                            viewCount: 1,
-                            commentCount: 1,
-                            createdAt: 1,
-                            formattedCreatedAt: 1,
-                            updatedAt: 1,
-                            // Ensure thumbnail is always included
-                            thumbnail: "$thumbnailUrl",
-                        },
-                    },
-                    {
-                        $sort: { createdAt: -1 },
-                    },
+                // Backward compatibility: if no pagination params provided, return all items
+                const usePagination = (options === null || options === void 0 ? void 0 : options.page) !== undefined || (options === null || options === void 0 ? void 0 : options.limit) !== undefined;
+                const page = (options === null || options === void 0 ? void 0 : options.page) && options.page > 0 ? options.page : 1;
+                const rawLimit = (options === null || options === void 0 ? void 0 : options.limit) && options.limit > 0 ? options.limit : (usePagination ? 50 : undefined);
+                // Clamp for mobile-friendly payloads (only if pagination is requested)
+                const limit = rawLimit ? Math.min(Math.max(rawLimit, 10), 100) : undefined;
+                const skip = limit ? (page - 1) * limit : 0;
+                // Reuse the shared aggregation pipeline with author + engagement info
+                const pipeline = this.buildAggregationPipeline({}, {
+                    sort: { createdAt: -1 },
+                });
+                if (skip > 0) {
+                    pipeline.push({ $skip: skip });
+                }
+                if (limit) {
+                    pipeline.push({ $limit: limit });
+                }
+                const [mediaList, total] = yield Promise.all([
+                    media_model_1.Media.aggregate(pipeline),
+                    media_model_1.Media.countDocuments({}),
                 ]);
-                return {
-                    media: mediaList,
-                    total: mediaList.length,
-                };
+                return Object.assign({ media: mediaList, total: usePagination ? total : mediaList.length }, (usePagination && {
+                    pagination: {
+                        page,
+                        limit: limit,
+                        total,
+                        pages: Math.ceil(total / limit),
+                    },
+                }));
             }
             catch (error) {
                 console.error("Error fetching all content:", error);

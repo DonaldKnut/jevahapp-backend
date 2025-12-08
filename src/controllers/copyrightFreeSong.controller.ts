@@ -367,13 +367,23 @@ export const trackPlayback = async (req: Request, res: Response): Promise<void> 
  * @param req - Express request with songId param and engagement payload
  * @param res - Express response
  */
+/**
+ * Record view for a copyright-free song
+ * POST /api/audio/copyright-free/:songId/view
+ * 
+ * Records a view with engagement metrics (durationMs, progressPct, isComplete)
+ * Implements one view per user per song with proper deduplication
+ * 
+ * @param req - Express request with songId param and engagement payload
+ * @param res - Express response
+ */
 export const recordView = async (req: Request, res: Response): Promise<void> => {
   try {
     const { songId } = req.params;
     const userId = req.userId;
     const { durationMs, progressPct, isComplete } = req.body;
 
-    // Authentication check
+    // Authentication check (required per spec)
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -383,27 +393,31 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Validate songId format
-    if (!songId || !songId.match(/^[0-9a-fA-F]{24}$/)) {
-      res.status(400).json({
+    // Validate songId exists
+    if (!songId) {
+      res.status(404).json({
         success: false,
-        error: "Invalid song ID",
-        code: "VALIDATION_ERROR",
+        error: "Song not found",
+        code: "NOT_FOUND",
       });
       return;
     }
 
     // Record the view with engagement metrics
+    // All request body fields are optional per spec
     const result = await interactionService.recordView(userId, songId, {
-      durationMs: durationMs ? Number(durationMs) : 0,
-      progressPct: progressPct ? Number(progressPct) : 0,
+      durationMs: durationMs !== undefined ? Number(durationMs) : 0,
+      progressPct: progressPct !== undefined ? Number(progressPct) : 0,
       isComplete: isComplete === true || isComplete === "true",
     });
 
     // Get updated song for real-time updates
     const updatedSong = await songService.getSongById(songId);
 
-    // Emit real-time update via WebSocket (if configured)
+    // Emit real-time update via WebSocket (per spec)
+    // Event: copyright-free-song-interaction-updated
+    // Room: content:audio:{songId}
+    // Note: Emitting for both new views and engagement updates to ensure frontend has latest data
     try {
       const { getIO } = await import("../socket/socketManager");
       const io = getIO();
@@ -423,14 +437,14 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
         });
       }
     } catch (socketError: any) {
-      // Don't fail the request if socket emission fails
+      // Don't fail the request if socket emission fails (per spec)
       logger.warn("Failed to emit realtime view update", {
         error: socketError?.message,
         songId,
       });
     }
 
-    // Return success response
+    // Return success response (per spec format)
     res.status(200).json({
       success: true,
       data: {
@@ -441,7 +455,7 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
   } catch (error: any) {
     logger.error("Error recording view:", error);
 
-    // Handle specific error types
+    // Handle specific error types (per spec)
     if (error.message === "Song not found") {
       res.status(404).json({
         success: false,
@@ -451,7 +465,7 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Generic server error
+    // Generic server error (per spec)
     res.status(500).json({
       success: false,
       error: "Failed to record view",

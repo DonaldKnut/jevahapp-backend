@@ -90,6 +90,23 @@ See `PERFORMANCE_OPTIMIZATION_GUIDE.md` for:
 
 ---
 
+## 📱 Expo / Mobile Payload Optimization
+
+- **All-content feeds** (`/api/media/all-content`, `/api/media/public/all-content`) now:
+  - **Backward compatible**: If no `page`/`limit` params are provided, returns **all items** (same as before).
+  - **Opt-in pagination**: When `page` and/or `limit` are provided, uses server-side pagination with a mobile-friendly default of 50 items per page.
+  - `limit` is clamped between 10-100 for optimal mobile performance.
+- **Why:** This keeps JSON responses small for Expo apps when pagination is used, reducing:
+  - Network transfer time,
+  - JSON parsing time on the device,
+  - And initial render work when showing large feeds.
+- **Examples:**
+  - `GET /api/media/all-content` - Returns all items (backward compatible)
+  - `GET /api/media/all-content?page=1&limit=30` - Returns first 30 items with pagination info
+  - `GET /api/media/public/all-content?mood=worship&page=1&limit=30` - Paginated with mood filter
+
+---
+
 ## ✅ Checklist
 
 - [ ] Update `src/index.ts` with connection pooling

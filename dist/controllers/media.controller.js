@@ -426,7 +426,27 @@ exports.getAllMedia = getAllMedia;
 const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
-        const result = yield media_service_1.mediaService.getAllContentForAllTab();
+        if ((request.query.page &&
+            isNaN(parseInt(request.query.page))) ||
+            (request.query.limit &&
+                isNaN(parseInt(request.query.limit)))) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid page or limit",
+            });
+            return;
+        }
+        // Only pass pagination params if they're explicitly provided (backward compatible)
+        const hasPage = request.query.page !== undefined;
+        const hasLimit = request.query.limit !== undefined;
+        const page = hasPage ? parseInt(request.query.page) : undefined;
+        const limitParam = hasLimit ? parseInt(request.query.limit) : undefined;
+        // Only pass options if pagination params were provided
+        const options = (hasPage || hasLimit) ? {
+            page: page && page > 0 ? page : undefined,
+            limit: limitParam && limitParam > 0 ? limitParam : undefined,
+        } : undefined;
+        const result = yield media_service_1.mediaService.getAllContentForAllTab(options);
         // Optional personalization: include recommendations when user is authenticated
         let recommendations = undefined;
         const userIdentifier = request.userId;
@@ -440,12 +460,8 @@ const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, 
             // Non-blocking failure; proceed without recommendations
             recommendations = undefined;
         }
-        response.status(200).json({
-            success: true,
-            media: result.media,
-            total: result.total,
-            recommendations,
-        });
+        response.status(200).json(Object.assign(Object.assign({ success: true, media: result.media, total: result.total }, (result.pagination && { pagination: result.pagination })), { // Only include if pagination was used
+            recommendations }));
     }
     catch (error) {
         console.error("Fetch all content error:", error);
@@ -1610,11 +1626,31 @@ const getPublicMedia = (request, response) => __awaiter(void 0, void 0, void 0, 
 exports.getPublicMedia = getPublicMedia;
 const getPublicAllContent = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const cacheKey = `media:public:all-content:${request.query.mood || "default"}`;
+        if ((request.query.page &&
+            isNaN(parseInt(request.query.page))) ||
+            (request.query.limit &&
+                isNaN(parseInt(request.query.limit)))) {
+            response.status(400).json({
+                success: false,
+                message: "Invalid page or limit",
+            });
+            return;
+        }
+        // Only pass pagination params if they're explicitly provided (backward compatible)
+        const hasPage = request.query.page !== undefined;
+        const hasLimit = request.query.limit !== undefined;
+        const page = hasPage ? parseInt(request.query.page) : undefined;
+        const limitParam = hasLimit ? parseInt(request.query.limit) : undefined;
+        // Only pass options if pagination params were provided
+        const options = (hasPage || hasLimit) ? {
+            page: page && page > 0 ? page : undefined,
+            limit: limitParam && limitParam > 0 ? limitParam : undefined,
+        } : undefined;
+        const cacheKey = `media:public:all-content:${request.query.mood || "default"}${options ? `:page=${page || 1}:limit=${limitParam || "default"}` : ""}`;
         // Cache for 5 minutes (300 seconds)
         const result = yield cache_service_1.default.getOrSet(cacheKey, () => __awaiter(void 0, void 0, void 0, function* () {
             var _a;
-            const mediaResult = yield media_service_1.mediaService.getAllContentForAllTab();
+            const mediaResult = yield media_service_1.mediaService.getAllContentForAllTab(options);
             // Public endpoint can still include non-personalized recommendations
             let recommendations = undefined;
             try {
@@ -1626,12 +1662,8 @@ const getPublicAllContent = (request, response) => __awaiter(void 0, void 0, voi
             catch (err) {
                 recommendations = undefined;
             }
-            return {
-                success: true,
-                media: mediaResult.media,
-                total: mediaResult.total,
-                recommendations,
-            };
+            return Object.assign(Object.assign({ success: true, media: mediaResult.media, total: mediaResult.total }, (mediaResult.pagination && { pagination: mediaResult.pagination })), { // Only include if pagination was used
+                recommendations });
         }), 300 // 5 minutes cache
         );
         response.status(200).json(result);

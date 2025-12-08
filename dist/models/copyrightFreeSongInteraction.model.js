@@ -84,8 +84,11 @@ const interactionSchema = new mongoose_1.Schema({
 }, {
     timestamps: true,
 });
-// Unique index: one interaction record per user per song
-interactionSchema.index({ userId: 1, songId: 1 }, { unique: true });
-interactionSchema.index({ songId: 1 });
+// Unique index: one interaction record per user per song (CRITICAL for deduplication)
+interactionSchema.index({ userId: 1, songId: 1 }, { unique: true, name: "user_song_unique" });
+// Index for querying song views
+interactionSchema.index({ songId: 1 }, { name: "song_index" });
+// Index for querying user views
+interactionSchema.index({ userId: 1 }, { name: "user_index" });
 exports.CopyrightFreeSongInteraction = mongoose_1.default.models.CopyrightFreeSongInteraction ||
     mongoose_1.default.model("CopyrightFreeSongInteraction", interactionSchema);

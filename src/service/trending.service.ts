@@ -45,11 +45,17 @@ export class TrendingService {
           { role: "artist" },
           { "artistProfile.isVerifiedArtist": true },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
-          const media = await Media.find({ uploadedBy: user._id });
+          const media = await Media.find({ uploadedBy: user._id })
+            .select(
+              "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
+            )
+            .lean();
           const totalViews = media.reduce(
             (sum, m) => sum + (m.viewCount || 0),
             0
@@ -86,14 +92,20 @@ export class TrendingService {
           { role: "artist" },
           { "artistProfile.isVerifiedArtist": true },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
           const ebooks = await Media.find({
             uploadedBy: user._id,
             contentType: "ebook",
-          });
+          })
+            .select(
+              "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
+            )
+            .lean();
 
           if (ebooks.length === 0) return null;
 
@@ -133,14 +145,20 @@ export class TrendingService {
           { role: "artist" },
           { "artistProfile.isVerifiedArtist": true },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
           const audioContent = await Media.find({
             uploadedBy: user._id,
             contentType: { $in: ["audio", "music", "podcast"] },
-          });
+          })
+            .select(
+              "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
+            )
+            .lean();
 
           if (audioContent.length === 0) return null;
 
@@ -181,14 +199,20 @@ export class TrendingService {
           { role: "artist" },
           { "artistProfile.isVerifiedArtist": true },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
           const sermons = await Media.find({
             uploadedBy: user._id,
             contentType: "sermon",
-          });
+          })
+            .select(
+              "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
+            )
+            .lean();
 
           if (sermons.length === 0) return null;
 
@@ -232,14 +256,20 @@ export class TrendingService {
           { role: "artist" },
           { "artistProfile.isVerifiedArtist": true },
         ],
-      }).limit(limit);
+      })
+        .limit(limit)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
           const liveStreams = await Media.find({
             uploadedBy: user._id,
             contentType: "live",
-          });
+          })
+            .select(
+              "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
+            )
+            .lean();
 
           if (liveStreams.length === 0) return null;
 
@@ -308,10 +338,14 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "live",
         isLive: true,
-      });
+      })
+        .select(
+          "contentType viewCount likeCount readCount listenCount createdAt actualEnd concurrentViewers uploadedBy"
+        )
+        .lean();
 
       const userIds = [...new Set(liveStreams.map(ls => ls.uploadedBy))];
-      const users = await User.find({ _id: { $in: userIds } });
+      const users = await User.find({ _id: { $in: userIds } }).lean();
 
       const results = await Promise.all(
         users.map(async user => {
@@ -347,10 +381,14 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "ended",
         actualEnd: { $gte: since },
-      });
+      })
+        .select(
+          "contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy"
+        )
+        .lean();
 
       const userIds = [...new Set(recentLiveStreams.map(ls => ls.uploadedBy))];
-      const users = await User.find({ _id: { $in: userIds } });
+      const users = await User.find({ _id: { $in: userIds } }).lean();
 
       const results = await Promise.all(
         users.map(async user => {
@@ -389,10 +427,14 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "scheduled",
         scheduledStart: { $gte: from, $lte: to },
-      });
+      })
+        .select(
+          "contentType viewCount likeCount readCount listenCount createdAt actualEnd scheduledStart uploadedBy"
+        )
+        .lean();
 
       const userIds = [...new Set(scheduledStreams.map(ls => ls.uploadedBy))];
-      const users = await User.find({ _id: { $in: userIds } });
+      const users = await User.find({ _id: { $in: userIds } }).lean();
 
       const results = await Promise.all(
         users.map(async user => {
@@ -421,9 +463,15 @@ export class TrendingService {
 
   private async getPopularLiveStreamers(): Promise<TrendingUser[]> {
     try {
-      const liveStreams = await Media.find({ contentType: "live" });
+      const liveStreams = await Media.find({ contentType: "live" })
+        .select(
+          "contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy"
+        )
+        .lean();
       const userIds = [...new Set(liveStreams.map(ls => ls.uploadedBy))];
-      const users = await User.find({ _id: { $in: userIds } }).limit(20);
+      const users = await User.find({ _id: { $in: userIds } })
+        .limit(20)
+        .lean();
 
       const results = await Promise.all(
         users.map(async user => {
