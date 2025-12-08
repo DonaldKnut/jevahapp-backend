@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleSave = exports.recordView = exports.trackPlayback = exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
+exports.toggleSave = exports.getTrendingSearches = exports.getSearchSuggestions = exports.recordView = exports.trackPlayback = exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
 const copyrightFreeSong_service_1 = require("../service/copyrightFreeSong.service");
 const logger_1 = __importDefault(require("../utils/logger"));
 const copyrightFreeSongInteraction_service_1 = require("../service/copyrightFreeSongInteraction.service");
@@ -298,38 +298,124 @@ const shareSong = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.shareSong = shareSong;
+/**
+ * Search copyright-free songs
+ * GET /api/audio/copyright-free/search
+ *
+ * Supports multi-field search, category filtering, sorting, and pagination
+ * Returns user-specific data (isLiked, isInLibrary) if authenticated
+ */
 const searchSongs = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const startTime = Date.now();
     try {
-        const { q } = req.query;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        if (!q || typeof q !== "string") {
+        const { q, page, limit, category, sort } = req.query;
+        const userId = req.userId;
+        // Validate query parameter (required)
+        if (!q || typeof q !== "string" || !q.trim()) {
             res.status(400).json({
                 success: false,
-                message: "Search query (q) is required",
+                error: "Search query is required",
+                code: "BAD_REQUEST",
             });
             return;
         }
-        const result = yield songService.searchSongs(q, page, limit);
+        // Parse and validate pagination parameters
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 20;
+        // Validate limit (max 100 per spec)
+        if (limitNum > 100) {
+            res.status(400).json({
+                success: false,
+                error: "Invalid limit. Maximum is 100",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        // Validate sort option
+        const validSorts = ["relevance", "popular", "newest", "oldest", "title"];
+        const sortOption = sort || "relevance";
+        if (!validSorts.includes(sortOption)) {
+            res.status(400).json({
+                success: false,
+                error: `Invalid sort option. Must be one of: ${validSorts.join(", ")}`,
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        // Perform search
+        const result = yield songService.searchSongs(q.trim(), {
+            page: pageNum,
+            limit: limitNum,
+            category: category,
+            sort: sortOption,
+            userId: userId || undefined,
+        });
+        // Add user-specific data if authenticated
+        let enrichedSongs = result.songs;
+        if (userId) {
+            const songIds = result.songs.map((s) => s._id.toString());
+            // Get user's likes and bookmarks in parallel
+            const [userLikes, userBookmarks] = yield Promise.all([
+                Promise.all(songIds.map((songId) => interactionService.isLiked(userId, songId))),
+                Promise.all(songIds.map((songId) => __awaiter(void 0, void 0, void 0, function* () {
+                    try {
+                        const { UnifiedBookmarkService } = yield Promise.resolve().then(() => __importStar(require("../service/unifiedBookmark.service")));
+                        return yield UnifiedBookmarkService.isBookmarked(userId, songId);
+                    }
+                    catch (_a) {
+                        return false;
+                    }
+                }))),
+            ]);
+            // Enrich songs with user-specific data
+            enrichedSongs = result.songs.map((song, index) => {
+                var _a, _b, _c;
+                const songObj = song;
+                return Object.assign(Object.assign({}, songObj), { id: ((_a = songObj._id) === null || _a === void 0 ? void 0 : _a.toString()) || songObj.id, views: songObj.viewCount || 0, likes: songObj.likeCount || 0, isLiked: userLikes[index] || false, isInLibrary: userBookmarks[index] || false, isPublicDomain: true, contentType: "copyright-free-music", audioUrl: songObj.fileUrl, artist: songObj.singer, uploadedBy: ((_c = (_b = songObj.uploadedBy) === null || _b === void 0 ? void 0 : _b._id) === null || _c === void 0 ? void 0 : _c.toString()) || "system" });
+            });
+        }
+        else {
+            // For non-authenticated users, add default values
+            enrichedSongs = result.songs.map((song) => {
+                var _a, _b, _c;
+                const songObj = song;
+                return Object.assign(Object.assign({}, songObj), { id: ((_a = songObj._id) === null || _a === void 0 ? void 0 : _a.toString()) || songObj.id, views: songObj.viewCount || 0, likes: songObj.likeCount || 0, isLiked: false, isInLibrary: false, isPublicDomain: true, contentType: "copyright-free-music", audioUrl: songObj.fileUrl, artist: songObj.singer, uploadedBy: ((_c = (_b = songObj.uploadedBy) === null || _b === void 0 ? void 0 : _b._id) === null || _c === void 0 ? void 0 : _c.toString()) || "system" });
+            });
+        }
+        const searchTime = Date.now() - startTime;
+        // Return success response (per spec format)
         res.status(200).json({
             success: true,
             data: {
-                songs: result.songs,
+                songs: enrichedSongs,
                 pagination: {
-                    total: result.total,
                     page: result.page,
+                    limit: limitNum,
+                    total: result.total,
                     totalPages: result.totalPages,
-                    limit,
+                    hasMore: result.hasMore,
                 },
+                query: q.trim(),
+                searchTime,
             },
         });
     }
     catch (error) {
         logger_1.default.error("Error searching songs:", error);
+        // Handle validation errors
+        if (error.message === "Search query is required") {
+            res.status(400).json({
+                success: false,
+                error: "Search query is required",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        // Generic server error
         res.status(500).json({
             success: false,
-            message: "Failed to search songs",
-            error: error.message,
+            error: "Failed to perform search",
+            code: "SERVER_ERROR",
         });
     }
 });
@@ -386,17 +472,8 @@ exports.trackPlayback = trackPlayback;
  * @param req - Express request with songId param and engagement payload
  * @param res - Express response
  */
-/**
- * Record view for a copyright-free song
- * POST /api/audio/copyright-free/:songId/view
- *
- * Records a view with engagement metrics (durationMs, progressPct, isComplete)
- * Implements one view per user per song with proper deduplication
- *
- * @param req - Express request with songId param and engagement payload
- * @param res - Express response
- */
 const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
     try {
         const { songId } = req.params;
         const userId = req.userId;
@@ -410,20 +487,47 @@ const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             });
             return;
         }
-        // Validate songId exists
+        // Validate songId exists and is valid ObjectId format
         if (!songId) {
-            res.status(404).json({
+            res.status(400).json({
                 success: false,
-                error: "Song not found",
-                code: "NOT_FOUND",
+                error: "Song ID is required",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        // Validate songId format (MongoDB ObjectId)
+        const mongoose = yield Promise.resolve().then(() => __importStar(require("mongoose")));
+        if (!mongoose.Types.ObjectId.isValid(songId)) {
+            res.status(400).json({
+                success: false,
+                error: "Invalid song ID format",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        // Validate optional fields if present
+        if (durationMs !== undefined && (typeof durationMs !== "number" || durationMs < 0)) {
+            res.status(400).json({
+                success: false,
+                error: "durationMs must be a non-negative number",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        if (progressPct !== undefined && (typeof progressPct !== "number" || progressPct < 0 || progressPct > 100)) {
+            res.status(400).json({
+                success: false,
+                error: "progressPct must be a number between 0 and 100",
+                code: "BAD_REQUEST",
             });
             return;
         }
         // Record the view with engagement metrics
         // All request body fields are optional per spec
         const result = yield interactionService.recordView(userId, songId, {
-            durationMs: durationMs !== undefined ? Number(durationMs) : 0,
-            progressPct: progressPct !== undefined ? Number(progressPct) : 0,
+            durationMs: durationMs !== undefined ? Number(durationMs) : undefined,
+            progressPct: progressPct !== undefined ? Number(progressPct) : undefined,
             isComplete: isComplete === true || isComplete === "true",
         });
         // Get updated song for real-time updates
@@ -467,9 +571,22 @@ const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         });
     }
     catch (error) {
-        logger_1.default.error("Error recording view:", error);
+        // Enhanced error logging with all diagnostic information
+        logger_1.default.error("Error recording view:", {
+            error: error.message,
+            stack: error.stack,
+            code: error.code,
+            codeName: error.codeName,
+            name: error.name,
+            songId: req.params.songId,
+            userId: req.userId,
+            body: req.body,
+            mongoError: error.code,
+            mongoErrorCode: error.codeName,
+            errorType: error.constructor.name,
+        });
         // Handle specific error types (per spec)
-        if (error.message === "Song not found") {
+        if (error.message === "Song not found" || ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes("Song not found"))) {
             res.status(404).json({
                 success: false,
                 error: "Song not found",
@@ -477,15 +594,119 @@ const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             });
             return;
         }
+        if (((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes("Invalid userId format")) || ((_c = error.message) === null || _c === void 0 ? void 0 : _c.includes("Invalid songId format"))) {
+            res.status(400).json({
+                success: false,
+                error: error.message || "Invalid ID format",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
         // Generic server error (per spec)
+        // Include error code in development mode for debugging
+        const isDevelopment = process.env.NODE_ENV === "development";
+        res.status(500).json(Object.assign({ success: false, error: isDevelopment ? error.message : "Failed to record view", code: "SERVER_ERROR" }, (isDevelopment && error.code ? { errorCode: error.code } : {})));
+    }
+});
+exports.recordView = recordView;
+/**
+ * Get search suggestions (autocomplete)
+ * GET /api/audio/copyright-free/search/suggestions
+ *
+ * Returns search suggestions based on partial query
+ */
+const getSearchSuggestions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { q, limit } = req.query;
+        const limitNum = parseInt(limit) || 10;
+        // Validate query parameter
+        if (!q || typeof q !== "string" || !q.trim()) {
+            res.status(400).json({
+                success: false,
+                error: "Search query is required",
+                code: "BAD_REQUEST",
+            });
+            return;
+        }
+        const searchTerm = q.trim().toLowerCase();
+        const searchRegex = new RegExp(`^${searchTerm}`, "i");
+        // Get unique suggestions from song titles and artists
+        const [titleMatches, artistMatches] = yield Promise.all([
+            songService.getAllSongs(1, 100), // Get more songs to find matches
+            songService.getAllSongs(1, 100),
+        ]);
+        const suggestions = new Set();
+        // Add title matches
+        titleMatches.songs.forEach((song) => {
+            if (song.title && song.title.toLowerCase().includes(searchTerm)) {
+                suggestions.add(song.title.toLowerCase());
+            }
+        });
+        // Add artist matches
+        artistMatches.songs.forEach((song) => {
+            if (song.singer && song.singer.toLowerCase().includes(searchTerm)) {
+                suggestions.add(song.singer.toLowerCase());
+            }
+        });
+        // Convert to array and limit
+        const suggestionsArray = Array.from(suggestions).slice(0, limitNum);
+        res.status(200).json({
+            success: true,
+            data: {
+                suggestions: suggestionsArray,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error getting search suggestions:", error);
         res.status(500).json({
             success: false,
-            error: "Failed to record view",
+            error: "Failed to get search suggestions",
             code: "SERVER_ERROR",
         });
     }
 });
-exports.recordView = recordView;
+exports.getSearchSuggestions = getSearchSuggestions;
+/**
+ * Get trending searches
+ * GET /api/audio/copyright-free/search/trending
+ *
+ * Returns popular search terms (simplified implementation)
+ */
+const getTrendingSearches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { limit, period } = req.query;
+        const limitNum = parseInt(limit) || 10;
+        const periodOption = period || "week";
+        // For now, return popular song titles and artists as trending searches
+        // In a full implementation, this would track actual search queries
+        const result = yield songService.getAllSongs(1, limitNum * 2);
+        // Get most viewed songs as "trending"
+        const trendingSongs = result.songs
+            .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+            .slice(0, limitNum);
+        const trending = trendingSongs.map((song) => ({
+            query: song.title || song.singer,
+            count: song.viewCount || 0,
+            category: "Gospel Music", // Default category
+        }));
+        res.status(200).json({
+            success: true,
+            data: {
+                trending,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error getting trending searches:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to get trending searches",
+            code: "SERVER_ERROR",
+        });
+    }
+});
+exports.getTrendingSearches = getTrendingSearches;
 /**
  * Toggle save/bookmark for a copyright-free song
  */

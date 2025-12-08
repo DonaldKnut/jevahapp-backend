@@ -4,6 +4,8 @@ import {
   getAllSongs as getCopyrightFreeSongsNew,
   getSongById as getCopyrightFreeSongNew,
   searchSongs as searchCopyrightFreeSongsNew,
+  getSearchSuggestions as getSearchSuggestionsCopyrightFree,
+  getTrendingSearches as getTrendingSearchesCopyrightFree,
   createSong as createCopyrightFreeSongNew,
   updateSong as updateCopyrightFreeSongNew,
   deleteSong as deleteCopyrightFreeSongNew,
@@ -72,10 +74,28 @@ router.get("/copyright-free/:songId", apiRateLimiter, getCopyrightFreeSongNew);
  * @route   GET /api/audio/copyright-free/search
  * @desc    Search copyright-free songs (Public)
  * @access  Public (No authentication required)
- * @query   { q: string (required), page?, limit? }
- * @returns { success: boolean, data: { songs: Song[], pagination: object } }
+ * @query   { q: string (required), page?, limit?, category?, sort? }
+ * @returns { success: boolean, data: { songs: Song[], pagination: object, query: string, searchTime: number } }
  */
 router.get("/copyright-free/search", apiRateLimiter, searchCopyrightFreeSongsNew);
+
+/**
+ * @route   GET /api/audio/copyright-free/search/suggestions
+ * @desc    Get search suggestions/autocomplete (Public)
+ * @access  Public (No authentication required)
+ * @query   { q: string (required), limit? }
+ * @returns { success: boolean, data: { suggestions: string[] } }
+ */
+router.get("/copyright-free/search/suggestions", apiRateLimiter, getSearchSuggestionsCopyrightFree);
+
+/**
+ * @route   GET /api/audio/copyright-free/search/trending
+ * @desc    Get trending searches (Public)
+ * @access  Public (No authentication required)
+ * @query   { limit?, period? }
+ * @returns { success: boolean, data: { trending: TrendingSearch[] } }
+ */
+router.get("/copyright-free/search/trending", apiRateLimiter, getTrendingSearchesCopyrightFree);
 
 
 /**

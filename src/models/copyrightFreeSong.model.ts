@@ -60,11 +60,19 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
   }
 );
 
-// Indexes
-copyrightFreeSongSchema.index({ title: "text", singer: "text" }); // For search
-copyrightFreeSongSchema.index({ likeCount: -1 }); // For sorting by popularity
-copyrightFreeSongSchema.index({ viewCount: -1 }); // For sorting by most viewed
-copyrightFreeSongSchema.index({ createdAt: -1 }); // For sorting by newest
+// Indexes for optimal search performance
+// Text index for full-text search across title and singer (artist)
+copyrightFreeSongSchema.index({ title: "text", singer: "text" }, { name: "search_text_index" });
+
+// Single field indexes for sorting
+copyrightFreeSongSchema.index({ likeCount: -1 }, { name: "like_count_index" }); // For sorting by popularity
+copyrightFreeSongSchema.index({ viewCount: -1 }, { name: "view_count_index" }); // For sorting by most viewed
+copyrightFreeSongSchema.index({ createdAt: -1 }, { name: "created_at_index" }); // For sorting by newest
+copyrightFreeSongSchema.index({ title: 1 }, { name: "title_index" }); // For alphabetical sorting
+
+// Compound indexes for common query patterns
+copyrightFreeSongSchema.index({ viewCount: -1, likeCount: -1 }, { name: "popularity_compound_index" }); // For relevance sorting
+copyrightFreeSongSchema.index({ createdAt: -1, viewCount: -1 }, { name: "newest_popular_compound_index" }); // For newest with popularity fallback
 
 export const CopyrightFreeSong =
   mongoose.models.CopyrightFreeSong ||

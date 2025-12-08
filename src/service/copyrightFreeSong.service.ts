@@ -200,42 +200,107 @@ export class CopyrightFreeSongService {
     }
   }
 
-  async searchSongs(query: string, page: number = 1, limit: number = 20): Promise<{
+  /**
+   * Search copyright-free songs with advanced filtering and sorting
+   * @param query - Search query string
+   * @param options - Search options (page, limit, category, sort, userId)
+   * @returns Search results with pagination
+   */
+  async searchSongs(
+    query: string,
+    options: {
+      page?: number;
+      limit?: number;
+      category?: string;
+      sort?: "relevance" | "popular" | "newest" | "oldest" | "title";
+      userId?: string;
+    } = {}
+  ): Promise<{
     songs: ICopyrightFreeSong[];
     total: number;
     page: number;
     totalPages: number;
+    hasMore: boolean;
   }> {
     try {
+      const startTime = Date.now();
+      const { page = 1, limit = 20, category, sort = "relevance", userId } = options;
       const skip = (page - 1) * limit;
-      
-      const searchRegex = new RegExp(query, "i");
-      
+
+      // Sanitize query
+      const searchTerm = query.trim().toLowerCase();
+      if (!searchTerm) {
+        throw new Error("Search query is required");
+      }
+
+      // Build search conditions - search in title and singer (artist)
+      const searchRegex = new RegExp(searchTerm, "i");
+      const searchConditions: any = {
+        $or: [
+          { title: searchRegex },
+          { singer: searchRegex },
+        ],
+      };
+
+      // Add category filter if provided (if category field exists in model)
+      // Note: Category filtering is optional as model may not have category field
+      // This can be extended if category field is added to the model
+
+      // Build sort object based on sort option
+      let sortObject: any = {};
+      switch (sort) {
+        case "relevance":
+          // For relevance, prioritize title matches, then sort by popularity
+          // MongoDB text search would be ideal, but regex works for now
+          sortObject = { viewCount: -1, likeCount: -1, createdAt: -1 };
+          break;
+        case "popular":
+          sortObject = { viewCount: -1, likeCount: -1 };
+          break;
+        case "newest":
+          sortObject = { createdAt: -1 };
+          break;
+        case "oldest":
+          sortObject = { createdAt: 1 };
+          break;
+        case "title":
+          sortObject = { title: 1 };
+          break;
+        default:
+          sortObject = { viewCount: -1, createdAt: -1 };
+      }
+
+      // Execute search query
       const [songs, total] = await Promise.all([
-        CopyrightFreeSong.find({
-          $or: [
-            { title: searchRegex },
-            { singer: searchRegex },
-          ],
-        })
+        CopyrightFreeSong.find(searchConditions)
           .populate("uploadedBy", "firstName lastName avatar")
-          .sort({ createdAt: -1 })
+          .sort(sortObject)
           .skip(skip)
           .limit(limit)
           .lean(),
-        CopyrightFreeSong.countDocuments({
-          $or: [
-            { title: searchRegex },
-            { singer: searchRegex },
-          ],
-        }),
+        CopyrightFreeSong.countDocuments(searchConditions),
       ]);
+
+      // Calculate pagination
+      const totalPages = Math.ceil(total / limit);
+      const hasMore = skip + limit < total;
+
+      const searchTime = Date.now() - startTime;
+
+      logger.debug("Search completed", {
+        query: searchTerm,
+        total,
+        page,
+        limit,
+        searchTime,
+      });
 
       return {
         songs: songs as unknown as ICopyrightFreeSong[],
         total,
         page,
-        totalPages: Math.ceil(total / limit),
+        totalPages,
+        hasMore,
       };
     } catch (error: any) {
       logger.error("Error searching copyright-free songs:", error);

@@ -180,143 +180,199 @@ class CopyrightFreeSongInteractionService {
     recordView(userId_1, songId_1) {
         return __awaiter(this, arguments, void 0, function* (userId, songId, payload = {}) {
             const { durationMs = 0, progressPct = 0, isComplete = false } = payload;
-            // Validate song exists
-            const song = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId);
-            if (!song) {
-                throw new Error("Song not found");
-            }
-            const userIdObj = new mongoose_1.Types.ObjectId(userId);
-            const songIdObj = new mongoose_1.Types.ObjectId(songId);
-            const now = new Date();
-            // Check if user already viewed this song
-            let viewRecord = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
-                userId: userIdObj,
-                songId: songIdObj,
-            });
-            if (viewRecord && viewRecord.hasViewed) {
-                // User already viewed → Update engagement metrics but DON'T increment count
-                viewRecord.durationMs = Math.max(viewRecord.durationMs || 0, durationMs || 0);
-                viewRecord.progressPct = Math.max(viewRecord.progressPct || 0, progressPct || 0);
-                viewRecord.isComplete = viewRecord.isComplete || isComplete;
-                viewRecord.lastViewedAt = now;
-                yield viewRecord.save();
-                // Return current count (NOT incremented)
-                const updatedSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId).select("viewCount").lean();
-                return {
-                    viewCount: (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) || 0,
-                    hasViewed: true,
-                    isNewView: false,
-                };
-            }
-            // User hasn't viewed → Create new view record and increment count
-            // Use transaction to ensure atomicity
-            const session = yield mongoose_2.default.startSession();
-            session.startTransaction();
             try {
-                // Check again within transaction (double-check pattern)
-                const existingView = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
+                // Validate userId and songId are valid ObjectIds
+                if (!mongoose_1.Types.ObjectId.isValid(userId)) {
+                    throw new Error(`Invalid userId format: ${userId}`);
+                }
+                if (!mongoose_1.Types.ObjectId.isValid(songId)) {
+                    throw new Error(`Invalid songId format: ${songId}`);
+                }
+                const userIdObj = new mongoose_1.Types.ObjectId(userId);
+                const songIdObj = new mongoose_1.Types.ObjectId(songId);
+                // Validate song exists
+                const song = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songIdObj);
+                if (!song) {
+                    throw new Error("Song not found");
+                }
+                const now = new Date();
+                // Check if user already viewed this song (outside transaction for early return)
+                const existingInteraction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
                     userId: userIdObj,
                     songId: songIdObj,
-                    hasViewed: true,
-                }, null, { session });
-                if (existingView) {
-                    // Another request already created the view record
-                    yield session.abortTransaction();
-                    // Update engagement metrics
-                    existingView.durationMs = Math.max(existingView.durationMs || 0, durationMs || 0);
-                    existingView.progressPct = Math.max(existingView.progressPct || 0, progressPct || 0);
-                    existingView.isComplete = existingView.isComplete || isComplete;
-                    existingView.lastViewedAt = now;
-                    yield existingView.save();
-                    const currentSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId).select("viewCount").lean();
+                });
+                if (existingInteraction && existingInteraction.hasViewed) {
+                    // User already viewed → Update engagement metrics but DON'T increment count
+                    const maxDurationMs = Math.max(existingInteraction.durationMs || 0, durationMs || 0);
+                    const maxProgressPct = Math.max(existingInteraction.progressPct || 0, progressPct || 0);
+                    const updatedIsComplete = existingInteraction.isComplete || isComplete;
+                    existingInteraction.durationMs = maxDurationMs;
+                    existingInteraction.progressPct = maxProgressPct;
+                    existingInteraction.isComplete = updatedIsComplete;
+                    existingInteraction.lastViewedAt = now;
+                    yield existingInteraction.save();
+                    // Return current count (NOT incremented)
+                    const updatedSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songIdObj).select("viewCount").lean();
                     return {
-                        viewCount: (currentSong === null || currentSong === void 0 ? void 0 : currentSong.viewCount) || 0,
+                        viewCount: (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) || 0,
                         hasViewed: true,
                         isNewView: false,
                     };
                 }
-                // Check if interaction exists before creating/updating
-                const existingInteraction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({ userId: userIdObj, songId: songIdObj }, null, { session });
-                const isNewView = !existingInteraction || !existingInteraction.hasViewed;
-                // Create or update interaction record with view data
-                const updateData = {
-                    $setOnInsert: {
-                        userId: userIdObj,
-                        songId: songIdObj,
-                        hasLiked: false,
-                        hasShared: false,
+                // User hasn't viewed → Create new view record and increment count
+                // Use transaction to ensure atomicity
+                const session = yield mongoose_2.default.startSession();
+                try {
+                    let isNewView = false;
+                    let viewCount = 0;
+                    yield session.withTransaction(() => __awaiter(this, void 0, void 0, function* () {
+                        // Double-check within transaction (race condition protection)
+                        const existingViewInTx = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
+                            userId: userIdObj,
+                            songId: songIdObj,
+                            hasViewed: true,
+                        }, null, { session });
+                        if (existingViewInTx) {
+                            // Another request already created the view record
+                            // Update engagement metrics
+                            const maxDurationMs = Math.max(existingViewInTx.durationMs || 0, durationMs || 0);
+                            const maxProgressPct = Math.max(existingViewInTx.progressPct || 0, progressPct || 0);
+                            const updatedIsComplete = existingViewInTx.isComplete || isComplete;
+                            existingViewInTx.durationMs = maxDurationMs;
+                            existingViewInTx.progressPct = maxProgressPct;
+                            existingViewInTx.isComplete = updatedIsComplete;
+                            existingViewInTx.lastViewedAt = now;
+                            yield existingViewInTx.save({ session });
+                            const currentSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songIdObj).select("viewCount").session(session).lean();
+                            viewCount = (currentSong === null || currentSong === void 0 ? void 0 : currentSong.viewCount) || 0;
+                            isNewView = false;
+                            return; // Exit transaction early
+                        }
+                        // Check if interaction exists (without hasViewed requirement)
+                        const interactionInTx = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({ userId: userIdObj, songId: songIdObj }, null, { session });
+                        isNewView = !interactionInTx || !interactionInTx.hasViewed;
+                        // Calculate max values for update
+                        const currentDurationMs = (interactionInTx === null || interactionInTx === void 0 ? void 0 : interactionInTx.durationMs) || 0;
+                        const currentProgressPct = (interactionInTx === null || interactionInTx === void 0 ? void 0 : interactionInTx.progressPct) || 0;
+                        const maxDurationMs = Math.max(currentDurationMs, durationMs || 0);
+                        const maxProgressPct = Math.max(currentProgressPct, progressPct || 0);
+                        const updatedIsComplete = ((interactionInTx === null || interactionInTx === void 0 ? void 0 : interactionInTx.isComplete) || false) || isComplete;
+                        // Create or update interaction record with view data
+                        // Use $set with calculated max values (no $max operator to avoid conflicts)
+                        const updateData = {
+                            $set: {
+                                hasViewed: true,
+                                lastViewedAt: now,
+                                durationMs: maxDurationMs,
+                                progressPct: maxProgressPct,
+                                isComplete: updatedIsComplete,
+                            },
+                            $setOnInsert: {
+                                userId: userIdObj,
+                                songId: songIdObj,
+                                hasLiked: false,
+                                hasShared: false,
+                                viewedAt: now,
+                            },
+                        };
+                        const interaction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOneAndUpdate({ userId: userIdObj, songId: songIdObj }, updateData, {
+                            upsert: true,
+                            new: true,
+                            session,
+                            runValidators: true,
+                        });
+                        if (isNewView) {
+                            // Increment view count only for new views
+                            yield copyrightFreeSong_model_1.CopyrightFreeSong.findByIdAndUpdate(songIdObj, { $inc: { viewCount: 1 } }, { session });
+                        }
+                        // Get updated song with new view count
+                        const updatedSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songIdObj).select("viewCount").session(session).lean();
+                        viewCount = (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) || 0;
+                    }));
+                    return {
+                        viewCount,
                         hasViewed: true,
-                        viewedAt: now,
-                        durationMs: durationMs || 0,
-                        progressPct: progressPct || 0,
-                        isComplete: isComplete || false,
-                        lastViewedAt: now,
-                    },
-                    $set: {
-                        hasViewed: true,
-                        lastViewedAt: now,
-                    },
-                    $max: {
-                        durationMs: durationMs || 0,
-                        progressPct: progressPct || 0,
-                    },
-                };
-                // For existing records, update isComplete if needed
-                if (existingInteraction) {
-                    updateData.$set = Object.assign(Object.assign({}, updateData.$set), { isComplete: existingInteraction.isComplete || isComplete });
+                        isNewView,
+                    };
                 }
-                else {
-                    // For new records, set isComplete in $setOnInsert
-                    updateData.$setOnInsert.isComplete = isComplete || false;
+                catch (error) {
+                    // Handle duplicate key error (race condition)
+                    if (error.code === 11000 || (error.message && error.message.includes("duplicate"))) {
+                        // Another request already created the view record
+                        // Fetch the existing record and return current count
+                        try {
+                            const existingView = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
+                                userId: userIdObj,
+                                songId: songIdObj,
+                            });
+                            if (existingView) {
+                                // Update engagement metrics
+                                const maxDurationMs = Math.max(existingView.durationMs || 0, durationMs || 0);
+                                const maxProgressPct = Math.max(existingView.progressPct || 0, progressPct || 0);
+                                const updatedIsComplete = existingView.isComplete || isComplete;
+                                existingView.durationMs = maxDurationMs;
+                                existingView.progressPct = maxProgressPct;
+                                existingView.isComplete = updatedIsComplete;
+                                existingView.lastViewedAt = now;
+                                yield existingView.save();
+                            }
+                            const currentSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songIdObj).select("viewCount").lean();
+                            return {
+                                viewCount: (currentSong === null || currentSong === void 0 ? void 0 : currentSong.viewCount) || 0,
+                                hasViewed: true,
+                                isNewView: false,
+                            };
+                        }
+                        catch (recoveryError) {
+                            logger_1.default.error("Error during duplicate key recovery:", {
+                                error: recoveryError.message,
+                                stack: recoveryError.stack,
+                                code: recoveryError.code,
+                                name: recoveryError.name,
+                                userId,
+                                songId,
+                            });
+                            throw recoveryError;
+                        }
+                    }
+                    // Re-throw transaction errors
+                    logger_1.default.error("Error in transaction while recording view:", {
+                        error: error.message,
+                        stack: error.stack,
+                        code: error.code,
+                        codeName: error.codeName,
+                        name: error.name,
+                        userId,
+                        songId,
+                        durationMs,
+                        progressPct,
+                        isComplete,
+                    });
+                    throw error;
                 }
-                const interaction = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOneAndUpdate({ userId: userIdObj, songId: songIdObj }, updateData, {
-                    upsert: true,
-                    new: true,
-                    session,
-                });
-                if (isNewView) {
-                    // Increment view count only for new views
-                    yield copyrightFreeSong_model_1.CopyrightFreeSong.findByIdAndUpdate(songId, { $inc: { viewCount: 1 } }, { session });
+                finally {
+                    yield session.endSession();
                 }
-                yield session.commitTransaction();
-                // Get updated song with new view count
-                const updatedSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId).select("viewCount").lean();
-                return {
-                    viewCount: (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) || 0,
-                    hasViewed: true,
-                    isNewView: isNewView,
-                };
             }
             catch (error) {
-                yield session.abortTransaction();
-                // Handle duplicate key error (race condition)
-                if (error.code === 11000 || error.message.includes("duplicate")) {
-                    // Another request already created the view record
-                    // Fetch the existing record and return current count
-                    const existingView = yield copyrightFreeSongInteraction_model_1.CopyrightFreeSongInteraction.findOne({
-                        userId: userIdObj,
-                        songId: songIdObj,
-                    });
-                    if (existingView) {
-                        // Update engagement metrics
-                        existingView.durationMs = Math.max(existingView.durationMs || 0, durationMs || 0);
-                        existingView.progressPct = Math.max(existingView.progressPct || 0, progressPct || 0);
-                        existingView.isComplete = existingView.isComplete || isComplete;
-                        existingView.lastViewedAt = now;
-                        yield existingView.save();
-                    }
-                    const currentSong = yield copyrightFreeSong_model_1.CopyrightFreeSong.findById(songId).select("viewCount").lean();
-                    return {
-                        viewCount: (currentSong === null || currentSong === void 0 ? void 0 : currentSong.viewCount) || 0,
-                        hasViewed: true,
-                        isNewView: false,
-                    };
-                }
-                logger_1.default.error("Error recording view:", error);
+                // Enhanced error logging with all relevant details
+                logger_1.default.error("Error recording view:", {
+                    error: error.message,
+                    stack: error.stack,
+                    code: error.code,
+                    codeName: error.codeName,
+                    name: error.name,
+                    userId,
+                    songId,
+                    durationMs,
+                    progressPct,
+                    isComplete,
+                    mongoError: error.code,
+                    mongoErrorCode: error.codeName,
+                    errorType: error.constructor.name,
+                });
+                // Re-throw to be handled by controller
                 throw error;
-            }
-            finally {
-                session.endSession();
             }
         });
     }

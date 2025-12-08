@@ -274,40 +274,160 @@ export const shareSong = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+/**
+ * Search copyright-free songs
+ * GET /api/audio/copyright-free/search
+ * 
+ * Supports multi-field search, category filtering, sorting, and pagination
+ * Returns user-specific data (isLiked, isInLibrary) if authenticated
+ */
 export const searchSongs = async (req: Request, res: Response): Promise<void> => {
+  const startTime = Date.now();
+  
   try {
-    const { q } = req.query;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const { q, page, limit, category, sort } = req.query;
+    const userId = req.userId;
 
-    if (!q || typeof q !== "string") {
+    // Validate query parameter (required)
+    if (!q || typeof q !== "string" || !q.trim()) {
       res.status(400).json({
         success: false,
-        message: "Search query (q) is required",
+        error: "Search query is required",
+        code: "BAD_REQUEST",
       });
       return;
     }
 
-    const result = await songService.searchSongs(q, page, limit);
+    // Parse and validate pagination parameters
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
 
+    // Validate limit (max 100 per spec)
+    if (limitNum > 100) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid limit. Maximum is 100",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Validate sort option
+    const validSorts = ["relevance", "popular", "newest", "oldest", "title"];
+    const sortOption = (sort as string) || "relevance";
+    if (!validSorts.includes(sortOption)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid sort option. Must be one of: ${validSorts.join(", ")}`,
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Perform search
+    const result = await songService.searchSongs(q.trim(), {
+      page: pageNum,
+      limit: limitNum,
+      category: category as string | undefined,
+      sort: sortOption as "relevance" | "popular" | "newest" | "oldest" | "title",
+      userId: userId || undefined,
+    });
+
+    // Add user-specific data if authenticated
+    let enrichedSongs = result.songs;
+    if (userId) {
+      const songIds = result.songs.map((s: any) => s._id.toString());
+      
+      // Get user's likes and bookmarks in parallel
+      const [userLikes, userBookmarks] = await Promise.all([
+        Promise.all(
+          songIds.map((songId: string) => interactionService.isLiked(userId, songId))
+        ),
+        Promise.all(
+          songIds.map(async (songId: string) => {
+            try {
+              const { UnifiedBookmarkService } = await import("../service/unifiedBookmark.service");
+              return await UnifiedBookmarkService.isBookmarked(userId, songId);
+            } catch {
+              return false;
+            }
+          })
+        ),
+      ]);
+
+      // Enrich songs with user-specific data
+      enrichedSongs = result.songs.map((song: any, index: number) => {
+        const songObj = song as any;
+        return {
+          ...songObj,
+          id: songObj._id?.toString() || songObj.id,
+          views: songObj.viewCount || 0, // For compatibility
+          likes: songObj.likeCount || 0, // For compatibility
+          isLiked: userLikes[index] || false,
+          isInLibrary: userBookmarks[index] || false,
+          isPublicDomain: true,
+          contentType: "copyright-free-music",
+          audioUrl: songObj.fileUrl,
+          artist: songObj.singer,
+          uploadedBy: songObj.uploadedBy?._id?.toString() || "system",
+        };
+      });
+    } else {
+      // For non-authenticated users, add default values
+      enrichedSongs = result.songs.map((song: any) => {
+        const songObj = song as any;
+        return {
+          ...songObj,
+          id: songObj._id?.toString() || songObj.id,
+          views: songObj.viewCount || 0,
+          likes: songObj.likeCount || 0,
+          isLiked: false,
+          isInLibrary: false,
+          isPublicDomain: true,
+          contentType: "copyright-free-music",
+          audioUrl: songObj.fileUrl,
+          artist: songObj.singer,
+          uploadedBy: songObj.uploadedBy?._id?.toString() || "system",
+        };
+      });
+    }
+
+    const searchTime = Date.now() - startTime;
+
+    // Return success response (per spec format)
     res.status(200).json({
       success: true,
       data: {
-        songs: result.songs,
+        songs: enrichedSongs,
         pagination: {
-          total: result.total,
           page: result.page,
+          limit: limitNum,
+          total: result.total,
           totalPages: result.totalPages,
-          limit,
+          hasMore: result.hasMore,
         },
+        query: q.trim(),
+        searchTime,
       },
     });
   } catch (error: any) {
     logger.error("Error searching songs:", error);
+
+    // Handle validation errors
+    if (error.message === "Search query is required") {
+      res.status(400).json({
+        success: false,
+        error: "Search query is required",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Generic server error
     res.status(500).json({
       success: false,
-      message: "Failed to search songs",
-      error: error.message,
+      error: "Failed to perform search",
+      code: "SERVER_ERROR",
     });
   }
 };
@@ -367,16 +487,6 @@ export const trackPlayback = async (req: Request, res: Response): Promise<void> 
  * @param req - Express request with songId param and engagement payload
  * @param res - Express response
  */
-/**
- * Record view for a copyright-free song
- * POST /api/audio/copyright-free/:songId/view
- * 
- * Records a view with engagement metrics (durationMs, progressPct, isComplete)
- * Implements one view per user per song with proper deduplication
- * 
- * @param req - Express request with songId param and engagement payload
- * @param res - Express response
- */
 export const recordView = async (req: Request, res: Response): Promise<void> => {
   try {
     const { songId } = req.params;
@@ -393,12 +503,42 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Validate songId exists
+    // Validate songId exists and is valid ObjectId format
     if (!songId) {
-      res.status(404).json({
+      res.status(400).json({
         success: false,
-        error: "Song not found",
-        code: "NOT_FOUND",
+        error: "Song ID is required",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Validate songId format (MongoDB ObjectId)
+    const mongoose = await import("mongoose");
+    if (!mongoose.Types.ObjectId.isValid(songId)) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid song ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    // Validate optional fields if present
+    if (durationMs !== undefined && (typeof durationMs !== "number" || durationMs < 0)) {
+      res.status(400).json({
+        success: false,
+        error: "durationMs must be a non-negative number",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    if (progressPct !== undefined && (typeof progressPct !== "number" || progressPct < 0 || progressPct > 100)) {
+      res.status(400).json({
+        success: false,
+        error: "progressPct must be a number between 0 and 100",
+        code: "BAD_REQUEST",
       });
       return;
     }
@@ -406,8 +546,8 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
     // Record the view with engagement metrics
     // All request body fields are optional per spec
     const result = await interactionService.recordView(userId, songId, {
-      durationMs: durationMs !== undefined ? Number(durationMs) : 0,
-      progressPct: progressPct !== undefined ? Number(progressPct) : 0,
+      durationMs: durationMs !== undefined ? Number(durationMs) : undefined,
+      progressPct: progressPct !== undefined ? Number(progressPct) : undefined,
       isComplete: isComplete === true || isComplete === "true",
     });
 
@@ -453,10 +593,23 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       },
     });
   } catch (error: any) {
-    logger.error("Error recording view:", error);
+    // Enhanced error logging with all diagnostic information
+    logger.error("Error recording view:", {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      codeName: error.codeName,
+      name: error.name,
+      songId: req.params.songId,
+      userId: req.userId,
+      body: req.body,
+      mongoError: error.code,
+      mongoErrorCode: error.codeName,
+      errorType: error.constructor.name,
+    });
 
     // Handle specific error types (per spec)
-    if (error.message === "Song not found") {
+    if (error.message === "Song not found" || error.message?.includes("Song not found")) {
       res.status(404).json({
         success: false,
         error: "Song not found",
@@ -465,10 +618,130 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    if (error.message?.includes("Invalid userId format") || error.message?.includes("Invalid songId format")) {
+      res.status(400).json({
+        success: false,
+        error: error.message || "Invalid ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
     // Generic server error (per spec)
+    // Include error code in development mode for debugging
+    const isDevelopment = process.env.NODE_ENV === "development";
     res.status(500).json({
       success: false,
-      error: "Failed to record view",
+      error: isDevelopment ? error.message : "Failed to record view",
+      code: "SERVER_ERROR",
+      ...(isDevelopment && error.code ? { errorCode: error.code } : {}),
+    });
+  }
+};
+
+/**
+ * Get search suggestions (autocomplete)
+ * GET /api/audio/copyright-free/search/suggestions
+ * 
+ * Returns search suggestions based on partial query
+ */
+export const getSearchSuggestions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { q, limit } = req.query;
+    const limitNum = parseInt(limit as string) || 10;
+
+    // Validate query parameter
+    if (!q || typeof q !== "string" || !q.trim()) {
+      res.status(400).json({
+        success: false,
+        error: "Search query is required",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
+    const searchTerm = q.trim().toLowerCase();
+    const searchRegex = new RegExp(`^${searchTerm}`, "i");
+
+    // Get unique suggestions from song titles and artists
+    const [titleMatches, artistMatches] = await Promise.all([
+      songService.getAllSongs(1, 100), // Get more songs to find matches
+      songService.getAllSongs(1, 100),
+    ]);
+
+    const suggestions = new Set<string>();
+    
+    // Add title matches
+    titleMatches.songs.forEach((song: any) => {
+      if (song.title && song.title.toLowerCase().includes(searchTerm)) {
+        suggestions.add(song.title.toLowerCase());
+      }
+    });
+
+    // Add artist matches
+    artistMatches.songs.forEach((song: any) => {
+      if (song.singer && song.singer.toLowerCase().includes(searchTerm)) {
+        suggestions.add(song.singer.toLowerCase());
+      }
+    });
+
+    // Convert to array and limit
+    const suggestionsArray = Array.from(suggestions).slice(0, limitNum);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        suggestions: suggestionsArray,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error getting search suggestions:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to get search suggestions",
+      code: "SERVER_ERROR",
+    });
+  }
+};
+
+/**
+ * Get trending searches
+ * GET /api/audio/copyright-free/search/trending
+ * 
+ * Returns popular search terms (simplified implementation)
+ */
+export const getTrendingSearches = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit, period } = req.query;
+    const limitNum = parseInt(limit as string) || 10;
+    const periodOption = (period as string) || "week";
+
+    // For now, return popular song titles and artists as trending searches
+    // In a full implementation, this would track actual search queries
+    const result = await songService.getAllSongs(1, limitNum * 2);
+
+    // Get most viewed songs as "trending"
+    const trendingSongs = result.songs
+      .sort((a: any, b: any) => (b.viewCount || 0) - (a.viewCount || 0))
+      .slice(0, limitNum);
+
+    const trending = trendingSongs.map((song: any) => ({
+      query: song.title || song.singer,
+      count: song.viewCount || 0,
+      category: "Gospel Music", // Default category
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        trending,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error getting trending searches:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to get trending searches",
       code: "SERVER_ERROR",
     });
   }

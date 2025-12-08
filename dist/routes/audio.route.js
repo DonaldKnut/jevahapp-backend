@@ -80,10 +80,26 @@ router.get("/copyright-free/:songId", rateLimiter_1.apiRateLimiter, copyrightFre
  * @route   GET /api/audio/copyright-free/search
  * @desc    Search copyright-free songs (Public)
  * @access  Public (No authentication required)
- * @query   { q: string (required), page?, limit? }
- * @returns { success: boolean, data: { songs: Song[], pagination: object } }
+ * @query   { q: string (required), page?, limit?, category?, sort? }
+ * @returns { success: boolean, data: { songs: Song[], pagination: object, query: string, searchTime: number } }
  */
 router.get("/copyright-free/search", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.searchSongs);
+/**
+ * @route   GET /api/audio/copyright-free/search/suggestions
+ * @desc    Get search suggestions/autocomplete (Public)
+ * @access  Public (No authentication required)
+ * @query   { q: string (required), limit? }
+ * @returns { success: boolean, data: { suggestions: string[] } }
+ */
+router.get("/copyright-free/search/suggestions", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.getSearchSuggestions);
+/**
+ * @route   GET /api/audio/copyright-free/search/trending
+ * @desc    Get trending searches (Public)
+ * @access  Public (No authentication required)
+ * @query   { limit?, period? }
+ * @returns { success: boolean, data: { trending: TrendingSearch[] } }
+ */
+router.get("/copyright-free/search/trending", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.getTrendingSearches);
 /**
  * @route   POST /api/audio/copyright-free
  * @desc    Create a copyright-free song (Admin Only)

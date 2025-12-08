@@ -62,6 +62,7 @@ const playlist_route_1 = __importDefault(require("./routes/playlist.route"));
 const playbackSession_route_1 = __importDefault(require("./routes/playbackSession.route"));
 const comment_route_1 = __importDefault(require("./routes/comment.route"));
 const audio_route_1 = __importDefault(require("./routes/audio.route"));
+const search_route_1 = __importDefault(require("./routes/search.route"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -290,6 +291,7 @@ app.use("/api/playlists", playlist_route_1.default);
 app.use("/api/media", playbackSession_route_1.default);
 app.use("/api/comments", comment_route_1.default);
 app.use("/api/audio", audio_route_1.default);
+app.use("/api/search", search_route_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({

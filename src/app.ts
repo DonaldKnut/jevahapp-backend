@@ -49,6 +49,7 @@ import playlistRoutes from "./routes/playlist.route";
 import playbackSessionRoutes from "./routes/playbackSession.route";
 import commentRoutes from "./routes/comment.route";
 import audioRoutes from "./routes/audio.route";
+import searchRoutes from "./routes/search.route";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -311,6 +312,7 @@ app.use("/api/playlists", playlistRoutes);
 app.use("/api/media", playbackSessionRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/audio", audioRoutes);
+app.use("/api/search", searchRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {
