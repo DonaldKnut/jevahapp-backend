@@ -60,6 +60,27 @@ const interactionSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false,
     },
+    // View engagement metrics (optional, for analytics)
+    durationMs: {
+        type: Number,
+        default: 0,
+    },
+    progressPct: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+    },
+    isComplete: {
+        type: Boolean,
+        default: false,
+    },
+    viewedAt: {
+        type: Date,
+    },
+    lastViewedAt: {
+        type: Date,
+    },
 }, {
     timestamps: true,
 });

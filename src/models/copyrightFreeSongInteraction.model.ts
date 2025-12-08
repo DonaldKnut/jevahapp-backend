@@ -6,6 +6,12 @@ export interface ICopyrightFreeSongInteraction extends Document {
   hasLiked: boolean;
   hasShared: boolean;
   hasViewed: boolean;
+  // View engagement metrics (for analytics)
+  durationMs?: number; // Total listening duration in milliseconds
+  progressPct?: number; // Maximum progress reached (0-100)
+  isComplete?: boolean; // Whether song was played to completion
+  viewedAt?: Date; // First view timestamp
+  lastViewedAt?: Date; // Last view timestamp (for analytics)
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +41,27 @@ const interactionSchema = new Schema<ICopyrightFreeSongInteraction>(
     hasViewed: {
       type: Boolean,
       default: false,
+    },
+    // View engagement metrics (optional, for analytics)
+    durationMs: {
+      type: Number,
+      default: 0,
+    },
+    progressPct: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    isComplete: {
+      type: Boolean,
+      default: false,
+    },
+    viewedAt: {
+      type: Date,
+    },
+    lastViewedAt: {
+      type: Date,
     },
   },
   {

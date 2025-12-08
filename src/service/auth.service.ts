@@ -13,11 +13,14 @@ import {
 } from "../utils/clerk";
 import fileUploadService from "./fileUpload.service";
 import aiReengagementService from "./aiReengagement.service";
+import { TOKEN_EXPIRATION, JWT_SECRET } from "../config/tokenConfig";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not defined in environment variables");
 }
+
+// Type assertion: JWT_SECRET is guaranteed to be defined after the check above
+const JWT_SECRET_ASSERTED: string = JWT_SECRET;
 
 class AuthService {
   private setVerificationFlags(role: string) {
@@ -96,7 +99,7 @@ class AuthService {
       }
 
       // Generate JWT token for backend authentication
-      const jwtToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
+      const jwtToken = jwt.sign({ userId: user._id }, JWT_SECRET_ASSERTED, {
         expiresIn: "7d",
       });
 
@@ -504,10 +507,22 @@ class AuthService {
       throw new Error("Please verify your email before logging in");
     }
 
-    // Generate access token (short-lived: 15 minutes for regular, 7 days if rememberMe)
-    const accessTokenExpiry = rememberMe ? "7d" : "15m";
-    const accessToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
-      expiresIn: accessTokenExpiry,
+    // Determine token expiration based on rememberMe flag
+    // rememberMe: true → 30 days, rememberMe: false → 7 days
+    const expiresIn = rememberMe 
+      ? TOKEN_EXPIRATION.REMEMBER_ME 
+      : TOKEN_EXPIRATION.STANDARD;
+
+    // Generate access token with rememberMe flag in payload
+    const tokenPayload = {
+      userId: user._id.toString(),
+      email: user.email,
+      rememberMe: rememberMe,
+    };
+
+    const accessToken = jwt.sign(tokenPayload, JWT_SECRET_ASSERTED, {
+      expiresIn: expiresIn,
+      algorithm: 'HS256',
     });
 
     let refreshToken: string | undefined;
@@ -544,9 +559,13 @@ class AuthService {
     // Track user return for re-engagement
     await aiReengagementService.trackUserReturn(user._id.toString());
 
+    // Log login event for security monitoring
+    console.log(`🔐 User login: ${user.email}, Remember Me: ${rememberMe}, Expires in: ${expiresIn}s`);
+
     return {
       accessToken,
       refreshToken,
+      expiresIn, // Token expiration in seconds
       user: {
         id: user._id,
         email: user.email,
@@ -980,13 +999,23 @@ class AuthService {
         throw new Error("Account is banned");
       }
 
-      // Generate new access token (15 minutes)
-      const newAccessToken = jwt.sign({ userId: user._id }, JWT_SECRET, {
-        expiresIn: "15m",
+      // Generate new access token
+      // Since refresh tokens are only created when rememberMe=true,
+      // we issue a long-lived access token (30 days) when refreshing
+      const tokenPayload = {
+        userId: user._id.toString(),
+        email: user.email,
+        rememberMe: true, // Refresh tokens imply rememberMe was enabled
+      };
+
+      const newAccessToken = jwt.sign(tokenPayload, JWT_SECRET_ASSERTED, {
+        expiresIn: TOKEN_EXPIRATION.REMEMBER_ME,
+        algorithm: 'HS256',
       });
 
       return {
         accessToken: newAccessToken,
+        expiresIn: TOKEN_EXPIRATION.REMEMBER_ME, // Token expiration in seconds
         user: {
           id: user._id,
           email: user.email,

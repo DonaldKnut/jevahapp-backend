@@ -750,20 +750,19 @@ export const shareContent = async (
       return;
     }
 
-    // For now, we'll use the existing share service
-    // TODO: Extend this to support all content types
-    const { default: shareService } = await import("../service/share.service");
-
-    const shareUrls = await shareService.generateSocialShareUrls(
+    // Use contentInteractionService to track share and get shareCount
+    const result = await contentInteractionService.shareContent(
+      userId,
       contentId,
-      message
+      contentType,
+      platform
     );
 
     res.status(200).json({
       success: true,
       message: "Content shared successfully",
       data: {
-        shareUrls,
+        shareCount: result.shareCount,
         platform,
         contentType,
       },

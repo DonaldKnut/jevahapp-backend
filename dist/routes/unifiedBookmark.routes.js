@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_middleware_1 = require("../middleware/auth.middleware");
@@ -48,7 +57,14 @@ const router = (0, express_1.Router)();
  *       500:
  *         description: Internal server error
  */
+// Support both :mediaId and :contentId for frontend compatibility
 router.post("/:mediaId/toggle", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, unifiedBookmark_controller_1.toggleBookmark);
+// Alias route for frontend spec compatibility (contentId = mediaId)
+router.post("/:contentId/toggle", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    req.params.mediaId = req.params.contentId;
+    delete req.params.contentId;
+    yield (0, unifiedBookmark_controller_1.toggleBookmark)(req, res);
+}));
 /**
  * @swagger
  * /api/bookmark/{mediaId}/status:
@@ -89,6 +105,12 @@ router.post("/:mediaId/toggle", auth_middleware_1.verifyToken, rateLimiter_1.api
  *         description: Internal server error
  */
 router.get("/:mediaId/status", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, unifiedBookmark_controller_1.getBookmarkStatus);
+// Alias route for frontend spec compatibility (contentId = mediaId)
+router.get("/:contentId/status", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    req.params.mediaId = req.params.contentId;
+    delete req.params.contentId;
+    yield (0, unifiedBookmark_controller_1.getBookmarkStatus)(req, res);
+}));
 /**
  * @swagger
  * /api/bookmark/user:

@@ -377,35 +377,47 @@ const trackPlayback = (req, res) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.trackPlayback = trackPlayback;
 /**
- * Record view for a copyright-free song (matches frontend expectations)
- * Frontend calls this when user views/listens to a song
+ * Record view for a copyright-free song
+ * POST /api/audio/copyright-free/:songId/view
+ *
+ * Records a view with engagement metrics (durationMs, progressPct, isComplete)
+ * Implements one view per user per song with proper deduplication
+ *
+ * @param req - Express request with songId param and engagement payload
+ * @param res - Express response
  */
 const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { songId } = req.params;
         const userId = req.userId;
         const { durationMs, progressPct, isComplete } = req.body;
+        // Authentication check
         if (!userId) {
             res.status(401).json({
                 success: false,
-                message: "Authentication required",
+                error: "Authentication required",
+                code: "UNAUTHORIZED",
             });
             return;
         }
-        // Check if user already viewed this song (one view per user per song)
-        const interaction = yield interactionService.getInteraction(userId, songId);
-        const hasViewed = (interaction === null || interaction === void 0 ? void 0 : interaction.hasViewed) || false;
-        let viewCount;
-        if (!hasViewed) {
-            // First view - increment count
-            yield songService.incrementViewCount(songId);
-            // Mark as viewed
-            yield interactionService.markAsViewed(userId, songId);
+        // Validate songId format
+        if (!songId || !songId.match(/^[0-9a-fA-F]{24}$/)) {
+            res.status(400).json({
+                success: false,
+                error: "Invalid song ID",
+                code: "VALIDATION_ERROR",
+            });
+            return;
         }
-        // Get updated song with latest counts
+        // Record the view with engagement metrics
+        const result = yield interactionService.recordView(userId, songId, {
+            durationMs: durationMs ? Number(durationMs) : 0,
+            progressPct: progressPct ? Number(progressPct) : 0,
+            isComplete: isComplete === true || isComplete === "true",
+        });
+        // Get updated song for real-time updates
         const updatedSong = yield songService.getSongById(songId);
-        viewCount = (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.viewCount) || 0;
-        // Emit realtime update to all clients viewing this song
+        // Emit real-time update via WebSocket (if configured)
         try {
             const { getIO } = yield Promise.resolve().then(() => __importStar(require("../socket/socketManager")));
             const io = getIO();
@@ -413,13 +425,14 @@ const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 const roomKey = `content:audio:${songId}`;
                 io.to(roomKey).emit("copyright-free-song-interaction-updated", {
                     songId,
-                    viewCount,
+                    viewCount: result.viewCount,
                     likeCount: (updatedSong === null || updatedSong === void 0 ? void 0 : updatedSong.likeCount) || 0,
                 });
                 logger_1.default.debug("Emitted realtime view update", {
                     songId,
                     roomKey,
-                    viewCount,
+                    viewCount: result.viewCount,
+                    isNewView: result.isNewView,
                 });
             }
         }
@@ -430,20 +443,31 @@ const recordView = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 songId,
             });
         }
+        // Return success response
         res.status(200).json({
             success: true,
             data: {
-                viewCount,
-                hasViewed: true, // Always true after this call
+                viewCount: result.viewCount,
+                hasViewed: result.hasViewed,
             },
         });
     }
     catch (error) {
         logger_1.default.error("Error recording view:", error);
+        // Handle specific error types
+        if (error.message === "Song not found") {
+            res.status(404).json({
+                success: false,
+                error: "Song not found",
+                code: "NOT_FOUND",
+            });
+            return;
+        }
+        // Generic server error
         res.status(500).json({
             success: false,
-            message: "Failed to record view",
-            error: error.message,
+            error: "Failed to record view",
+            code: "SERVER_ERROR",
         });
     }
 });

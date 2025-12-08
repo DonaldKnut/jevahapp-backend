@@ -54,7 +54,14 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
+// Support both :mediaId and :contentId for frontend compatibility
 router.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
+// Alias route for frontend spec compatibility (contentId = mediaId)
+router.post("/:contentId/toggle", verifyToken, apiRateLimiter, async (req, res) => {
+  req.params.mediaId = req.params.contentId;
+  delete req.params.contentId;
+  await toggleBookmark(req, res);
+});
 
 /**
  * @swagger
@@ -96,6 +103,12 @@ router.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
  *         description: Internal server error
  */
 router.get("/:mediaId/status", verifyToken, apiRateLimiter, getBookmarkStatus);
+// Alias route for frontend spec compatibility (contentId = mediaId)
+router.get("/:contentId/status", verifyToken, apiRateLimiter, async (req, res) => {
+  req.params.mediaId = req.params.contentId;
+  delete req.params.contentId;
+  await getBookmarkStatus(req, res);
+});
 
 /**
  * @swagger

@@ -217,6 +217,8 @@ class AuthController {
                     token: result.accessToken, // Access token for Authorization header
                     accessToken: result.accessToken, // Alias for clarity
                     user: result.user,
+                    expiresIn: result.expiresIn, // Token expiration time in seconds
+                    tokenType: "bearer", // Token type
                     rememberMe: rememberMe,
                 });
             }

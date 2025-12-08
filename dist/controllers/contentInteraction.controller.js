@@ -651,15 +651,13 @@ const shareContent = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             });
             return;
         }
-        // For now, we'll use the existing share service
-        // TODO: Extend this to support all content types
-        const { default: shareService } = yield Promise.resolve().then(() => __importStar(require("../service/share.service")));
-        const shareUrls = yield shareService.generateSocialShareUrls(contentId, message);
+        // Use contentInteractionService to track share and get shareCount
+        const result = yield contentInteraction_service_1.default.shareContent(userId, contentId, contentType, platform);
         res.status(200).json({
             success: true,
             message: "Content shared successfully",
             data: {
-                shareUrls,
+                shareCount: result.shareCount,
                 platform,
                 contentType,
             },

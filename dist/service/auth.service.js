@@ -55,10 +55,12 @@ const email_service_1 = __importDefault(require("./email.service"));
 const clerk_1 = require("../utils/clerk");
 const fileUpload_service_1 = __importDefault(require("./fileUpload.service"));
 const aiReengagement_service_1 = __importDefault(require("./aiReengagement.service"));
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+const tokenConfig_1 = require("../config/tokenConfig");
+if (!tokenConfig_1.JWT_SECRET) {
     throw new Error("JWT_SECRET is not defined in environment variables");
 }
+// Type assertion: JWT_SECRET is guaranteed to be defined after the check above
+const JWT_SECRET_ASSERTED = tokenConfig_1.JWT_SECRET;
 class AuthService {
     setVerificationFlags(role) {
         const verificationFlags = {
@@ -124,7 +126,7 @@ class AuthService {
                     }
                 }
                 // Generate JWT token for backend authentication
-                const jwtToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
+                const jwtToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET_ASSERTED, {
                     expiresIn: "7d",
                 });
                 return {
@@ -415,10 +417,20 @@ class AuthService {
             if (!user.isEmailVerified) {
                 throw new Error("Please verify your email before logging in");
             }
-            // Generate access token (short-lived: 15 minutes for regular, 7 days if rememberMe)
-            const accessTokenExpiry = rememberMe ? "7d" : "15m";
-            const accessToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
-                expiresIn: accessTokenExpiry,
+            // Determine token expiration based on rememberMe flag
+            // rememberMe: true → 30 days, rememberMe: false → 7 days
+            const expiresIn = rememberMe
+                ? tokenConfig_1.TOKEN_EXPIRATION.REMEMBER_ME
+                : tokenConfig_1.TOKEN_EXPIRATION.STANDARD;
+            // Generate access token with rememberMe flag in payload
+            const tokenPayload = {
+                userId: user._id.toString(),
+                email: user.email,
+                rememberMe: rememberMe,
+            };
+            const accessToken = jsonwebtoken_1.default.sign(tokenPayload, JWT_SECRET_ASSERTED, {
+                expiresIn: expiresIn,
+                algorithm: 'HS256',
             });
             let refreshToken;
             // If rememberMe is true, generate a long-lived refresh token (90 days)
@@ -447,9 +459,12 @@ class AuthService {
             });
             // Track user return for re-engagement
             yield aiReengagement_service_1.default.trackUserReturn(user._id.toString());
+            // Log login event for security monitoring
+            console.log(`🔐 User login: ${user.email}, Remember Me: ${rememberMe}, Expires in: ${expiresIn}s`);
             return {
                 accessToken,
                 refreshToken,
+                expiresIn, // Token expiration in seconds
                 user: {
                     id: user._id,
                     email: user.email,
@@ -792,12 +807,21 @@ class AuthService {
                     yield RefreshToken.updateMany({ userId: user._id }, { isRevoked: true, revokedAt: new Date() });
                     throw new Error("Account is banned");
                 }
-                // Generate new access token (15 minutes)
-                const newAccessToken = jsonwebtoken_1.default.sign({ userId: user._id }, JWT_SECRET, {
-                    expiresIn: "15m",
+                // Generate new access token
+                // Since refresh tokens are only created when rememberMe=true,
+                // we issue a long-lived access token (30 days) when refreshing
+                const tokenPayload = {
+                    userId: user._id.toString(),
+                    email: user.email,
+                    rememberMe: true, // Refresh tokens imply rememberMe was enabled
+                };
+                const newAccessToken = jsonwebtoken_1.default.sign(tokenPayload, JWT_SECRET_ASSERTED, {
+                    expiresIn: tokenConfig_1.TOKEN_EXPIRATION.REMEMBER_ME,
+                    algorithm: 'HS256',
                 });
                 return {
                     accessToken: newAccessToken,
+                    expiresIn: tokenConfig_1.TOKEN_EXPIRATION.REMEMBER_ME, // Token expiration in seconds
                     user: {
                         id: user._id,
                         email: user.email,
