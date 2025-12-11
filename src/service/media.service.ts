@@ -339,16 +339,14 @@ export class MediaService {
     limit?: number;
   }) {
     try {
-      // Backward compatibility: if no pagination params provided, return all items
-      const usePagination = options?.page !== undefined || options?.limit !== undefined;
-      
+      // Always enforce pagination for mobile-friendly payloads (prevents excessive data usage)
+      // Default: page 1, limit 50 (mobile-optimized to save data/airtime)
       const page = options?.page && options.page > 0 ? options.page : 1;
-      const rawLimit =
-        options?.limit && options.limit > 0 ? options.limit : (usePagination ? 50 : undefined);
+      const rawLimit = options?.limit && options.limit > 0 ? options.limit : 50;
       
-      // Clamp for mobile-friendly payloads (only if pagination is requested)
-      const limit = rawLimit ? Math.min(Math.max(rawLimit, 10), 100) : undefined;
-      const skip = limit ? (page - 1) * limit : 0;
+      // Clamp for mobile-friendly payloads (min 10, max 100)
+      const limit = Math.min(Math.max(rawLimit, 10), 100);
+      const skip = (page - 1) * limit;
 
       // Reuse the shared aggregation pipeline with author + engagement info
       const pipeline = this.buildAggregationPipeline(
@@ -361,9 +359,7 @@ export class MediaService {
       if (skip > 0) {
         pipeline.push({ $skip: skip });
       }
-      if (limit) {
-        pipeline.push({ $limit: limit });
-      }
+      pipeline.push({ $limit: limit });
 
       const [mediaList, total] = await Promise.all([
         Media.aggregate(pipeline),
@@ -372,15 +368,13 @@ export class MediaService {
 
       return {
         media: mediaList,
-        total: usePagination ? total : mediaList.length, // Backward compat: return array length if no pagination
-        ...(usePagination && {
-          pagination: {
-            page,
-            limit: limit!,
-            total,
-            pages: Math.ceil(total / limit!),
-          },
-        }),
+        total,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
       };
     } catch (error) {
       console.error("Error fetching all content:", error);

@@ -140,8 +140,42 @@ app.use((0, cors_1.default)({
         "expo-platform",
     ],
 }));
-// Compression middleware
-app.use((0, compression_1.default)());
+// Compression middleware - Optimized for mobile data savings
+// Compresses JSON/text responses to reduce mobile data usage (airtime)
+// This significantly reduces the amount of data transferred, saving users' mobile data/airtime
+app.use((0, compression_1.default)({
+    // Compress responses larger than 1KB (saves data on all API responses)
+    // Smaller responses don't benefit much from compression overhead
+    threshold: 1024,
+    // Use compression level 6 (good balance between CPU usage and compression ratio)
+    // Higher levels (7-9) use more CPU but compress better - 6 is optimal for mobile
+    level: 6,
+    // Filter: compress JSON, text, and common API response types
+    // Skip already-compressed formats (images, videos, etc.) to save CPU
+    filter: (req, res) => {
+        // Don't compress if client explicitly doesn't want it
+        if (req.headers["x-no-compression"]) {
+            return false;
+        }
+        // Get content type from response headers
+        const contentType = res.getHeader("content-type");
+        if (typeof contentType === "string") {
+            // Compress JSON and text responses (most API responses)
+            // These compress very well (often 70-90% reduction)
+            const compressibleTypes = [
+                "application/json",
+                "text/",
+                "application/javascript",
+                "application/xml",
+                "application/x-www-form-urlencoded",
+            ];
+            return compressibleTypes.some((type) => contentType.includes(type));
+        }
+        // For responses without content-type or unknown types, use default behavior
+        // Default compression filter checks Accept-Encoding header
+        return true;
+    },
+}));
 // Keep-Alive headers for better connection reuse
 app.use((req, res, next) => {
     res.setHeader("Connection", "keep-alive");

@@ -54,7 +54,9 @@ const interactionService = new copyrightFreeSongInteraction_service_1.CopyrightF
 const getAllSongs = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
+        let limit = parseInt(req.query.limit) || 20;
+        // Enforce maximum limit for mobile-friendly payloads
+        limit = Math.min(Math.max(limit, 1), 100);
         const result = yield songService.getAllSongs(page, limit);
         res.status(200).json({
             success: true,
@@ -618,7 +620,7 @@ exports.recordView = recordView;
 const getSearchSuggestions = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { q, limit } = req.query;
-        const limitNum = parseInt(limit) || 10;
+        const limitNum = Math.min(parseInt(limit) || 10, 20); // Max 20 suggestions
         // Validate query parameter
         if (!q || typeof q !== "string" || !q.trim()) {
             res.status(400).json({
@@ -630,21 +632,33 @@ const getSearchSuggestions = (req, res) => __awaiter(void 0, void 0, void 0, fun
         }
         const searchTerm = q.trim().toLowerCase();
         const searchRegex = new RegExp(`^${searchTerm}`, "i");
-        // Get unique suggestions from song titles and artists
+        // Use efficient database query instead of fetching all songs
+        const { CopyrightFreeSong } = yield Promise.resolve().then(() => __importStar(require("../models/copyrightFreeSong.model")));
+        // Query for matching titles and singers in a single efficient query
         const [titleMatches, artistMatches] = yield Promise.all([
-            songService.getAllSongs(1, 100), // Get more songs to find matches
-            songService.getAllSongs(1, 100),
+            CopyrightFreeSong.find({
+                title: { $regex: searchRegex, $options: "i" }
+            })
+                .select("title")
+                .limit(50)
+                .lean(),
+            CopyrightFreeSong.find({
+                singer: { $regex: searchRegex, $options: "i" }
+            })
+                .select("singer")
+                .limit(50)
+                .lean(),
         ]);
         const suggestions = new Set();
-        // Add title matches
-        titleMatches.songs.forEach((song) => {
-            if (song.title && song.title.toLowerCase().includes(searchTerm)) {
+        // Add unique title matches
+        titleMatches.forEach((song) => {
+            if (song.title) {
                 suggestions.add(song.title.toLowerCase());
             }
         });
-        // Add artist matches
-        artistMatches.songs.forEach((song) => {
-            if (song.singer && song.singer.toLowerCase().includes(searchTerm)) {
+        // Add unique artist matches
+        artistMatches.forEach((song) => {
+            if (song.singer) {
                 suggestions.add(song.singer.toLowerCase());
             }
         });
@@ -676,15 +690,15 @@ exports.getSearchSuggestions = getSearchSuggestions;
 const getTrendingSearches = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { limit, period } = req.query;
-        const limitNum = parseInt(limit) || 10;
+        const limitNum = Math.min(parseInt(limit) || 10, 20); // Max 20 trending
         const periodOption = period || "week";
-        // For now, return popular song titles and artists as trending searches
-        // In a full implementation, this would track actual search queries
-        const result = yield songService.getAllSongs(1, limitNum * 2);
-        // Get most viewed songs as "trending"
-        const trendingSongs = result.songs
-            .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
-            .slice(0, limitNum);
+        // Use efficient database query to get trending songs directly sorted by viewCount
+        const { CopyrightFreeSong } = yield Promise.resolve().then(() => __importStar(require("../models/copyrightFreeSong.model")));
+        const trendingSongs = yield CopyrightFreeSong.find()
+            .select("title singer viewCount")
+            .sort({ viewCount: -1, createdAt: -1 })
+            .limit(limitNum)
+            .lean();
         const trending = trendingSongs.map((song) => ({
             query: song.title || song.singer,
             count: song.viewCount || 0,

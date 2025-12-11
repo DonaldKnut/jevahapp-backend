@@ -256,13 +256,13 @@ class MediaService {
     getAllContentForAllTab(options) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                // Backward compatibility: if no pagination params provided, return all items
-                const usePagination = (options === null || options === void 0 ? void 0 : options.page) !== undefined || (options === null || options === void 0 ? void 0 : options.limit) !== undefined;
+                // Always enforce pagination for mobile-friendly payloads (prevents excessive data usage)
+                // Default: page 1, limit 50 (mobile-optimized to save data/airtime)
                 const page = (options === null || options === void 0 ? void 0 : options.page) && options.page > 0 ? options.page : 1;
-                const rawLimit = (options === null || options === void 0 ? void 0 : options.limit) && options.limit > 0 ? options.limit : (usePagination ? 50 : undefined);
-                // Clamp for mobile-friendly payloads (only if pagination is requested)
-                const limit = rawLimit ? Math.min(Math.max(rawLimit, 10), 100) : undefined;
-                const skip = limit ? (page - 1) * limit : 0;
+                const rawLimit = (options === null || options === void 0 ? void 0 : options.limit) && options.limit > 0 ? options.limit : 50;
+                // Clamp for mobile-friendly payloads (min 10, max 100)
+                const limit = Math.min(Math.max(rawLimit, 10), 100);
+                const skip = (page - 1) * limit;
                 // Reuse the shared aggregation pipeline with author + engagement info
                 const pipeline = this.buildAggregationPipeline({}, {
                     sort: { createdAt: -1 },
@@ -270,21 +270,21 @@ class MediaService {
                 if (skip > 0) {
                     pipeline.push({ $skip: skip });
                 }
-                if (limit) {
-                    pipeline.push({ $limit: limit });
-                }
+                pipeline.push({ $limit: limit });
                 const [mediaList, total] = yield Promise.all([
                     media_model_1.Media.aggregate(pipeline),
                     media_model_1.Media.countDocuments({}),
                 ]);
-                return Object.assign({ media: mediaList, total: usePagination ? total : mediaList.length }, (usePagination && {
+                return {
+                    media: mediaList,
+                    total,
                     pagination: {
                         page,
-                        limit: limit,
+                        limit,
                         total,
                         pages: Math.ceil(total / limit),
                     },
-                }));
+                };
             }
             catch (error) {
                 console.error("Error fetching all content:", error);

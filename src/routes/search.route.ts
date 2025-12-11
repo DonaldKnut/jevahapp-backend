@@ -37,3 +37,4 @@ router.get("/suggestions", apiRateLimiter, getUnifiedSearchSuggestions);
 router.get("/trending", apiRateLimiter, getUnifiedTrendingSearches);
 
 export default router;
+
