@@ -86,7 +86,7 @@ export class ContentInteractionService {
     userId: string,
     contentId: string,
     contentType: string
-  ): Promise<{ liked: boolean; likeCount: number }> {
+  ): Promise<{ contentId: string; liked: boolean; likeCount: number }> {
     // Enhanced validation
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
       throw new Error("Invalid user or content ID");
@@ -171,6 +171,8 @@ export class ContentInteractionService {
         }
       });
 
+      // Read the updated like count after transaction commits
+      // This ensures we get the accurate count that was just updated
       const likeCount = await this.getLikeCount(contentId, contentType);
 
       // Send notification if content was liked (not unliked)
@@ -254,6 +256,7 @@ export class ContentInteractionService {
       });
 
       return {
+        contentId,
         liked,
         likeCount,
       };
@@ -1196,6 +1199,8 @@ export class ContentInteractionService {
   ): Promise<any> {
     switch (contentType) {
       case "media":
+      case "ebook":
+      case "podcast":
         const media = await Media.findById(contentId);
         return {
           likes: media?.likeCount || 0,
@@ -1321,6 +1326,8 @@ export class ContentInteractionService {
 
     switch (contentType) {
       case "media":
+      case "ebook":
+      case "podcast":
         const mediaLike = await MediaInteraction.findOne({
           user: new Types.ObjectId(userId),
           media: new Types.ObjectId(contentId),
@@ -1339,6 +1346,15 @@ export class ContentInteractionService {
         return artist?.following?.some(
           (id: any) => id.toString() === contentId
         ) || false;
+      case "merch":
+        // Merch uses "favorite" interactionType, not "like"
+        const merchFavorite = await MediaInteraction.findOne({
+          user: new Types.ObjectId(userId),
+          media: new Types.ObjectId(contentId),
+          interactionType: "favorite",
+          isRemoved: { $ne: true },
+        });
+        return !!merchFavorite;
       default:
         return false;
     }
@@ -1736,16 +1752,42 @@ export class ContentInteractionService {
       );
       return false;
     } else {
-      // Like
-      await MediaInteraction.findOneAndUpdate(
-        {
-          user: new Types.ObjectId(userId),
-          media: new Types.ObjectId(contentId),
-          interactionType: "like",
-        },
-        { isRemoved: false },
-        { upsert: true, session }
-      );
+      // Like - check if there's a soft-deleted like to restore
+      const softDeletedLike = await MediaInteraction.findOne({
+        user: new Types.ObjectId(userId),
+        media: new Types.ObjectId(contentId),
+        interactionType: "like",
+        isRemoved: true,
+      }).session(session);
+
+      if (softDeletedLike) {
+        // Restore soft-deleted like
+        await MediaInteraction.findByIdAndUpdate(
+          softDeletedLike._id,
+          {
+            isRemoved: false,
+            lastInteraction: new Date(),
+          },
+          { session }
+        );
+      } else {
+        // Create new like
+        await MediaInteraction.create(
+          [
+            {
+              user: new Types.ObjectId(userId),
+              media: new Types.ObjectId(contentId),
+              interactionType: "like",
+              lastInteraction: new Date(),
+              count: 1,
+              isRemoved: false,
+            },
+          ],
+          { session }
+        );
+      }
+
+      // Increment like count atomically
       await Media.findByIdAndUpdate(
         contentId,
         { $inc: { likeCount: 1 } },
@@ -1874,17 +1916,54 @@ export class ContentInteractionService {
         { isRemoved: true },
         { session }
       );
+      // Decrement favoriteCount atomically
+      await Media.findByIdAndUpdate(
+        contentId,
+        { $inc: { favoriteCount: -1 } },
+        { session }
+      );
       return false;
     } else {
-      // Add favorite
-      await MediaInteraction.findOneAndUpdate(
-        {
-          user: new Types.ObjectId(userId),
-          media: new Types.ObjectId(contentId),
-          interactionType: "favorite",
-        },
-        { isRemoved: false },
-        { upsert: true, session }
+      // Check if there's a soft-deleted favorite to restore
+      const softDeletedFavorite = await MediaInteraction.findOne({
+        user: new Types.ObjectId(userId),
+        media: new Types.ObjectId(contentId),
+        interactionType: "favorite",
+        isRemoved: true,
+      }).session(session);
+
+      if (softDeletedFavorite) {
+        // Restore soft-deleted favorite
+        await MediaInteraction.findByIdAndUpdate(
+          softDeletedFavorite._id,
+          {
+            isRemoved: false,
+            lastInteraction: new Date(),
+          },
+          { session }
+        );
+      } else {
+        // Create new favorite
+        await MediaInteraction.create(
+          [
+            {
+              user: new Types.ObjectId(userId),
+              media: new Types.ObjectId(contentId),
+              interactionType: "favorite",
+              lastInteraction: new Date(),
+              count: 1,
+              isRemoved: false,
+            },
+          ],
+          { session }
+        );
+      }
+
+      // Increment favoriteCount atomically
+      await Media.findByIdAndUpdate(
+        contentId,
+        { $inc: { favoriteCount: 1 } },
+        { session }
       );
       return true;
     }

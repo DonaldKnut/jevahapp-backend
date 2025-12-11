@@ -113,6 +113,8 @@ class ContentInteractionService {
                             throw new Error(`Unsupported content type: ${contentType}`);
                     }
                 }));
+                // Read the updated like count after transaction commits
+                // This ensures we get the accurate count that was just updated
                 const likeCount = yield this.getLikeCount(contentId, contentType);
                 // Send notification if content was liked (not unliked)
                 if (liked) {
@@ -179,6 +181,7 @@ class ContentInteractionService {
                     timestamp: new Date().toISOString(),
                 });
                 return {
+                    contentId,
                     liked,
                     likeCount,
                 };
@@ -895,6 +898,8 @@ class ContentInteractionService {
             var _a;
             switch (contentType) {
                 case "media":
+                case "ebook":
+                case "podcast":
                     const media = yield media_model_1.Media.findById(contentId);
                     return {
                         likes: (media === null || media === void 0 ? void 0 : media.likeCount) || 0,
@@ -1011,6 +1016,8 @@ class ContentInteractionService {
             }
             switch (contentType) {
                 case "media":
+                case "ebook":
+                case "podcast":
                     const mediaLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
                         user: new mongoose_1.Types.ObjectId(userId),
                         media: new mongoose_1.Types.ObjectId(contentId),
@@ -1027,6 +1034,15 @@ class ContentInteractionService {
                 case "artist":
                     const artist = yield user_model_1.User.findById(new mongoose_1.Types.ObjectId(userId));
                     return ((_a = artist === null || artist === void 0 ? void 0 : artist.following) === null || _a === void 0 ? void 0 : _a.some((id) => id.toString() === contentId)) || false;
+                case "merch":
+                    // Merch uses "favorite" interactionType, not "like"
+                    const merchFavorite = yield mediaInteraction_model_1.MediaInteraction.findOne({
+                        user: new mongoose_1.Types.ObjectId(userId),
+                        media: new mongoose_1.Types.ObjectId(contentId),
+                        interactionType: "favorite",
+                        isRemoved: { $ne: true },
+                    });
+                    return !!merchFavorite;
                 default:
                     return false;
             }
@@ -1365,12 +1381,34 @@ class ContentInteractionService {
                 return false;
             }
             else {
-                // Like
-                yield mediaInteraction_model_1.MediaInteraction.findOneAndUpdate({
+                // Like - check if there's a soft-deleted like to restore
+                const softDeletedLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
                     user: new mongoose_1.Types.ObjectId(userId),
                     media: new mongoose_1.Types.ObjectId(contentId),
                     interactionType: "like",
-                }, { isRemoved: false }, { upsert: true, session });
+                    isRemoved: true,
+                }).session(session);
+                if (softDeletedLike) {
+                    // Restore soft-deleted like
+                    yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(softDeletedLike._id, {
+                        isRemoved: false,
+                        lastInteraction: new Date(),
+                    }, { session });
+                }
+                else {
+                    // Create new like
+                    yield mediaInteraction_model_1.MediaInteraction.create([
+                        {
+                            user: new mongoose_1.Types.ObjectId(userId),
+                            media: new mongoose_1.Types.ObjectId(contentId),
+                            interactionType: "like",
+                            lastInteraction: new Date(),
+                            count: 1,
+                            isRemoved: false,
+                        },
+                    ], { session });
+                }
+                // Increment like count atomically
                 yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { likeCount: 1 } }, { session });
                 return true;
             }
@@ -1450,15 +1488,40 @@ class ContentInteractionService {
             if (existingFavorite) {
                 // Remove favorite
                 yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(existingFavorite._id, { isRemoved: true }, { session });
+                // Decrement favoriteCount atomically
+                yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { favoriteCount: -1 } }, { session });
                 return false;
             }
             else {
-                // Add favorite
-                yield mediaInteraction_model_1.MediaInteraction.findOneAndUpdate({
+                // Check if there's a soft-deleted favorite to restore
+                const softDeletedFavorite = yield mediaInteraction_model_1.MediaInteraction.findOne({
                     user: new mongoose_1.Types.ObjectId(userId),
                     media: new mongoose_1.Types.ObjectId(contentId),
                     interactionType: "favorite",
-                }, { isRemoved: false }, { upsert: true, session });
+                    isRemoved: true,
+                }).session(session);
+                if (softDeletedFavorite) {
+                    // Restore soft-deleted favorite
+                    yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(softDeletedFavorite._id, {
+                        isRemoved: false,
+                        lastInteraction: new Date(),
+                    }, { session });
+                }
+                else {
+                    // Create new favorite
+                    yield mediaInteraction_model_1.MediaInteraction.create([
+                        {
+                            user: new mongoose_1.Types.ObjectId(userId),
+                            media: new mongoose_1.Types.ObjectId(contentId),
+                            interactionType: "favorite",
+                            lastInteraction: new Date(),
+                            count: 1,
+                            isRemoved: false,
+                        },
+                    ], { session });
+                }
+                // Increment favoriteCount atomically
+                yield media_model_1.Media.findByIdAndUpdate(contentId, { $inc: { favoriteCount: 1 } }, { session });
                 return true;
             }
         });
