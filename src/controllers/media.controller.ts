@@ -7,6 +7,9 @@ import contaboStreamingService from "../service/contaboStreaming.service";
 import liveRecordingService from "../service/liveRecording.service";
 import { NotificationService } from "../service/notification.service";
 import cacheService from "../service/cache.service";
+import { enqueueAnalyticsEvent, enqueueMediaPostUpload } from "../queues/enqueue";
+import { incrPostCounter } from "../lib/redisCounters";
+import { redisSafe } from "../lib/redis";
 import { aiContentDescriptionService } from "../service/aiContentDescription.service";
 import { User } from "../models/user.model";
 import { contentModerationService } from "../service/contentModeration.service";
@@ -448,6 +451,27 @@ export const uploadMedia = async (
     await cacheService.delPattern("media:public:*");
     await cacheService.delPattern("media:all:*");
 
+    // Enqueue non-blocking post-upload processing + analytics event
+    const mediaIdString = String((media as any)._id);
+
+    enqueueMediaPostUpload({
+      mediaId: mediaIdString,
+      userId,
+      contentType,
+      fileUrl: media.fileUrl,
+      requestId: (request as any).requestId,
+    });
+    enqueueAnalyticsEvent({
+      name: "media_uploaded",
+      payload: {
+        mediaId: mediaIdString,
+        userId,
+        contentType,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (request as any).requestId,
+    });
+
     // Cleanup upload session
     if (contentType !== "live") {
       uploadProgressService.clearUploadSession(uploadId);
@@ -551,11 +575,69 @@ export const getAllContentForAllTab = async (
       limit: limitParam && limitParam > 0 ? limitParam : undefined,
     } : undefined;
 
-    const result = await mediaService.getAllContentForAllTab(options);
+    const userIdentifier = request.userId;
+
+    /**
+     * Per-user feed caching (IDs only) using Upstash Redis:
+     * - Key: feed:user:{userId}
+     * - TTL: ~45s
+     *
+     * On hit: fetch by IDs from MongoDB (DB remains source of truth)
+     * On miss: generate feed, cache IDs, return response
+     */
+    const feedKey = userIdentifier ? `feed:user:${userIdentifier}` : null;
+    if (feedKey) {
+      const cachedIds = await redisSafe<string[] | null>(
+        "feedGet",
+        async (r) => {
+          const ids = await r.get<string[]>(feedKey);
+          return Array.isArray(ids) ? ids : null;
+        },
+        null
+      );
+
+      if (cachedIds && cachedIds.length > 0) {
+        const docs = await Media.find({ _id: { $in: cachedIds } }).lean();
+        const byId = new Map(docs.map((d: any) => [String(d._id), d]));
+        const ordered = cachedIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+        // Recommendations remain user-specific and are computed separately.
+        let recommendations: any = undefined;
+        try {
+          recommendations = await mediaService.getRecommendationsForAllContent(
+            userIdentifier,
+            {
+              limitPerSection: 12,
+              mood: (request.query?.mood as string) || undefined,
+            }
+          );
+        } catch {
+          recommendations = undefined;
+        }
+
+        response.status(200).json({
+          success: true,
+          media: ordered,
+          total: ordered.length,
+          recommendations,
+        });
+        return;
+      }
+    }
+
+    // Global cache (heavy list) briefly using existing Redis/TCP cacheService.
+    // Recommendations remain user-specific and are computed separately.
+    const cacheKey = `media:all-content:${
+      options ? `page=${options.page || 1}:limit=${options.limit || "default"}` : "default"
+    }`;
+    const result = await cacheService.getOrSet(
+      cacheKey,
+      () => mediaService.getAllContentForAllTab(options),
+      60
+    );
 
     // Optional personalization: include recommendations when user is authenticated
     let recommendations: any = undefined;
-    const userIdentifier = request.userId;
     try {
       recommendations = await mediaService.getRecommendationsForAllContent(
         userIdentifier,
@@ -567,6 +649,19 @@ export const getAllContentForAllTab = async (
     } catch (err) {
       // Non-blocking failure; proceed without recommendations
       recommendations = undefined;
+    }
+
+    // Cache IDs for this user feed (best-effort, never blocks)
+    if (feedKey) {
+      const ids = (result.media || []).map((m: any) => String(m._id)).filter(Boolean);
+      redisSafe(
+        "feedSet",
+        async (r) => {
+          await r.set(feedKey, ids, { ex: 45 });
+          return true;
+        },
+        false
+      ).catch(() => {});
     }
 
     response.status(200).json({
@@ -882,7 +977,20 @@ export const recordMediaInteraction = async (
     // If interaction is a view, add to viewed media list
     if (interactionType === "view") {
       await mediaService.addToViewedMedia(userIdentifier, id);
+      incrPostCounter({ postId: id, field: "views", delta: 1 }).catch(() => {});
     }
+
+    // Non-blocking analytics event (aggregation/ranking can run offline)
+    enqueueAnalyticsEvent({
+      name: "media_interaction",
+      payload: {
+        userId: userIdentifier,
+        mediaId: id,
+        interactionType,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (request as any).requestId,
+    });
 
     response.status(201).json({
       success: true,
@@ -943,6 +1051,20 @@ export const trackViewWithDuration = async (
       mediaIdentifier: mediaId,
       duration,
       isComplete,
+    });
+
+    incrPostCounter({ postId: mediaId, field: "views", delta: 1 }).catch(() => {});
+
+    enqueueAnalyticsEvent({
+      name: "media_view_duration",
+      payload: {
+        userId,
+        mediaId,
+        duration,
+        isComplete,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (request as any).requestId,
     });
 
     response.status(200).json({

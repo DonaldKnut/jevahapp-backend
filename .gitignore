@@ -22,6 +22,9 @@ node_modules/.DS_Store
 node_modules/react-native/.DS_Store
 node_modules
 
+# Local npm cache used to avoid ~/.npm permission issues
+.npm-cache/
+
 # Logs
 logs/
 *.log

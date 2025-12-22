@@ -7,6 +7,14 @@ import logger from "../utils/logger";
 class CacheService {
   private client: Redis | null = null;
   private isConnected: boolean = false;
+  private counters = {
+    hits: 0,
+    misses: 0,
+    sets: 0,
+    dels: 0,
+    invalidations: 0,
+    errors: 0,
+  };
 
   constructor() {
     this.initialize();
@@ -68,10 +76,13 @@ class CacheService {
     try {
       const data = await this.client.get(key);
       if (!data) {
+        this.counters.misses++;
         return null;
       }
+      this.counters.hits++;
       return JSON.parse(data) as T;
     } catch (error) {
+      this.counters.errors++;
       logger.error("Cache get error:", { key, error: (error as Error).message });
       return null;
     }
@@ -87,7 +98,9 @@ class CacheService {
 
     try {
       await this.client.setex(key, ttl, JSON.stringify(value));
+      this.counters.sets++;
     } catch (error) {
+      this.counters.errors++;
       logger.error("Cache set error:", { key, error: (error as Error).message });
     }
   }
@@ -102,7 +115,9 @@ class CacheService {
 
     try {
       await this.client.del(key);
+      this.counters.dels++;
     } catch (error) {
+      this.counters.errors++;
       logger.error("Cache delete error:", { key, error: (error as Error).message });
     }
   }
@@ -116,12 +131,33 @@ class CacheService {
     }
 
     try {
-      const keys = await this.client.keys(pattern);
-      if (keys.length > 0) {
-        await this.client.del(...keys);
-        logger.info(`Cache cleared: ${keys.length} keys matching pattern "${pattern}"`);
+      // IMPORTANT: Avoid Redis KEYS in production.
+      // KEYS is O(N) and can block Redis (causing timeouts / stalls).
+      // SCAN is incremental and safe for prod usage.
+      const stream = this.client.scanStream({
+        match: pattern,
+        count: 250,
+      });
+
+      let deleted = 0;
+
+      for await (const keys of stream as any) {
+        if (!Array.isArray(keys) || keys.length === 0) continue;
+        deleted += keys.length;
+        // Pipeline deletes to reduce RTT
+        const pipeline = this.client.pipeline();
+        for (const key of keys) pipeline.del(key);
+        await pipeline.exec();
+      }
+
+      if (deleted > 0) {
+        this.counters.invalidations++;
+        logger.info(
+          `Cache cleared: ${deleted} keys matching pattern "${pattern}"`
+        );
       }
     } catch (error) {
+      this.counters.errors++;
       logger.error("Cache delete pattern error:", { pattern, error: (error as Error).message });
     }
   }
@@ -164,9 +200,17 @@ class CacheService {
   async getStats(): Promise<{
     connected: boolean;
     keys?: number;
+    counters?: {
+      hits: number;
+      misses: number;
+      sets: number;
+      dels: number;
+      invalidations: number;
+      errors: number;
+    };
   }> {
     if (!this.isConnected || !this.client) {
-      return { connected: false };
+      return { connected: false, counters: this.counters };
     }
 
     try {
@@ -174,10 +218,12 @@ class CacheService {
       return {
         connected: true,
         keys,
+        counters: this.counters,
       };
     } catch (error) {
       return {
         connected: true,
+        counters: this.counters,
       };
     }
   }

@@ -12,7 +12,19 @@ import logger from "../utils/logger";
  */
 export const cacheMiddleware = (
   ttl: number = 300,
-  keyGenerator?: (req: Request) => string
+  keyGenerator?: (req: Request) => string,
+  options?: {
+    /**
+     * If true, authenticated requests can be cached too.
+     * Use only when the response is NOT user-specific (or when you provide a per-user key).
+     */
+    allowAuthenticated?: boolean;
+    /**
+     * If true, cache varies by userId when authenticated.
+     * Useful for "feed"/personalized endpoints with a short TTL.
+     */
+    varyByUserId?: boolean;
+  }
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     // Only cache GET requests
@@ -20,10 +32,9 @@ export const cacheMiddleware = (
       return next();
     }
 
-    // Skip cache for authenticated user-specific data
-    if (req.userId) {
-      return next();
-    }
+    const allowAuthenticated = options?.allowAuthenticated === true;
+    const varyByUserId = options?.varyByUserId === true;
+    if (req.userId && !allowAuthenticated) return next();
 
     // Skip if Redis is not connected
     if (!cacheService.isReady()) {
@@ -33,7 +44,9 @@ export const cacheMiddleware = (
     // Generate cache key
     const cacheKey = keyGenerator
       ? keyGenerator(req)
-      : `cache:${req.originalUrl}:${JSON.stringify(req.query)}`;
+      : `cache:${req.originalUrl}:${JSON.stringify(req.query)}${
+          varyByUserId && req.userId ? `:user=${req.userId}` : ""
+        }`;
 
     try {
       // Try to get from cache
@@ -42,7 +55,8 @@ export const cacheMiddleware = (
         res.setHeader("X-Cache", "HIT");
         res.setHeader("X-Cache-Key", cacheKey);
         logger.debug(`Cache HIT: ${cacheKey}`);
-        return res.json(cached);
+        res.json(cached);
+        return;
       }
 
       // Cache miss - store original json method

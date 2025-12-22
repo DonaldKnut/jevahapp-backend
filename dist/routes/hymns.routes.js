@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const hymns_controller_1 = require("../controllers/hymns.controller");
 const router = express_1.default.Router();
 // Rate limiters
@@ -101,7 +102,8 @@ const interactionRateLimiter = (0, rateLimiter_1.rateLimiter)(10, 60000); // 10 
  *       500:
  *         description: Internal server error
  */
-router.get("/", hymns_controller_1.getHymns);
+router.get("/", (0, cache_middleware_1.cacheMiddleware)(300), // 5 minutes for hymn lists
+hymns_controller_1.getHymns);
 /**
  * @swagger
  * /api/hymns/search/scripture:
@@ -170,7 +172,8 @@ router.get("/", hymns_controller_1.getHymns);
  *       500:
  *         description: Internal server error
  */
-router.get("/search/scripture", searchRateLimiter, hymns_controller_1.searchHymnsByScripture);
+router.get("/search/scripture", searchRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60), // 1 minute for search results
+hymns_controller_1.searchHymnsByScripture);
 /**
  * @swagger
  * /api/hymns/search/tags:
@@ -216,7 +219,8 @@ router.get("/search/scripture", searchRateLimiter, hymns_controller_1.searchHymn
  *       500:
  *         description: Internal server error
  */
-router.get("/search/tags", hymns_controller_1.searchHymnsByTags);
+router.get("/search/tags", (0, cache_middleware_1.cacheMiddleware)(60), // 1 minute for tag search
+hymns_controller_1.searchHymnsByTags);
 /**
  * @swagger
  * /api/hymns/category/{category}:
@@ -263,7 +267,8 @@ router.get("/search/tags", hymns_controller_1.searchHymnsByTags);
  *       500:
  *         description: Internal server error
  */
-router.get("/category/:category", hymns_controller_1.getHymnsByCategory);
+router.get("/category/:category", (0, cache_middleware_1.cacheMiddleware)(300), // 5 minutes for category lists
+hymns_controller_1.getHymnsByCategory);
 /**
  * @swagger
  * /api/hymns/{id}:
@@ -294,7 +299,8 @@ router.get("/category/:category", hymns_controller_1.getHymnsByCategory);
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", hymns_controller_1.getHymnById);
+router.get("/:id", (0, cache_middleware_1.cacheMiddleware)(600), // 10 minutes for individual hymns
+hymns_controller_1.getHymnById);
 /**
  * @swagger
  * /api/hymns/stats:
@@ -334,7 +340,8 @@ router.get("/:id", hymns_controller_1.getHymnById);
  *       500:
  *         description: Internal server error
  */
-router.get("/stats", hymns_controller_1.getHymnStats);
+router.get("/stats", (0, cache_middleware_1.cacheMiddleware)(3600), // 1 hour for stats
+hymns_controller_1.getHymnStats);
 /**
  * @swagger
  * /api/hymns/sync/popular:

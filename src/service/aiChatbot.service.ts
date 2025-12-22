@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { User } from "../models/user.model";
 import logger from "../utils/logger";
+import cacheService from "./cache.service";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -39,7 +40,23 @@ export interface AIResponse {
 export class AIChatbotService {
   private genAI: GoogleGenerativeAI | null;
   private model: any;
+  /**
+   * Fallback only (Redis is primary). Kept small to avoid memory pressure.
+   * This ensures the chatbot doesn't hard-fail when Redis is temporarily unavailable.
+   */
   private chatSessions: Map<string, ChatSession> = new Map();
+  private readonly maxInMemorySessions = parseInt(
+    process.env.AI_CHAT_IN_MEMORY_MAX_SESSIONS || "200",
+    10
+  );
+  private readonly maxMessagesPerSession = parseInt(
+    process.env.AI_CHAT_MAX_MESSAGES || "50",
+    10
+  );
+  private readonly sessionTtlSeconds = parseInt(
+    process.env.AI_CHAT_SESSION_TTL_SEC || "86400",
+    10
+  ); // default 24h
 
   constructor() {
     const apiKey = process.env.GOOGLE_AI_API_KEY;
@@ -55,22 +72,111 @@ export class AIChatbotService {
     }
   }
 
+  private getSessionCacheKey(userId: string): string {
+    return `ai-chat:session:${userId}`;
+  }
+
+  /**
+   * Normalize a session loaded from JSON (Dates become strings).
+   */
+  private normalizeSession(session: any): ChatSession {
+    const normalized: ChatSession = {
+      userId: session.userId,
+      messages: Array.isArray(session.messages)
+        ? session.messages.map((m: any) => ({
+            role: m.role,
+            content: m.content,
+            messageType: m.messageType,
+            timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          }))
+        : [],
+      context: {
+        userMood: session.context?.userMood,
+        userConcerns: session.context?.userConcerns,
+        previousTopics: session.context?.previousTopics,
+        sessionStartTime: session.context?.sessionStartTime
+          ? new Date(session.context.sessionStartTime)
+          : new Date(),
+      },
+      createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
+      updatedAt: session.updatedAt ? new Date(session.updatedAt) : new Date(),
+    };
+
+    // Cap messages defensively
+    if (normalized.messages.length > this.maxMessagesPerSession) {
+      normalized.messages = normalized.messages.slice(-this.maxMessagesPerSession);
+    }
+
+    return normalized;
+  }
+
+  private newSession(userId: string): ChatSession {
+    const now = new Date();
+    return {
+      userId,
+      messages: [],
+      context: {
+        sessionStartTime: now,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private capInMemorySessions(): void {
+    // Simple eviction: delete oldest inserted entries once over limit
+    while (this.chatSessions.size > this.maxInMemorySessions) {
+      const oldestKey = this.chatSessions.keys().next().value as
+        | string
+        | undefined;
+      if (!oldestKey) break;
+      this.chatSessions.delete(oldestKey);
+    }
+  }
+
+  private async loadSession(userId: string): Promise<ChatSession | null> {
+    // Prefer Redis for horizontal scaling
+    if (cacheService.isReady()) {
+      const cached = await cacheService.get<any>(this.getSessionCacheKey(userId));
+      if (cached) return this.normalizeSession(cached);
+    }
+
+    // Fallback to in-memory
+    const memory = this.chatSessions.get(userId);
+    return memory || null;
+  }
+
+  private async saveSession(session: ChatSession): Promise<void> {
+    // Always keep messages bounded
+    if (session.messages.length > this.maxMessagesPerSession) {
+      session.messages = session.messages.slice(-this.maxMessagesPerSession);
+    }
+
+    // Primary: Redis
+    if (cacheService.isReady()) {
+      await cacheService.set(
+        this.getSessionCacheKey(session.userId),
+        session,
+        this.sessionTtlSeconds
+      );
+      return;
+    }
+
+    // Fallback: in-memory (capped)
+    this.chatSessions.set(session.userId, session);
+    this.capInMemorySessions();
+  }
+
   /**
    * Initialize or get existing chat session
    */
-  private getOrCreateSession(userId: string): ChatSession {
-    if (!this.chatSessions.has(userId)) {
-      this.chatSessions.set(userId, {
-        userId,
-        messages: [],
-        context: {
-          sessionStartTime: new Date(),
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
-    return this.chatSessions.get(userId)!;
+  private async getOrCreateSession(userId: string): Promise<ChatSession> {
+    const existing = await this.loadSession(userId);
+    if (existing) return existing;
+
+    const created = this.newSession(userId);
+    await this.saveSession(created);
+    return created;
   }
 
   /**
@@ -182,7 +288,7 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
     user: any
   ): Promise<AIResponse> {
     try {
-      const session = this.getOrCreateSession(userId);
+      const session = await this.getOrCreateSession(userId);
       const messageType = this.analyzeMessageType(message);
 
       // Add user message to session
@@ -192,6 +298,9 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
         timestamp: new Date(),
         messageType: messageType as any,
       });
+      if (session.messages.length > this.maxMessagesPerSession) {
+        session.messages = session.messages.slice(-this.maxMessagesPerSession);
+      }
 
       // Generate system prompt
       const systemPrompt = this.generateSystemPrompt(user, messageType);
@@ -220,6 +329,7 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
         });
 
         session.updatedAt = new Date();
+        await this.saveSession(session);
 
         return {
           response,
@@ -270,6 +380,7 @@ Please provide a compassionate, biblical response that includes:
       });
 
       session.updatedAt = new Date();
+      await this.saveSession(session);
 
       return {
         response,
@@ -403,23 +514,28 @@ Please provide a compassionate, biblical response that includes:
   /**
    * Get chat history for user
    */
-  getChatHistory(userId: string): ChatMessage[] {
-    const session = this.chatSessions.get(userId);
+  async getChatHistory(userId: string): Promise<ChatMessage[]> {
+    const session = await this.loadSession(userId);
     return session ? session.messages : [];
   }
 
   /**
    * Clear chat history for user
    */
-  clearChatHistory(userId: string): void {
+  async clearChatHistory(userId: string): Promise<void> {
+    // Best-effort delete from Redis
+    if (cacheService.isReady()) {
+      await cacheService.del(this.getSessionCacheKey(userId));
+    }
+    // Always delete in-memory fallback
     this.chatSessions.delete(userId);
   }
 
   /**
    * Get session statistics
    */
-  getSessionStats(userId: string): any {
-    const session = this.chatSessions.get(userId);
+  async getSessionStats(userId: string): Promise<any> {
+    const session = await this.loadSession(userId);
     if (!session) return null;
 
     return {
@@ -427,6 +543,7 @@ Please provide a compassionate, biblical response that includes:
       sessionDuration: Date.now() - session.context.sessionStartTime.getTime(),
       topics: session.context.previousTopics || [],
       lastActivity: session.updatedAt,
+      storage: cacheService.isReady() ? "redis" : "memory",
     };
   }
 }

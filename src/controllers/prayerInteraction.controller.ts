@@ -4,6 +4,8 @@ import { MediaInteraction } from "../models/mediaInteraction.model";
 import { User } from "../models/user.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
+import { redisRateLimit } from "../lib/redisRateLimit";
+import { incrPostCounter } from "../lib/redisCounters";
 
 /**
  * Toggle like on a prayer post
@@ -25,6 +27,20 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Redis-backed rate limit (per user + per post)
+    const likeRl = await redisRateLimit({
+      key: `rl:like:${userId}:${prayerId}`,
+      limit: 10,
+      windowSeconds: 30,
+    });
+    if (!likeRl.allowed) {
+      res.status(429).json({
+        success: false,
+        error: "Too many like requests. Please slow down.",
+      });
+      return;
+    }
+
     // Check if user already liked this prayer
     const existingLike = await MediaInteraction.findOne({
       user: userId,
@@ -43,6 +59,8 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
       prayer.likesCount = Math.max(0, (prayer.likesCount || 0) - 1);
       await prayer.save();
       likeCount = prayer.likesCount || 0;
+      // Fast counter (best-effort, doesn't affect correctness)
+      incrPostCounter({ postId: prayerId, field: "likes", delta: -1 }).catch(() => {});
     } else {
       // Like - create new interaction
       await MediaInteraction.create({
@@ -57,6 +75,7 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
       prayer.likesCount = (prayer.likesCount || 0) + 1;
       await prayer.save();
       likeCount = prayer.likesCount || 0;
+      incrPostCounter({ postId: prayerId, field: "likes", delta: 1 }).catch(() => {});
     }
 
     logger.info("Prayer like toggled", { prayerId, userId, liked, likeCount });
@@ -248,6 +267,20 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // Redis-backed rate limit (per user + per post)
+    const commentRl = await redisRateLimit({
+      key: `rl:comment:${userId}:${prayerId}`,
+      limit: 5,
+      windowSeconds: 30,
+    });
+    if (!commentRl.allowed) {
+      res.status(429).json({
+        success: false,
+        error: "Too many comments. Please slow down.",
+      });
+      return;
+    }
+
     // Validate parent comment if provided
     if (parentCommentId) {
       if (!Types.ObjectId.isValid(parentCommentId)) {
@@ -281,6 +314,7 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
     // Update prayer commentsCount
     prayer.commentsCount = (prayer.commentsCount || 0) + 1;
     await prayer.save();
+    incrPostCounter({ postId: prayerId, field: "comments", delta: 1 }).catch(() => {});
 
     // Populate user info
     await comment.populate("user", "firstName lastName username avatar");

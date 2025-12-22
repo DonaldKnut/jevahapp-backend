@@ -164,6 +164,7 @@ class Logger {
       userAgent: req.get("User-Agent"),
       ip: req.ip,
       userId: req.userId || "anonymous",
+      requestId: req.requestId,
     };
 
     if (res.statusCode >= 400) {

@@ -4,6 +4,7 @@ const express_1 = require("express");
 const merchandise_controller_1 = require("../controllers/merchandise.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -131,7 +132,7 @@ router.post("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, me
  *       500:
  *         description: Internal server error
  */
-router.get("/:merchandiseId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, merchandise_controller_1.getMerchandiseById);
+router.get("/:merchandiseId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), merchandise_controller_1.getMerchandiseById);
 /**
  * @swagger
  * /api/merchandise:
@@ -205,7 +206,7 @@ router.get("/:merchandiseId", auth_middleware_1.verifyToken, rateLimiter_1.apiRa
  *       500:
  *         description: Internal server error
  */
-router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, merchandise_controller_1.searchMerchandise);
+router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true }), merchandise_controller_1.searchMerchandise);
 /**
  * @swagger
  * /api/merchandise/trending:
@@ -393,5 +394,5 @@ router.post("/:merchandiseId/review", auth_middleware_1.verifyToken, rateLimiter
  *       500:
  *         description: Internal server error
  */
-router.get("/seller/:sellerId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, merchandise_controller_1.getSellerMerchandise);
+router.get("/seller/:sellerId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), merchandise_controller_1.getSellerMerchandise);
 exports.default = router;

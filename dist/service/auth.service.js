@@ -641,17 +641,26 @@ class AuthService {
     }
     getCurrentUser(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const user = yield user_model_1.User.findById(userId).select("firstName lastName avatar avatarUpload bio section");
+            // Use lean() for faster query (no Mongoose document overhead)
+            const user = yield user_model_1.User.findById(userId).select("firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt").lean();
             if (!user) {
                 throw new Error("User not found");
             }
             const avatar = user.avatar || user.avatarUpload || null;
             return {
+                id: user._id.toString(),
                 firstName: user.firstName,
                 lastName: user.lastName,
+                email: user.email,
                 avatar,
+                avatarUpload: user.avatarUpload || null,
                 bio: user.bio || null,
                 section: user.section || "adults",
+                role: user.role,
+                isProfileComplete: user.isProfileComplete || false,
+                isEmailVerified: user.isEmailVerified || false,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
             };
         });
     }

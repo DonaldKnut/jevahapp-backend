@@ -61,7 +61,7 @@ const playlistTrackSchema = new mongoose_1.Schema({
         type: String,
         enum: ["media", "copyrightFree"],
         required: true,
-        index: true,
+        // Index defined at schema level below (line 161)
     },
     addedAt: {
         type: Date,

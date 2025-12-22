@@ -6,6 +6,7 @@ import {
 } from "../controllers/unifiedSearch.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -25,7 +26,12 @@ router.get("/", apiRateLimiter, unifiedSearch);
  * @query   { q: string (required), limit? }
  * @returns { success: boolean, data: { suggestions: string[] } }
  */
-router.get("/suggestions", apiRateLimiter, getUnifiedSearchSuggestions);
+router.get(
+  "/suggestions",
+  apiRateLimiter,
+  cacheMiddleware(60), // 1 minute for search suggestions
+  getUnifiedSearchSuggestions
+);
 
 /**
  * @route   GET /api/search/trending
@@ -34,7 +40,9 @@ router.get("/suggestions", apiRateLimiter, getUnifiedSearchSuggestions);
  * @query   { limit?, period? }
  * @returns { success: boolean, data: { trending: TrendingSearch[] } }
  */
-router.get("/trending", apiRateLimiter, getUnifiedTrendingSearches);
+router.get("/trending", apiRateLimiter, cacheMiddleware(120), getUnifiedTrendingSearches);
 
 export default router;
+
+
 

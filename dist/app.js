@@ -24,6 +24,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const http_1 = require("http");
+const requestId_middleware_1 = require("./middleware/requestId.middleware");
 // Import routes
 const user_route_1 = __importDefault(require("./routes/user.route"));
 const auth_route_1 = __importDefault(require("./routes/auth.route"));
@@ -63,6 +64,7 @@ const playbackSession_route_1 = __importDefault(require("./routes/playbackSessio
 const comment_route_1 = __importDefault(require("./routes/comment.route"));
 const audio_route_1 = __importDefault(require("./routes/audio.route"));
 const search_route_1 = __importDefault(require("./routes/search.route"));
+const metrics_routes_1 = __importDefault(require("./routes/metrics.routes"));
 // import datingRoutes from "./routes/dating.route";
 // Import services and utilities
 const socket_service_1 = __importDefault(require("./service/socket.service"));
@@ -75,6 +77,8 @@ const app = (0, express_1.default)();
 exports.app = app;
 const server = (0, http_1.createServer)(app);
 exports.server = server;
+// Request ID must be first so every log line can include it
+app.use(requestId_middleware_1.requestIdMiddleware);
 // Initialize Socket.IO service
 const socketService = new socket_service_1.default(server);
 exports.socketService = socketService;
@@ -207,6 +211,7 @@ app.use((req, res, next) => {
         ip: req.ip,
         userAgent: req.get("User-Agent"),
         userId: req.userId || "anonymous",
+        requestId: req.requestId,
     });
     // Override res.end to log response
     const originalEnd = res.end;
@@ -326,6 +331,8 @@ app.use("/api/media", playbackSession_route_1.default);
 app.use("/api/comments", comment_route_1.default);
 app.use("/api/audio", audio_route_1.default);
 app.use("/api/search", search_route_1.default);
+// NOTE: Protect this at the infrastructure level (private network / internal auth)
+app.use("/api/metrics", metrics_routes_1.default);
 // Add a simple test route
 app.get("/api/test", (req, res) => {
     res.json({
@@ -354,6 +361,7 @@ app.use((error, req, res, next) => {
         method: req.method,
         url: req.originalUrl,
         userId: req.userId || "anonymous",
+        requestId: req.requestId,
     });
     // Don't leak error details in production
     const isDevelopment = process.env.NODE_ENV === "development";

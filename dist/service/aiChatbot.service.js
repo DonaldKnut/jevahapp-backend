@@ -15,9 +15,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIChatbotService = void 0;
 const generative_ai_1 = require("@google/generative-ai");
 const logger_1 = __importDefault(require("../utils/logger"));
+const cache_service_1 = __importDefault(require("./cache.service"));
 class AIChatbotService {
     constructor() {
+        /**
+         * Fallback only (Redis is primary). Kept small to avoid memory pressure.
+         * This ensures the chatbot doesn't hard-fail when Redis is temporarily unavailable.
+         */
         this.chatSessions = new Map();
+        this.maxInMemorySessions = parseInt(process.env.AI_CHAT_IN_MEMORY_MAX_SESSIONS || "200", 10);
+        this.maxMessagesPerSession = parseInt(process.env.AI_CHAT_MAX_MESSAGES || "50", 10);
+        this.sessionTtlSeconds = parseInt(process.env.AI_CHAT_SESSION_TTL_SEC || "86400", 10); // default 24h
         const apiKey = process.env.GOOGLE_AI_API_KEY;
         if (!apiKey) {
             logger_1.default.warn("GOOGLE_AI_API_KEY not found. AI chatbot will use fallback responses.");
@@ -29,22 +37,103 @@ class AIChatbotService {
             this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         }
     }
+    getSessionCacheKey(userId) {
+        return `ai-chat:session:${userId}`;
+    }
+    /**
+     * Normalize a session loaded from JSON (Dates become strings).
+     */
+    normalizeSession(session) {
+        var _a, _b, _c, _d;
+        const normalized = {
+            userId: session.userId,
+            messages: Array.isArray(session.messages)
+                ? session.messages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                    messageType: m.messageType,
+                    timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+                }))
+                : [],
+            context: {
+                userMood: (_a = session.context) === null || _a === void 0 ? void 0 : _a.userMood,
+                userConcerns: (_b = session.context) === null || _b === void 0 ? void 0 : _b.userConcerns,
+                previousTopics: (_c = session.context) === null || _c === void 0 ? void 0 : _c.previousTopics,
+                sessionStartTime: ((_d = session.context) === null || _d === void 0 ? void 0 : _d.sessionStartTime)
+                    ? new Date(session.context.sessionStartTime)
+                    : new Date(),
+            },
+            createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
+            updatedAt: session.updatedAt ? new Date(session.updatedAt) : new Date(),
+        };
+        // Cap messages defensively
+        if (normalized.messages.length > this.maxMessagesPerSession) {
+            normalized.messages = normalized.messages.slice(-this.maxMessagesPerSession);
+        }
+        return normalized;
+    }
+    newSession(userId) {
+        const now = new Date();
+        return {
+            userId,
+            messages: [],
+            context: {
+                sessionStartTime: now,
+            },
+            createdAt: now,
+            updatedAt: now,
+        };
+    }
+    capInMemorySessions() {
+        // Simple eviction: delete oldest inserted entries once over limit
+        while (this.chatSessions.size > this.maxInMemorySessions) {
+            const oldestKey = this.chatSessions.keys().next().value;
+            if (!oldestKey)
+                break;
+            this.chatSessions.delete(oldestKey);
+        }
+    }
+    loadSession(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Prefer Redis for horizontal scaling
+            if (cache_service_1.default.isReady()) {
+                const cached = yield cache_service_1.default.get(this.getSessionCacheKey(userId));
+                if (cached)
+                    return this.normalizeSession(cached);
+            }
+            // Fallback to in-memory
+            const memory = this.chatSessions.get(userId);
+            return memory || null;
+        });
+    }
+    saveSession(session) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Always keep messages bounded
+            if (session.messages.length > this.maxMessagesPerSession) {
+                session.messages = session.messages.slice(-this.maxMessagesPerSession);
+            }
+            // Primary: Redis
+            if (cache_service_1.default.isReady()) {
+                yield cache_service_1.default.set(this.getSessionCacheKey(session.userId), session, this.sessionTtlSeconds);
+                return;
+            }
+            // Fallback: in-memory (capped)
+            this.chatSessions.set(session.userId, session);
+            this.capInMemorySessions();
+        });
+    }
     /**
      * Initialize or get existing chat session
      */
     getOrCreateSession(userId) {
-        if (!this.chatSessions.has(userId)) {
-            this.chatSessions.set(userId, {
-                userId,
-                messages: [],
-                context: {
-                    sessionStartTime: new Date(),
-                },
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-        }
-        return this.chatSessions.get(userId);
+        return __awaiter(this, void 0, void 0, function* () {
+            const existing = yield this.loadSession(userId);
+            if (existing)
+                return existing;
+            const created = this.newSession(userId);
+            yield this.saveSession(created);
+            return created;
+        });
     }
     /**
      * Generate system prompt based on user's needs
@@ -132,7 +221,7 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
     generateResponse(userId, message, user) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const session = this.getOrCreateSession(userId);
+                const session = yield this.getOrCreateSession(userId);
                 const messageType = this.analyzeMessageType(message);
                 // Add user message to session
                 session.messages.push({
@@ -141,6 +230,9 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
                     timestamp: new Date(),
                     messageType: messageType,
                 });
+                if (session.messages.length > this.maxMessagesPerSession) {
+                    session.messages = session.messages.slice(-this.maxMessagesPerSession);
+                }
                 // Generate system prompt
                 const systemPrompt = this.generateSystemPrompt(user, messageType);
                 // Create conversation history
@@ -164,6 +256,7 @@ Remember: You are here to be the "Ark of God" - a shield against worldly nonsens
                         messageType: messageType,
                     });
                     session.updatedAt = new Date();
+                    yield this.saveSession(session);
                     return {
                         response,
                         bibleVerses,
@@ -205,6 +298,7 @@ Please provide a compassionate, biblical response that includes:
                     messageType: messageType,
                 });
                 session.updatedAt = new Date();
+                yield this.saveSession(session);
                 return {
                     response,
                     bibleVerses,
@@ -312,28 +406,40 @@ Please provide a compassionate, biblical response that includes:
      * Get chat history for user
      */
     getChatHistory(userId) {
-        const session = this.chatSessions.get(userId);
-        return session ? session.messages : [];
+        return __awaiter(this, void 0, void 0, function* () {
+            const session = yield this.loadSession(userId);
+            return session ? session.messages : [];
+        });
     }
     /**
      * Clear chat history for user
      */
     clearChatHistory(userId) {
-        this.chatSessions.delete(userId);
+        return __awaiter(this, void 0, void 0, function* () {
+            // Best-effort delete from Redis
+            if (cache_service_1.default.isReady()) {
+                yield cache_service_1.default.del(this.getSessionCacheKey(userId));
+            }
+            // Always delete in-memory fallback
+            this.chatSessions.delete(userId);
+        });
     }
     /**
      * Get session statistics
      */
     getSessionStats(userId) {
-        const session = this.chatSessions.get(userId);
-        if (!session)
-            return null;
-        return {
-            messageCount: session.messages.length,
-            sessionDuration: Date.now() - session.context.sessionStartTime.getTime(),
-            topics: session.context.previousTopics || [],
-            lastActivity: session.updatedAt,
-        };
+        return __awaiter(this, void 0, void 0, function* () {
+            const session = yield this.loadSession(userId);
+            if (!session)
+                return null;
+            return {
+                messageCount: session.messages.length,
+                sessionDuration: Date.now() - session.context.sessionStartTime.getTime(),
+                topics: session.context.previousTopics || [],
+                lastActivity: session.updatedAt,
+                storage: cache_service_1.default.isReady() ? "redis" : "memory",
+            };
+        });
     }
 }
 exports.AIChatbotService = AIChatbotService;

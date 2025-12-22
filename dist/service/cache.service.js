@@ -10,6 +10,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __asyncValues = (this && this.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -21,6 +28,14 @@ class CacheService {
     constructor() {
         this.client = null;
         this.isConnected = false;
+        this.counters = {
+            hits: 0,
+            misses: 0,
+            sets: 0,
+            dels: 0,
+            invalidations: 0,
+            errors: 0,
+        };
         this.initialize();
     }
     initialize() {
@@ -73,11 +88,14 @@ class CacheService {
             try {
                 const data = yield this.client.get(key);
                 if (!data) {
+                    this.counters.misses++;
                     return null;
                 }
+                this.counters.hits++;
                 return JSON.parse(data);
             }
             catch (error) {
+                this.counters.errors++;
                 logger_1.default.error("Cache get error:", { key, error: error.message });
                 return null;
             }
@@ -93,8 +111,10 @@ class CacheService {
             }
             try {
                 yield this.client.setex(key, ttl, JSON.stringify(value));
+                this.counters.sets++;
             }
             catch (error) {
+                this.counters.errors++;
                 logger_1.default.error("Cache set error:", { key, error: error.message });
             }
         });
@@ -109,8 +129,10 @@ class CacheService {
             }
             try {
                 yield this.client.del(key);
+                this.counters.dels++;
             }
             catch (error) {
+                this.counters.errors++;
                 logger_1.default.error("Cache delete error:", { key, error: error.message });
             }
         });
@@ -120,17 +142,48 @@ class CacheService {
      */
     delPattern(pattern) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, e_1, _b, _c;
             if (!this.isConnected || !this.client) {
                 return;
             }
             try {
-                const keys = yield this.client.keys(pattern);
-                if (keys.length > 0) {
-                    yield this.client.del(...keys);
-                    logger_1.default.info(`Cache cleared: ${keys.length} keys matching pattern "${pattern}"`);
+                // IMPORTANT: Avoid Redis KEYS in production.
+                // KEYS is O(N) and can block Redis (causing timeouts / stalls).
+                // SCAN is incremental and safe for prod usage.
+                const stream = this.client.scanStream({
+                    match: pattern,
+                    count: 250,
+                });
+                let deleted = 0;
+                try {
+                    for (var _d = true, _e = __asyncValues(stream), _f; _f = yield _e.next(), _a = _f.done, !_a; _d = true) {
+                        _c = _f.value;
+                        _d = false;
+                        const keys = _c;
+                        if (!Array.isArray(keys) || keys.length === 0)
+                            continue;
+                        deleted += keys.length;
+                        // Pipeline deletes to reduce RTT
+                        const pipeline = this.client.pipeline();
+                        for (const key of keys)
+                            pipeline.del(key);
+                        yield pipeline.exec();
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (!_d && !_a && (_b = _e.return)) yield _b.call(_e);
+                    }
+                    finally { if (e_1) throw e_1.error; }
+                }
+                if (deleted > 0) {
+                    this.counters.invalidations++;
+                    logger_1.default.info(`Cache cleared: ${deleted} keys matching pattern "${pattern}"`);
                 }
             }
             catch (error) {
+                this.counters.errors++;
                 logger_1.default.error("Cache delete pattern error:", { pattern, error: error.message });
             }
         });
@@ -166,18 +219,20 @@ class CacheService {
     getStats() {
         return __awaiter(this, void 0, void 0, function* () {
             if (!this.isConnected || !this.client) {
-                return { connected: false };
+                return { connected: false, counters: this.counters };
             }
             try {
                 const keys = yield this.client.dbsize();
                 return {
                     connected: true,
                     keys,
+                    counters: this.counters,
                 };
             }
             catch (error) {
                 return {
                     connected: true,
+                    counters: this.counters,
                 };
             }
         });

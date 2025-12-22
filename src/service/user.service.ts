@@ -1,6 +1,8 @@
 import { User } from "../models/user.model";
+import { Media } from "../models/media.model";
 import { Types } from "mongoose";
 import logger from "../utils/logger";
+import fileUploadService from "./fileUpload.service";
 
 /**
  * Interface for user profile data

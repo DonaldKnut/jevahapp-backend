@@ -177,4 +177,20 @@ router.get("/full", (0, asyncHandler_1.asyncHandler)((req, res) => __awaiter(voi
         res.status(503).json(Object.assign({ success: false }, health));
     }
 })));
+/**
+ * @route   GET /api/health/warmup
+ * @desc    Lightweight endpoint to wake up backend from cold start
+ * @access  Public
+ * @returns { status: string, timestamp: number }
+ *
+ * This endpoint is designed to be called FIRST by the frontend on app start.
+ * It's lightweight (no database queries) and helps wake up Render.com instances.
+ */
+router.get("/warmup", (req, res) => {
+    res.status(200).json({
+        status: "warm",
+        timestamp: Date.now(),
+        message: "Backend is ready",
+    });
+});
 exports.default = router;

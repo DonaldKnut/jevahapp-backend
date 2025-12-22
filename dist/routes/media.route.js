@@ -9,6 +9,7 @@ const media_controller_1 = require("../controllers/media.controller");
 const mediaAnalytics_controller_1 = require("../controllers/mediaAnalytics.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 // Configure Multer for in-memory file uploads
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 const router = (0, express_1.Router)();
@@ -34,7 +35,8 @@ router.get("/public/all-content", rateLimiter_1.apiRateLimiter, media_controller
  * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
  * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
  */
-router.get("/public/search", rateLimiter_1.apiRateLimiter, media_controller_1.searchPublicMedia);
+router.get("/public/search", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60), // 1 minute for search results
+media_controller_1.searchPublicMedia);
 /**
  * @route   GET /api/media/public/:id
  * @desc    Retrieve a single media item by its identifier (PUBLIC - no authentication required)
@@ -90,7 +92,7 @@ router.get("/all-content", auth_middleware_1.verifyToken, rateLimiter_1.apiRateL
  * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
  * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
  */
-router.get("/search", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.searchMedia);
+router.get("/search", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(30, undefined, { allowAuthenticated: true }), media_controller_1.searchMedia);
 /**
  * @route   GET /api/media/analytics
  * @desc    Retrieve analytics dashboard data (admin or creator-specific views)
@@ -122,7 +124,8 @@ router.get("/:mediaId/analytics", auth_middleware_1.verifyToken, rateLimiter_1.a
  * @query   { contentType?: string, limit?: string }
  * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
  */
-router.get("/default", rateLimiter_1.apiRateLimiter, media_controller_1.getDefaultContent);
+router.get("/default", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(600), // 10 minutes for default/onboarding content
+media_controller_1.getDefaultContent);
 /**
  * @route   GET /api/media/:id
  * @desc    Retrieve a single media item by its identifier
@@ -130,7 +133,7 @@ router.get("/default", rateLimiter_1.apiRateLimiter, media_controller_1.getDefau
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @returns { success: boolean, media: object }
  */
-router.get("/:id", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getMediaByIdentifier);
+router.get("/:id", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), media_controller_1.getMediaByIdentifier);
 /**
  * @route   GET /api/media/:id/stats
  * @desc    Retrieve interaction statistics for a media item (views, listens, reads, downloads, favorites, shares)
@@ -186,7 +189,7 @@ router.get("/:id/download-file", auth_middleware_1.verifyToken, rateLimiter_1.me
  * @query   { page?: number, limit?: number }
  * @returns { success: boolean, data: { downloads: array, pagination: object } }
  */
-router.get("/offline-downloads", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getOfflineDownloads);
+router.get("/offline-downloads", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true, varyByUserId: true }), media_controller_1.getOfflineDownloads);
 /**
  * @route   DELETE /api/media/offline-downloads/:mediaId
  * @desc    Remove media from offline downloads
@@ -201,7 +204,8 @@ router.delete("/offline-downloads/:mediaId", auth_middleware_1.verifyToken, rate
  * @access  Public (Optional authentication for user-specific data)
  * @returns { success: boolean, data: MediaWithEngagement }
  */
-router.get("/:mediaId/engagement", media_controller_1.getMediaWithEngagement);
+router.get("/:mediaId/engagement", (0, cache_middleware_1.cacheMiddleware)(60), // Public endpoint, cache for 1 minute
+media_controller_1.getMediaWithEngagement);
 /**
  * @route   POST /api/media/:id/track-view
  * @desc    Track view with duration for accurate view counting
@@ -238,7 +242,7 @@ router.post("/viewed", auth_middleware_1.verifyToken, rateLimiter_1.mediaInterac
  * @access  Protected (Authenticated users only)
  * @returns { success: boolean, message: string, viewedMedia: object[] }
  */
-router.get("/viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, media_controller_1.getViewedMedia);
+router.get("/viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(30, undefined, { allowAuthenticated: true, varyByUserId: true }), media_controller_1.getViewedMedia);
 /**
  * @route   POST /api/media/live/start
  * @desc    Start a new Mux live stream

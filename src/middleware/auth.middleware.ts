@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
+import logger from "../utils/logger";
+import { redisSafe } from "../lib/redis";
 
 export const verifyToken = async (
   req: Request,
@@ -93,8 +95,16 @@ export const verifyToken = async (
   }
 
   try {
-    // Check if token is blacklisted
-    const isBlacklisted = await BlacklistedToken.findOne({ token });
+    // Verify JWT first (fast, no DB query)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      userId: string;
+    };
+
+    req.userId = decoded.userId;
+
+    // Always check blacklist in DB (preserves auth behavior)
+    const isBlacklisted = await BlacklistedToken.findOne({ token }).lean();
+
     if (isBlacklisted) {
       res.status(401).json({
         success: false,
@@ -103,31 +113,51 @@ export const verifyToken = async (
       return;
     }
 
-    // Verify JWT
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
-      userId: string;
-    };
-
-    req.userId = decoded.userId;
-
-    // Fetch user and attach full user to request
-    const user = await User.findById(decoded.userId).select(
-      "role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil"
+    // Cache user lookup briefly in Redis (optimization only)
+    const userCacheKey = `auth:user:${decoded.userId}`;
+    const cachedUser = await redisSafe<any | null>(
+      "authUserGet",
+      async (r) => {
+        const u = await r.get<any>(userCacheKey);
+        return u || null;
+      },
+      null
     );
+
+    const user =
+      cachedUser ||
+      (await User.findById(decoded.userId)
+        .select(
+          "role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil banReason"
+        )
+        .lean());
+
     if (!user) {
       res.status(401).json({ success: false, message: "User not found" });
       return;
     }
 
-    // Check if user is banned
+    // Refresh cache (best-effort)
+    if (!cachedUser) {
+      redisSafe(
+        "authUserSet",
+        async (r) => {
+          await r.set(userCacheKey, user, { ex: 120 }); // 2 minutes
+          return true;
+        },
+        false
+      ).catch(() => {});
+    }
+
+    // Check if user is banned (non-blocking update if expired)
     if (user.isBanned) {
       // Check if ban has expired
       if (user.banUntil && new Date() > user.banUntil) {
-        // Ban expired, unban user
-        await User.findByIdAndUpdate(decoded.userId, {
+        // Ban expired, unban user (non-blocking - don't wait for update)
+        User.findByIdAndUpdate(decoded.userId, {
           isBanned: false,
           banUntil: undefined,
-        });
+        }).catch(err => logger.warn("Failed to unban user", { userId: decoded.userId, error: err.message }));
       } else {
         res.status(403).json({
           success: false,

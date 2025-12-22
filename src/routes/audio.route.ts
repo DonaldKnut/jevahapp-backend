@@ -41,6 +41,7 @@ import {
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { apiRateLimiter, mediaUploadRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 import { Media } from "../models/media.model";
 
 const router = Router();
@@ -59,7 +60,12 @@ const upload = multer({ storage: multer.memoryStorage() });
  * @query   { search?, category?, artist?, year?, minDuration?, maxDuration?, tags?, sortBy?, page?, limit? }
  * @returns { success: boolean, data: { songs: Song[], pagination: object } }
  */
-router.get("/copyright-free", apiRateLimiter, getCopyrightFreeSongsNew);
+router.get(
+  "/copyright-free",
+  apiRateLimiter,
+  cacheMiddleware(60), // 1 minute for public copyright-free songs
+  getCopyrightFreeSongsNew
+);
 
 /**
  * @route   GET /api/audio/copyright-free/:songId
@@ -77,7 +83,12 @@ router.get("/copyright-free/:songId", apiRateLimiter, getCopyrightFreeSongNew);
  * @query   { q: string (required), page?, limit?, category?, sort? }
  * @returns { success: boolean, data: { songs: Song[], pagination: object, query: string, searchTime: number } }
  */
-router.get("/copyright-free/search", apiRateLimiter, searchCopyrightFreeSongsNew);
+router.get(
+  "/copyright-free/search",
+  apiRateLimiter,
+  cacheMiddleware(30), // 30 seconds for search results
+  searchCopyrightFreeSongsNew
+);
 
 /**
  * @route   GET /api/audio/copyright-free/search/suggestions
@@ -95,7 +106,12 @@ router.get("/copyright-free/search/suggestions", apiRateLimiter, getSearchSugges
  * @query   { limit?, period? }
  * @returns { success: boolean, data: { trending: TrendingSearch[] } }
  */
-router.get("/copyright-free/search/trending", apiRateLimiter, getTrendingSearchesCopyrightFree);
+router.get(
+  "/copyright-free/search/trending",
+  apiRateLimiter,
+  cacheMiddleware(120), // 2 minutes for trending searches
+  getTrendingSearchesCopyrightFree
+);
 
 
 /**
@@ -261,7 +277,13 @@ router.post("/playlists", verifyToken, apiRateLimiter, createPlaylist);
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
  * @returns { success: boolean, data: Playlist }
  */
-router.get("/playlists/:playlistId", verifyToken, apiRateLimiter, getPlaylistById);
+router.get(
+  "/playlists/:playlistId",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getPlaylistById
+);
 
 /**
  * @route   PUT /api/audio/playlists/:playlistId
@@ -477,7 +499,13 @@ router.get(
  * @access  Protected (Authenticated users only)
  * @returns { success: boolean, data: Song[] }
  */
-router.get("/library", verifyToken, apiRateLimiter, getUserAudioLibrary);
+router.get(
+  "/library",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserAudioLibrary
+);
 
 export default router;
 

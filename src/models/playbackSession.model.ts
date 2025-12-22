@@ -91,14 +91,12 @@ const playbackSessionSchema = new Schema<IPlaybackSession>(
 );
 
 // Indexes for better performance
+// Index for active sessions (one active session per user)
+// Note: We'll handle uniqueness in service layer since MongoDB unique partial indexes can be tricky
 playbackSessionSchema.index({ userId: 1, isActive: 1 });
 playbackSessionSchema.index({ userId: 1, mediaId: 1, isActive: 1 });
 playbackSessionSchema.index({ lastProgressAt: -1 });
 playbackSessionSchema.index({ createdAt: -1 });
-
-// Index for active sessions (one active session per user)
-// Note: We'll handle uniqueness in service layer since MongoDB unique partial indexes can be tricky
-playbackSessionSchema.index({ userId: 1, isActive: 1 });
 
 export const PlaybackSession =
   mongoose.models.PlaybackSession ||

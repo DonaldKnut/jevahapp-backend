@@ -22,16 +22,16 @@ const logger_1 = __importDefault(require("../utils/logger"));
  * @param ttl - Time to live in seconds (default: 5 minutes)
  * @param keyGenerator - Optional function to generate cache key
  */
-const cacheMiddleware = (ttl = 300, keyGenerator) => {
+const cacheMiddleware = (ttl = 300, keyGenerator, options) => {
     return (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
         // Only cache GET requests
         if (req.method !== "GET") {
             return next();
         }
-        // Skip cache for authenticated user-specific data
-        if (req.userId) {
+        const allowAuthenticated = (options === null || options === void 0 ? void 0 : options.allowAuthenticated) === true;
+        const varyByUserId = (options === null || options === void 0 ? void 0 : options.varyByUserId) === true;
+        if (req.userId && !allowAuthenticated)
             return next();
-        }
         // Skip if Redis is not connected
         if (!cache_service_1.default.isReady()) {
             return next();
@@ -39,7 +39,7 @@ const cacheMiddleware = (ttl = 300, keyGenerator) => {
         // Generate cache key
         const cacheKey = keyGenerator
             ? keyGenerator(req)
-            : `cache:${req.originalUrl}:${JSON.stringify(req.query)}`;
+            : `cache:${req.originalUrl}:${JSON.stringify(req.query)}${varyByUserId && req.userId ? `:user=${req.userId}` : ""}`;
         try {
             // Try to get from cache
             const cached = yield cache_service_1.default.get(cacheKey);
@@ -47,7 +47,8 @@ const cacheMiddleware = (ttl = 300, keyGenerator) => {
                 res.setHeader("X-Cache", "HIT");
                 res.setHeader("X-Cache-Key", cacheKey);
                 logger_1.default.debug(`Cache HIT: ${cacheKey}`);
-                return res.json(cached);
+                res.json(cached);
+                return;
             }
             // Cache miss - store original json method
             const originalJson = res.json.bind(res);

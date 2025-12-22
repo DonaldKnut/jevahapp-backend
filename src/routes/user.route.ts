@@ -16,6 +16,7 @@ import {
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -179,7 +180,13 @@ router.get("/stats", verifyToken, requireAdmin, apiRateLimiter, getUserStats);
  *       500:
  *         description: Internal server error
  */
-router.get("/:userId", verifyToken, apiRateLimiter, getUserById);
+router.get(
+  "/:userId",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getUserById
+);
 
 /**
  * @swagger
@@ -350,7 +357,13 @@ router.get("/:userId/posts", verifyToken, apiRateLimiter, getUserPosts);
  *     security:
  *       - bearerAuth: []
  */
-router.get("/:userId/media", verifyToken, apiRateLimiter, getUserMedia);
+router.get(
+  "/:userId/media",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getUserMedia
+);
 
 /**
  * @swagger
@@ -362,7 +375,13 @@ router.get("/:userId/media", verifyToken, apiRateLimiter, getUserMedia);
  *     security:
  *       - bearerAuth: []
  */
-router.get("/:userId/videos", verifyToken, apiRateLimiter, getUserVideos);
+router.get(
+  "/:userId/videos",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getUserVideos
+);
 
 /**
  * @swagger

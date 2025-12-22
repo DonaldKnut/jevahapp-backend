@@ -6,6 +6,7 @@ import {
 } from "../controllers/ebook.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -65,7 +66,12 @@ const router = Router();
  *       500:
  *         description: Server error
  */
-router.get("/text", apiRateLimiter, getEbookText);
+router.get(
+  "/text",
+  apiRateLimiter,
+  cacheMiddleware(300), // 5 minutes for ebook text (doesn't change often)
+  getEbookText
+);
 
 /**
  * @swagger
@@ -155,7 +161,13 @@ router.post("/render", verifyToken, apiRateLimiter, renderTTS);
  *       500:
  *         description: Server error
  */
-router.get("/status/:jobId", verifyToken, apiRateLimiter, getTTSStatus);
+router.get(
+  "/status/:jobId",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(10), // 10 seconds for TTS status (changes frequently)
+  getTTSStatus
+);
 
 export default router;
 

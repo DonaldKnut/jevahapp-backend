@@ -11,6 +11,7 @@ import {
 } from "../controllers/merchandise.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -141,7 +142,13 @@ router.post("/", verifyToken, apiRateLimiter, createMerchandise);
  *       500:
  *         description: Internal server error
  */
-router.get("/:merchandiseId", verifyToken, apiRateLimiter, getMerchandiseById);
+router.get(
+  "/:merchandiseId",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getMerchandiseById
+);
 
 /**
  * @swagger
@@ -216,7 +223,13 @@ router.get("/:merchandiseId", verifyToken, apiRateLimiter, getMerchandiseById);
  *       500:
  *         description: Internal server error
  */
-router.get("/", verifyToken, apiRateLimiter, searchMerchandise);
+router.get(
+  "/",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true }),
+  searchMerchandise
+);
 
 /**
  * @swagger
@@ -418,6 +431,7 @@ router.get(
   "/seller/:sellerId",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
   getSellerMerchandise
 );
 

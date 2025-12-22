@@ -5,6 +5,7 @@ const user_controller_1 = require("../controllers/user.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const role_middleware_1 = require("../middleware/role.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -161,7 +162,7 @@ router.get("/stats", auth_middleware_1.verifyToken, role_middleware_1.requireAdm
  *       500:
  *         description: Internal server error
  */
-router.get("/:userId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, user_controller_1.getUserById);
+router.get("/:userId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), user_controller_1.getUserById);
 /**
  * @swagger
  * /api/users/{userId}:
@@ -316,7 +317,7 @@ router.get("/:userId/posts", auth_middleware_1.verifyToken, rateLimiter_1.apiRat
  *     security:
  *       - bearerAuth: []
  */
-router.get("/:userId/media", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, user_controller_1.getUserMedia);
+router.get("/:userId/media", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), user_controller_1.getUserMedia);
 /**
  * @swagger
  * /api/users/{userId}/videos:
@@ -327,7 +328,7 @@ router.get("/:userId/media", auth_middleware_1.verifyToken, rateLimiter_1.apiRat
  *     security:
  *       - bearerAuth: []
  */
-router.get("/:userId/videos", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, user_controller_1.getUserVideos);
+router.get("/:userId/videos", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), user_controller_1.getUserVideos);
 /**
  * @swagger
  * /api/users/{userId}/analytics:

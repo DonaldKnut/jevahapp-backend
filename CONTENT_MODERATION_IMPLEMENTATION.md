@@ -87,7 +87,11 @@ Body: {
    brew install ffmpeg
    
    # Ubuntu/Debian
-   sudo apt-get install ffmpeg
+   sudo apt-get update && sudo apt-get install -y ffmpeg
+   
+   # NOTE
+   # If you're seeing: "sudo: apt-get: command not found"
+   # you're on macOS. Use Homebrew (`brew`) instead of apt-get.
    
    # Windows
    # Download from https://ffmpeg.org/download.html

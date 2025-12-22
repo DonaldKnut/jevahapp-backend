@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const unifiedSearch_controller_1 = require("../controllers/unifiedSearch.controller");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @route   GET /api/search
@@ -19,7 +20,8 @@ router.get("/", rateLimiter_1.apiRateLimiter, unifiedSearch_controller_1.unified
  * @query   { q: string (required), limit? }
  * @returns { success: boolean, data: { suggestions: string[] } }
  */
-router.get("/suggestions", rateLimiter_1.apiRateLimiter, unifiedSearch_controller_1.getUnifiedSearchSuggestions);
+router.get("/suggestions", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60), // 1 minute for search suggestions
+unifiedSearch_controller_1.getUnifiedSearchSuggestions);
 /**
  * @route   GET /api/search/trending
  * @desc    Get trending searches across all content types
@@ -27,5 +29,5 @@ router.get("/suggestions", rateLimiter_1.apiRateLimiter, unifiedSearch_controlle
  * @query   { limit?, period? }
  * @returns { success: boolean, data: { trending: TrendingSearch[] } }
  */
-router.get("/trending", rateLimiter_1.apiRateLimiter, unifiedSearch_controller_1.getUnifiedTrendingSearches);
+router.get("/trending", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120), unifiedSearch_controller_1.getUnifiedTrendingSearches);
 exports.default = router;

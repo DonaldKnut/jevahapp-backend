@@ -17,6 +17,8 @@ const forumPost_model_1 = require("../models/forumPost.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
+const redisRateLimit_1 = require("../lib/redisRateLimit");
+const redisCounters_1 = require("../lib/redisCounters");
 /**
  * Helper function to get comment nesting depth
  * Returns the depth level (0 = top-level, 1 = reply, 2 = reply to reply, etc.)
@@ -56,6 +58,19 @@ const likeForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             res.status(404).json({ success: false, error: "Post not found" });
             return;
         }
+        // Redis-backed rate limit (per user + per post)
+        const likeRl = yield (0, redisRateLimit_1.redisRateLimit)({
+            key: `rl:like:${userId}:${postId}`,
+            limit: 10,
+            windowSeconds: 30,
+        });
+        if (!likeRl.allowed) {
+            res.status(429).json({
+                success: false,
+                error: "Too many like requests. Please slow down.",
+            });
+            return;
+        }
         // Check if user already liked this post
         const existingLike = yield mediaInteraction_model_1.MediaInteraction.findOne({
             user: userId,
@@ -71,6 +86,7 @@ const likeForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
             yield post.save();
             likeCount = post.likesCount || 0;
+            (0, redisCounters_1.incrPostCounter)({ postId, field: "likes", delta: -1 }).catch(() => { });
         }
         else {
             // Like - create new interaction
@@ -85,6 +101,7 @@ const likeForumPost = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             post.likesCount = (post.likesCount || 0) + 1;
             yield post.save();
             likeCount = post.likesCount || 0;
+            (0, redisCounters_1.incrPostCounter)({ postId, field: "likes", delta: 1 }).catch(() => { });
         }
         logger_1.default.info("Forum post like toggled", { postId, userId, liked, likeCount });
         res.status(200).json({
@@ -299,6 +316,19 @@ const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, funct
             res.status(404).json({ success: false, error: "Post not found" });
             return;
         }
+        // Redis-backed rate limit (per user + per post)
+        const commentRl = yield (0, redisRateLimit_1.redisRateLimit)({
+            key: `rl:comment:${userId}:${postId}`,
+            limit: 5,
+            windowSeconds: 30,
+        });
+        if (!commentRl.allowed) {
+            res.status(429).json({
+                success: false,
+                error: "Too many comments. Please slow down.",
+            });
+            return;
+        }
         // Validate parent comment if provided
         if (parentCommentId) {
             if (!mongoose_1.Types.ObjectId.isValid(parentCommentId)) {
@@ -339,6 +369,7 @@ const commentOnForumPost = (req, res) => __awaiter(void 0, void 0, void 0, funct
         // Update post commentsCount
         post.commentsCount = (post.commentsCount || 0) + 1;
         yield post.save();
+        (0, redisCounters_1.incrPostCounter)({ postId, field: "comments", delta: 1 }).catch(() => { });
         // Populate user info
         yield comment.populate("user", "firstName lastName username avatar");
         logger_1.default.info("Forum post comment created", { postId, userId, commentId: comment._id });

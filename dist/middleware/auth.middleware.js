@@ -49,6 +49,8 @@ exports.verifyToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = require("../models/user.model");
 const blacklistedToken_model_1 = require("../models/blacklistedToken.model");
+const logger_1 = __importDefault(require("../utils/logger"));
+const redis_1 = require("../lib/redis");
 const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     // Try to get token from Authorization header first
@@ -127,8 +129,11 @@ const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
         return;
     }
     try {
-        // Check if token is blacklisted
-        const isBlacklisted = yield blacklistedToken_model_1.BlacklistedToken.findOne({ token });
+        // Verify JWT first (fast, no DB query)
+        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        req.userId = decoded.userId;
+        // Always check blacklist in DB (preserves auth behavior)
+        const isBlacklisted = yield blacklistedToken_model_1.BlacklistedToken.findOne({ token }).lean();
         if (isBlacklisted) {
             res.status(401).json({
                 success: false,
@@ -136,24 +141,36 @@ const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             });
             return;
         }
-        // Verify JWT
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        req.userId = decoded.userId;
-        // Fetch user and attach full user to request
-        const user = yield user_model_1.User.findById(decoded.userId).select("role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil");
+        // Cache user lookup briefly in Redis (optimization only)
+        const userCacheKey = `auth:user:${decoded.userId}`;
+        const cachedUser = yield (0, redis_1.redisSafe)("authUserGet", (r) => __awaiter(void 0, void 0, void 0, function* () {
+            const u = yield r.get(userCacheKey);
+            return u || null;
+        }), null);
+        const user = cachedUser ||
+            (yield user_model_1.User.findById(decoded.userId)
+                .select("role isVerifiedCreator isVerifiedVendor isVerifiedChurch isBanned banUntil banReason")
+                .lean());
         if (!user) {
             res.status(401).json({ success: false, message: "User not found" });
             return;
         }
-        // Check if user is banned
+        // Refresh cache (best-effort)
+        if (!cachedUser) {
+            (0, redis_1.redisSafe)("authUserSet", (r) => __awaiter(void 0, void 0, void 0, function* () {
+                yield r.set(userCacheKey, user, { ex: 120 }); // 2 minutes
+                return true;
+            }), false).catch(() => { });
+        }
+        // Check if user is banned (non-blocking update if expired)
         if (user.isBanned) {
             // Check if ban has expired
             if (user.banUntil && new Date() > user.banUntil) {
-                // Ban expired, unban user
-                yield user_model_1.User.findByIdAndUpdate(decoded.userId, {
+                // Ban expired, unban user (non-blocking - don't wait for update)
+                user_model_1.User.findByIdAndUpdate(decoded.userId, {
                     isBanned: false,
                     banUntil: undefined,
-                });
+                }).catch(err => logger_1.default.warn("Failed to unban user", { userId: decoded.userId, error: err.message }));
             }
             else {
                 res.status(403).json({

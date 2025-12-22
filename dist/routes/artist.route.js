@@ -4,6 +4,7 @@ const express_1 = require("express");
 const artist_controller_1 = require("../controllers/artist.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
 
@@ -22,13 +23,13 @@ router.post("/unfollow", auth_middleware_1.verifyToken, rateLimiter_1.followRate
 
 
  */
-router.get("/:artistId/followers", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, artist_controller_1.getArtistFollowers);
+router.get("/:artistId/followers", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), artist_controller_1.getArtistFollowers);
 /**
 
 
 
  */
-router.get("/following", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, artist_controller_1.getUserFollowing);
+router.get("/following", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true, varyByUserId: true }), artist_controller_1.getUserFollowing);
 /**
 
 
@@ -52,7 +53,7 @@ router.delete("/merch/:merchItemId", auth_middleware_1.verifyToken, rateLimiter_
 
 
  */
-router.get("/:artistId/merch", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, artist_controller_1.getArtistMerch);
+router.get("/:artistId/merch", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), artist_controller_1.getArtistMerch);
 /**
 
 
@@ -70,5 +71,5 @@ router.get("/:artistId/songs", auth_middleware_1.verifyToken, rateLimiter_1.apiR
 
 
  */
-router.get("/downloads", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, artist_controller_1.getUserOfflineDownloads);
+router.get("/downloads", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true, varyByUserId: true }), artist_controller_1.getUserOfflineDownloads);
 exports.default = router;

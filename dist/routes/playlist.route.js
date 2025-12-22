@@ -4,6 +4,7 @@ const express_1 = require("express");
 const playlist_controller_1 = require("../controllers/playlist.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @route   POST /api/playlists
@@ -20,7 +21,7 @@ router.post("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, pl
  * @query   { page?: number, limit?: number }
  * @returns { success: boolean, data: Playlist[], pagination: object }
  */
-router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, playlist_controller_1.getUserPlaylists);
+router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true, varyByUserId: true }), playlist_controller_1.getUserPlaylists);
 /**
  * @route   GET /api/playlists/:playlistId
  * @desc    Get a specific playlist by ID
@@ -28,7 +29,7 @@ router.get("/", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, pla
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
  * @returns { success: boolean, data: Playlist }
  */
-router.get("/:playlistId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, playlist_controller_1.getPlaylistById);
+router.get("/:playlistId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), playlist_controller_1.getPlaylistById);
 /**
  * @route   PUT /api/playlists/:playlistId
  * @desc    Update playlist details (name, description, isPublic, etc.)

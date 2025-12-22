@@ -4,6 +4,7 @@ import contentInteractionService from "../service/contentInteraction.service";
 import logger from "../utils/logger";
 import { Bookmark } from "../models/bookmark.model";
 import { MediaInteraction } from "../models/mediaInteraction.model";
+import { enqueueAnalyticsEvent } from "../queues/enqueue";
 
 // Toggle like on any content type
 export const toggleContentLike = async (
@@ -79,6 +80,19 @@ export const toggleContentLike = async (
       contentId,
       contentType
     );
+
+    enqueueAnalyticsEvent({
+      name: "content_like_toggled",
+      payload: {
+        userId,
+        contentId,
+        contentType,
+        liked: result.liked,
+        likeCount: result.likeCount,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (req as any).requestId,
+    });
 
     logger.info("Toggle content like successful", {
       userId,
@@ -186,6 +200,19 @@ export const addContentComment = async (
       content,
       parentCommentId
     );
+
+    enqueueAnalyticsEvent({
+      name: "content_commented",
+      payload: {
+        userId,
+        contentId,
+        contentType,
+        parentCommentId: parentCommentId || null,
+        commentId: comment?._id,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (req as any).requestId,
+    });
 
     res.status(201).json({
       success: true,
@@ -757,6 +784,20 @@ export const shareContent = async (
       contentType,
       platform
     );
+
+    enqueueAnalyticsEvent({
+      name: "content_shared",
+      payload: {
+        userId,
+        contentId,
+        contentType,
+        platform,
+        message: message || null,
+        shareCount: result.shareCount,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (req as any).requestId,
+    });
 
     res.status(200).json({
       success: true,

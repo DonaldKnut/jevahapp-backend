@@ -17,6 +17,8 @@ const prayerPost_model_1 = require("../models/prayerPost.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
 const mongoose_1 = require("mongoose");
 const logger_1 = __importDefault(require("../utils/logger"));
+const redisRateLimit_1 = require("../lib/redisRateLimit");
+const redisCounters_1 = require("../lib/redisCounters");
 /**
  * Toggle like on a prayer post
  */
@@ -32,6 +34,19 @@ const likePrayer = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const prayer = yield prayerPost_model_1.PrayerPost.findById(prayerId);
         if (!prayer) {
             res.status(404).json({ success: false, error: "Prayer not found" });
+            return;
+        }
+        // Redis-backed rate limit (per user + per post)
+        const likeRl = yield (0, redisRateLimit_1.redisRateLimit)({
+            key: `rl:like:${userId}:${prayerId}`,
+            limit: 10,
+            windowSeconds: 30,
+        });
+        if (!likeRl.allowed) {
+            res.status(429).json({
+                success: false,
+                error: "Too many like requests. Please slow down.",
+            });
             return;
         }
         // Check if user already liked this prayer
@@ -50,6 +65,8 @@ const likePrayer = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             prayer.likesCount = Math.max(0, (prayer.likesCount || 0) - 1);
             yield prayer.save();
             likeCount = prayer.likesCount || 0;
+            // Fast counter (best-effort, doesn't affect correctness)
+            (0, redisCounters_1.incrPostCounter)({ postId: prayerId, field: "likes", delta: -1 }).catch(() => { });
         }
         else {
             // Like - create new interaction
@@ -65,6 +82,7 @@ const likePrayer = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             prayer.likesCount = (prayer.likesCount || 0) + 1;
             yield prayer.save();
             likeCount = prayer.likesCount || 0;
+            (0, redisCounters_1.incrPostCounter)({ postId: prayerId, field: "likes", delta: 1 }).catch(() => { });
         }
         logger_1.default.info("Prayer like toggled", { prayerId, userId, liked, likeCount });
         res.status(200).json({
@@ -244,6 +262,19 @@ const commentOnPrayer = (req, res) => __awaiter(void 0, void 0, void 0, function
             res.status(404).json({ success: false, error: "Prayer not found" });
             return;
         }
+        // Redis-backed rate limit (per user + per post)
+        const commentRl = yield (0, redisRateLimit_1.redisRateLimit)({
+            key: `rl:comment:${userId}:${prayerId}`,
+            limit: 5,
+            windowSeconds: 30,
+        });
+        if (!commentRl.allowed) {
+            res.status(429).json({
+                success: false,
+                error: "Too many comments. Please slow down.",
+            });
+            return;
+        }
         // Validate parent comment if provided
         if (parentCommentId) {
             if (!mongoose_1.Types.ObjectId.isValid(parentCommentId)) {
@@ -275,6 +306,7 @@ const commentOnPrayer = (req, res) => __awaiter(void 0, void 0, void 0, function
         // Update prayer commentsCount
         prayer.commentsCount = (prayer.commentsCount || 0) + 1;
         yield prayer.save();
+        (0, redisCounters_1.incrPostCounter)({ postId: prayerId, field: "comments", delta: 1 }).catch(() => { });
         // Populate user info
         yield comment.populate("user", "firstName lastName username avatar");
         logger_1.default.info("Prayer comment created", { prayerId, userId, commentId: comment._id });

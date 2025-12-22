@@ -236,6 +236,9 @@ sudo apt-get update
 sudo apt-get install -y ffmpeg
 ```
 
+> If you see `sudo: apt-get: command not found`, you're on **macOS**.
+> Use: `brew install ffmpeg`
+
 #### CentOS/RHEL
 ```bash
 sudo dnf install ffmpeg

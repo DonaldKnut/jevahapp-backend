@@ -384,6 +384,18 @@ const mediaSchema = new mongoose_1.Schema({
         default: false,
         index: true,
     },
+    // Background processing (BullMQ)
+    processing: {
+        status: {
+            type: String,
+            enum: ["idle", "queued", "processing", "completed", "failed"],
+            default: "idle",
+            index: true,
+        },
+        jobType: { type: String },
+        updatedAt: { type: Date },
+        error: { type: String },
+    },
 }, {
     timestamps: true,
 });

@@ -54,6 +54,7 @@ const playbackSession_controller_1 = require("../controllers/playbackSession.con
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const role_middleware_1 = require("../middleware/role.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 // Configure Multer for in-memory file uploads
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
@@ -67,7 +68,8 @@ const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage()
  * @query   { search?, category?, artist?, year?, minDuration?, maxDuration?, tags?, sortBy?, page?, limit? }
  * @returns { success: boolean, data: { songs: Song[], pagination: object } }
  */
-router.get("/copyright-free", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.getAllSongs);
+router.get("/copyright-free", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60), // 1 minute for public copyright-free songs
+copyrightFreeSong_controller_1.getAllSongs);
 /**
  * @route   GET /api/audio/copyright-free/:songId
  * @desc    Get a single copyright-free song (Public)
@@ -83,7 +85,8 @@ router.get("/copyright-free/:songId", rateLimiter_1.apiRateLimiter, copyrightFre
  * @query   { q: string (required), page?, limit?, category?, sort? }
  * @returns { success: boolean, data: { songs: Song[], pagination: object, query: string, searchTime: number } }
  */
-router.get("/copyright-free/search", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.searchSongs);
+router.get("/copyright-free/search", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(30), // 30 seconds for search results
+copyrightFreeSong_controller_1.searchSongs);
 /**
  * @route   GET /api/audio/copyright-free/search/suggestions
  * @desc    Get search suggestions/autocomplete (Public)
@@ -99,7 +102,8 @@ router.get("/copyright-free/search/suggestions", rateLimiter_1.apiRateLimiter, c
  * @query   { limit?, period? }
  * @returns { success: boolean, data: { trending: TrendingSearch[] } }
  */
-router.get("/copyright-free/search/trending", rateLimiter_1.apiRateLimiter, copyrightFreeSong_controller_1.getTrendingSearches);
+router.get("/copyright-free/search/trending", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120), // 2 minutes for trending searches
+copyrightFreeSong_controller_1.getTrendingSearches);
 /**
  * @route   POST /api/audio/copyright-free
  * @desc    Create a copyright-free song (Admin Only)
@@ -202,7 +206,7 @@ router.post("/playlists", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLi
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
  * @returns { success: boolean, data: Playlist }
  */
-router.get("/playlists/:playlistId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, playlist_controller_1.getPlaylistById);
+router.get("/playlists/:playlistId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120, undefined, { allowAuthenticated: true }), playlist_controller_1.getPlaylistById);
 /**
  * @route   PUT /api/audio/playlists/:playlistId
  * @desc    Update playlist details
@@ -381,5 +385,5 @@ router.get("/playback/last-position/:trackId", auth_middleware_1.verifyToken, ra
  * @access  Protected (Authenticated users only)
  * @returns { success: boolean, data: Song[] }
  */
-router.get("/library", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, audio_controller_1.getUserAudioLibrary);
+router.get("/library", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true, varyByUserId: true }), audio_controller_1.getUserAudioLibrary);
 exports.default = router;

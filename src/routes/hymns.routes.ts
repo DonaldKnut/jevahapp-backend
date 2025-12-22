@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.middleware";
 import { rateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 import {
   getHymns,
   getHymnById,
@@ -108,7 +109,11 @@ const interactionRateLimiter = rateLimiter(10, 60000); // 10 requests per minute
  *       500:
  *         description: Internal server error
  */
-router.get("/", getHymns);
+router.get(
+  "/",
+  cacheMiddleware(300), // 5 minutes for hymn lists
+  getHymns
+);
 
 /**
  * @swagger
@@ -178,7 +183,12 @@ router.get("/", getHymns);
  *       500:
  *         description: Internal server error
  */
-router.get("/search/scripture", searchRateLimiter, searchHymnsByScripture);
+router.get(
+  "/search/scripture",
+  searchRateLimiter,
+  cacheMiddleware(60), // 1 minute for search results
+  searchHymnsByScripture
+);
 
 /**
  * @swagger
@@ -225,7 +235,11 @@ router.get("/search/scripture", searchRateLimiter, searchHymnsByScripture);
  *       500:
  *         description: Internal server error
  */
-router.get("/search/tags", searchHymnsByTags);
+router.get(
+  "/search/tags",
+  cacheMiddleware(60), // 1 minute for tag search
+  searchHymnsByTags
+);
 
 /**
  * @swagger
@@ -273,7 +287,11 @@ router.get("/search/tags", searchHymnsByTags);
  *       500:
  *         description: Internal server error
  */
-router.get("/category/:category", getHymnsByCategory);
+router.get(
+  "/category/:category",
+  cacheMiddleware(300), // 5 minutes for category lists
+  getHymnsByCategory
+);
 
 /**
  * @swagger
@@ -305,7 +323,11 @@ router.get("/category/:category", getHymnsByCategory);
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", getHymnById);
+router.get(
+  "/:id",
+  cacheMiddleware(600), // 10 minutes for individual hymns
+  getHymnById
+);
 
 /**
  * @swagger
@@ -346,7 +368,11 @@ router.get("/:id", getHymnById);
  *       500:
  *         description: Internal server error
  */
-router.get("/stats", getHymnStats);
+router.get(
+  "/stats",
+  cacheMiddleware(3600), // 1 hour for stats
+  getHymnStats
+);
 
 /**
  * @swagger

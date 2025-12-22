@@ -11,6 +11,7 @@ import {
 } from "../controllers/enhancedMedia.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -48,7 +49,13 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.get("/trending", verifyToken, apiRateLimiter, getTrendingMedia);
+router.get(
+  "/trending",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true }),
+  getTrendingMedia
+);
 
 /**
  * @swagger
@@ -83,7 +90,13 @@ router.get("/trending", verifyToken, apiRateLimiter, getTrendingMedia);
  *       500:
  *         description: Internal server error
  */
-router.get("/most-viewed", verifyToken, apiRateLimiter, getMostViewedMedia);
+router.get(
+  "/most-viewed",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true }),
+  getMostViewedMedia
+);
 
 /**
  * @swagger
@@ -147,6 +160,7 @@ router.get(
   "/search/advanced",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true }),
   searchMediaWithFilters
 );
 
@@ -337,6 +351,7 @@ router.get(
   "/currently-watching",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(30, undefined, { allowAuthenticated: true, varyByUserId: true }),
   getCurrentlyWatching
 );
 

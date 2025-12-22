@@ -18,6 +18,7 @@ import {
   followRateLimiter,
   mediaInteractionRateLimiter,
 } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.get(
   "/:artistId/followers",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
   getArtistFollowers
 );
 
@@ -52,7 +54,13 @@ router.get(
 
 
  */
-router.get("/following", verifyToken, apiRateLimiter, getUserFollowing);
+router.get(
+  "/following",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserFollowing
+);
 
 /**
 
@@ -90,7 +98,13 @@ router.delete(
 
 
  */
-router.get("/:artistId/merch", verifyToken, apiRateLimiter, getArtistMerch);
+router.get(
+  "/:artistId/merch",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getArtistMerch
+);
 
 /**
 
@@ -121,6 +135,12 @@ router.get(
 
 
  */
-router.get("/downloads", verifyToken, apiRateLimiter, getUserOfflineDownloads);
+router.get(
+  "/downloads",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserOfflineDownloads
+);
 
 export default router;

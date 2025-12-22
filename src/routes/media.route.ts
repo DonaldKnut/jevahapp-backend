@@ -60,6 +60,7 @@ import {
   mediaUploadRateLimiter,
   mediaInteractionRateLimiter,
 } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 // Define interface for the request body of /favorite and /share routes
 interface UserActionRequestBody {
@@ -95,7 +96,12 @@ router.get("/public/all-content", apiRateLimiter, getPublicAllContent);
  * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
  * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
  */
-router.get("/public/search", apiRateLimiter, searchPublicMedia);
+router.get(
+  "/public/search",
+  apiRateLimiter,
+  cacheMiddleware(60), // 1 minute for search results
+  searchPublicMedia
+);
 
 /**
  * @route   GET /api/media/public/:id
@@ -169,7 +175,13 @@ router.get("/all-content", verifyToken, apiRateLimiter, getAllContentForAllTab);
  * @query   { search?: string, contentType?: string, category?: string, topics?: string, sort?: string, page?: string, limit?: string, creator?: string, duration?: "short" | "medium" | "long", startDate?: string, endDate?: string }
  * @returns { success: boolean, message: string, media: object[], pagination: { page: number, limit: number, total: number, pages: number } }
  */
-router.get("/search", verifyToken, apiRateLimiter, searchMedia);
+router.get(
+  "/search",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(30, undefined, { allowAuthenticated: true }),
+  searchMedia
+);
 
 /**
  * @route   GET /api/media/analytics
@@ -215,7 +227,12 @@ router.get(
  * @query   { contentType?: string, limit?: string }
  * @returns { success: boolean, data: { total: number, grouped: object, all: object[] } }
  */
-router.get("/default", apiRateLimiter, getDefaultContent);
+router.get(
+  "/default",
+  apiRateLimiter,
+  cacheMiddleware(600), // 10 minutes for default/onboarding content
+  getDefaultContent
+);
 
 /**
  * @route   GET /api/media/:id
@@ -224,7 +241,13 @@ router.get("/default", apiRateLimiter, getDefaultContent);
  * @param   { id: string } - MongoDB ObjectId of the media item
  * @returns { success: boolean, media: object }
  */
-router.get("/:id", verifyToken, apiRateLimiter, getMediaByIdentifier);
+router.get(
+  "/:id",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getMediaByIdentifier
+);
 
 /**
  * @route   GET /api/media/:id/stats
@@ -307,6 +330,7 @@ router.get(
   "/offline-downloads",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
   getOfflineDownloads
 );
 
@@ -330,7 +354,11 @@ router.delete(
  * @access  Public (Optional authentication for user-specific data)
  * @returns { success: boolean, data: MediaWithEngagement }
  */
-router.get("/:mediaId/engagement", getMediaWithEngagement);
+router.get(
+  "/:mediaId/engagement",
+  cacheMiddleware(60), // Public endpoint, cache for 1 minute
+  getMediaWithEngagement
+);
 
 /**
  * @route   POST /api/media/:id/track-view
@@ -389,7 +417,13 @@ router.post(
  * @access  Protected (Authenticated users only)
  * @returns { success: boolean, message: string, viewedMedia: object[] }
  */
-router.get("/viewed", verifyToken, apiRateLimiter, getViewedMedia);
+router.get(
+  "/viewed",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(30, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getViewedMedia
+);
 
 /**
  * @route   POST /api/media/live/start

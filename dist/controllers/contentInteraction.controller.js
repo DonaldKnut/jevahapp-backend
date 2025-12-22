@@ -51,6 +51,7 @@ const contentInteraction_service_1 = __importDefault(require("../service/content
 const logger_1 = __importDefault(require("../utils/logger"));
 const bookmark_model_1 = require("../models/bookmark.model");
 const mediaInteraction_model_1 = require("../models/mediaInteraction.model");
+const enqueue_1 = require("../queues/enqueue");
 // Toggle like on any content type
 const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -113,6 +114,18 @@ const toggleContentLike = (req, res) => __awaiter(void 0, void 0, void 0, functi
             return;
         }
         const result = yield contentInteraction_service_1.default.toggleLike(userId, contentId, contentType);
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "content_like_toggled",
+            payload: {
+                userId,
+                contentId,
+                contentType,
+                liked: result.liked,
+                likeCount: result.likeCount,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: req.requestId,
+        });
         logger_1.default.info("Toggle content like successful", {
             userId,
             contentId,
@@ -198,6 +211,18 @@ const addContentComment = (req, res) => __awaiter(void 0, void 0, void 0, functi
             return;
         }
         const comment = yield contentInteraction_service_1.default.addComment(userId, contentId, contentType, content, parentCommentId);
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "content_commented",
+            payload: {
+                userId,
+                contentId,
+                contentType,
+                parentCommentId: parentCommentId || null,
+                commentId: comment === null || comment === void 0 ? void 0 : comment._id,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: req.requestId,
+        });
         res.status(201).json({
             success: true,
             message: "Comment added successfully",
@@ -653,6 +678,19 @@ const shareContent = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         }
         // Use contentInteractionService to track share and get shareCount
         const result = yield contentInteraction_service_1.default.shareContent(userId, contentId, contentType, platform);
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "content_shared",
+            payload: {
+                userId,
+                contentId,
+                contentType,
+                platform,
+                message: message || null,
+                shareCount: result.shareCount,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: req.requestId,
+        });
         res.status(200).json({
             success: true,
             message: "Content shared successfully",

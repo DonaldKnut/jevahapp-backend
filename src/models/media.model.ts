@@ -112,6 +112,17 @@ export interface IMedia extends Document {
   };
   reportCount?: number;
   isHidden?: boolean; // Hidden from public view due to reports/moderation
+
+  /**
+   * Background processing state (BullMQ worker).
+   * This keeps async post-upload tasks observable and debuggable.
+   */
+  processing?: {
+    status?: "idle" | "queued" | "processing" | "completed" | "failed";
+    jobType?: string;
+    updatedAt?: Date;
+    error?: string;
+  };
   
   createdAt: Date;
   updatedAt: Date;
@@ -466,6 +477,19 @@ const mediaSchema = new Schema<IMedia>(
     type: Boolean,
     default: false,
     index: true,
+  },
+
+  // Background processing (BullMQ)
+  processing: {
+    status: {
+      type: String,
+      enum: ["idle", "queued", "processing", "completed", "failed"],
+      default: "idle",
+      index: true,
+    },
+    jobType: { type: String },
+    updatedAt: { type: Date },
+    error: { type: String },
   },
   },
   {

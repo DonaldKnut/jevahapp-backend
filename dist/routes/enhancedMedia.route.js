@@ -4,6 +4,7 @@ const express_1 = require("express");
 const enhancedMedia_controller_1 = require("../controllers/enhancedMedia.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -39,7 +40,7 @@ const router = (0, express_1.Router)();
  *       500:
  *         description: Internal server error
  */
-router.get("/trending", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, enhancedMedia_controller_1.getTrendingMedia);
+router.get("/trending", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true }), enhancedMedia_controller_1.getTrendingMedia);
 /**
  * @swagger
  * /api/media/most-viewed:
@@ -73,7 +74,7 @@ router.get("/trending", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimi
  *       500:
  *         description: Internal server error
  */
-router.get("/most-viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, enhancedMedia_controller_1.getMostViewedMedia);
+router.get("/most-viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true }), enhancedMedia_controller_1.getMostViewedMedia);
 /**
  * @swagger
  * /api/media/search/advanced:
@@ -132,7 +133,7 @@ router.get("/most-viewed", auth_middleware_1.verifyToken, rateLimiter_1.apiRateL
  *       500:
  *         description: Internal server error
  */
-router.get("/search/advanced", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, enhancedMedia_controller_1.searchMediaWithFilters);
+router.get("/search/advanced", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(60, undefined, { allowAuthenticated: true }), enhancedMedia_controller_1.searchMediaWithFilters);
 /**
  * @swagger
  * /api/media/library/add:
@@ -307,5 +308,5 @@ router.put("/progress", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimi
  *       500:
  *         description: Internal server error
  */
-router.get("/currently-watching", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, enhancedMedia_controller_1.getCurrentlyWatching);
+router.get("/currently-watching", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(30, undefined, { allowAuthenticated: true, varyByUserId: true }), enhancedMedia_controller_1.getCurrentlyWatching);
 exports.default = router;

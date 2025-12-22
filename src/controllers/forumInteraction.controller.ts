@@ -3,6 +3,8 @@ import { ForumPost } from "../models/forumPost.model";
 import { MediaInteraction } from "../models/mediaInteraction.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
+import { redisRateLimit } from "../lib/redisRateLimit";
+import { incrPostCounter } from "../lib/redisCounters";
 
 /**
  * Helper function to get comment nesting depth
@@ -47,6 +49,20 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Redis-backed rate limit (per user + per post)
+    const likeRl = await redisRateLimit({
+      key: `rl:like:${userId}:${postId}`,
+      limit: 10,
+      windowSeconds: 30,
+    });
+    if (!likeRl.allowed) {
+      res.status(429).json({
+        success: false,
+        error: "Too many like requests. Please slow down.",
+      });
+      return;
+    }
+
     // Check if user already liked this post
     const existingLike = await MediaInteraction.findOne({
       user: userId,
@@ -64,6 +80,7 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
       post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
       await post.save();
       likeCount = post.likesCount || 0;
+      incrPostCounter({ postId, field: "likes", delta: -1 }).catch(() => {});
     } else {
       // Like - create new interaction
       await MediaInteraction.create({
@@ -77,6 +94,7 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
       post.likesCount = (post.likesCount || 0) + 1;
       await post.save();
       likeCount = post.likesCount || 0;
+      incrPostCounter({ postId, field: "likes", delta: 1 }).catch(() => {});
     }
 
     logger.info("Forum post like toggled", { postId, userId, liked, likeCount });
@@ -310,6 +328,20 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
       return;
     }
 
+    // Redis-backed rate limit (per user + per post)
+    const commentRl = await redisRateLimit({
+      key: `rl:comment:${userId}:${postId}`,
+      limit: 5,
+      windowSeconds: 30,
+    });
+    if (!commentRl.allowed) {
+      res.status(429).json({
+        success: false,
+        error: "Too many comments. Please slow down.",
+      });
+      return;
+    }
+
     // Validate parent comment if provided
     if (parentCommentId) {
       if (!Types.ObjectId.isValid(parentCommentId)) {
@@ -353,6 +385,7 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
     // Update post commentsCount
     post.commentsCount = (post.commentsCount || 0) + 1;
     await post.save();
+    incrPostCounter({ postId, field: "comments", delta: 1 }).catch(() => {});
 
     // Populate user info
     await comment.populate("user", "firstName lastName username avatar");

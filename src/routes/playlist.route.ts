@@ -12,6 +12,7 @@ import {
 } from "../controllers/playlist.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 
 const router = Router();
 
@@ -31,7 +32,13 @@ router.post("/", verifyToken, apiRateLimiter, createPlaylist);
  * @query   { page?: number, limit?: number }
  * @returns { success: boolean, data: Playlist[], pagination: object }
  */
-router.get("/", verifyToken, apiRateLimiter, getUserPlaylists);
+router.get(
+  "/",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserPlaylists
+);
 
 /**
  * @route   GET /api/playlists/:playlistId
@@ -40,7 +47,13 @@ router.get("/", verifyToken, apiRateLimiter, getUserPlaylists);
  * @param   { playlistId: string } - MongoDB ObjectId of the playlist
  * @returns { success: boolean, data: Playlist }
  */
-router.get("/:playlistId", verifyToken, apiRateLimiter, getPlaylistById);
+router.get(
+  "/:playlistId",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  getPlaylistById
+);
 
 /**
  * @route   PUT /api/playlists/:playlistId

@@ -4,6 +4,7 @@ const express_1 = require("express");
 const ebook_controller_1 = require("../controllers/ebook.controller");
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const rateLimiter_1 = require("../middleware/rateLimiter");
+const cache_middleware_1 = require("../middleware/cache.middleware");
 const router = (0, express_1.Router)();
 /**
  * @swagger
@@ -61,7 +62,8 @@ const router = (0, express_1.Router)();
  *       500:
  *         description: Server error
  */
-router.get("/text", rateLimiter_1.apiRateLimiter, ebook_controller_1.getEbookText);
+router.get("/text", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(300), // 5 minutes for ebook text (doesn't change often)
+ebook_controller_1.getEbookText);
 /**
  * @swagger
  * /api/tts/render:
@@ -149,5 +151,6 @@ router.post("/render", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimit
  *       500:
  *         description: Server error
  */
-router.get("/status/:jobId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, ebook_controller_1.getTTSStatus);
+router.get("/status/:jobId", auth_middleware_1.verifyToken, rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(10), // 10 seconds for TTS status (changes frequently)
+ebook_controller_1.getTTSStatus);
 exports.default = router;

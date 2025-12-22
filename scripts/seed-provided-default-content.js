@@ -82,7 +82,7 @@ const C = {
 
 // Provided default content
 const defaultContent = [
-  // Music (Kefee)
+  // Music (Kefee) - Keep as music, not sermon
   {
     title: "Thank You My God - Kefee",
     description: "Gospel music by Kefee",
@@ -98,9 +98,11 @@ const defaultContent = [
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-08-10T12:00:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-10T12:00:00Z"),
   },
 
-  // Sermons (Videos)
+  // Video Sermons - Keep as videos (video sermons)
   {
     title: "The Power of Faith - Pastor Adeboye",
     description: "Sermon video by Pastor E. A. Adeboye",
@@ -111,10 +113,12 @@ const defaultContent = [
     fileMimeType: "video/mp4",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/adeboye-enoch-jpeg.webp",
-    topics: ["faith", "sermon"],
+    topics: ["sermon", "faith", "teaching"],
     uploadedBy: C.adeboye,
     isDefaultContent: true,
     isOnboardingContent: true,
+    createdAt: new Date("2024-08-25T11:20:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-25T11:20:00Z"),
   },
   {
     title: "Walking in Victory - Pastor Kumuyi",
@@ -126,80 +130,90 @@ const defaultContent = [
     fileMimeType: "video/mp4",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/ddf37a3e-a511-4430-af0d-a660f9fc224f.jpg",
-    topics: ["faith", "sermon"],
+    topics: ["sermon", "faith", "teaching"],
     uploadedBy: C.kumuyi,
     isDefaultContent: true,
     isOnboardingContent: true,
+    createdAt: new Date("2024-09-01T15:30:00Z"), // 3 months ago
+    updatedAt: new Date("2024-09-01T15:30:00Z"),
   },
 
-  // Audio (Pastor Chris)
+  // Audio Sermons (Pastor Chris) - Changed from "audio" to "sermon"
   {
     title: "Control Your Thoughts - Pastor Chris",
-    description: "Quick word of encouragement",
-    contentType: "audio",
-    category: "inspiration",
+    description: "Sermon by Pastor Chris Oyakhilome",
+    contentType: "sermon",
+    category: "teachings",
     fileUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-music/pastor-chris-oyakhilome-control-your-thoughts.mp3",
     fileMimeType: "audio/mpeg",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/pastrchris.jpg",
-    topics: ["inspiration", "teaching"],
+    topics: ["sermon", "teaching", "faith"],
     uploadedBy: C.chris,
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-08-15T10:00:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-15T10:00:00Z"),
   },
   {
     title: "Spiritual Warfare: Understanding Demonic Activity - Pastor Chris",
-    description: "Teaching on spiritual warfare",
-    contentType: "audio",
+    description: "Sermon on spiritual warfare by Pastor Chris Oyakhilome",
+    contentType: "sermon",
     category: "teachings",
     fileUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-music/Spiritual-Warfare-Understanding-Demonic-Activity-Pastor-Chris-Oyakhilome.mp3",
     fileMimeType: "audio/mpeg",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/Pastor-Chris.webp",
-    topics: ["faith", "teaching"],
+    topics: ["sermon", "faith", "teaching"],
     uploadedBy: C.chris,
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-08-20T14:30:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-20T14:30:00Z"),
   },
 
-  // Audio (Arome Osayi)
+  // Audio Sermons (Arome Osayi) - Changed from "audio" to "sermon"
   {
     title: "This Jesus... The Pattern (2010) - Apostle Arome Osayi",
-    description: "Teaching by Apostle Arome Osayi",
-    contentType: "audio",
+    description: "Sermon by Apostle Arome Osayi",
+    contentType: "sermon",
     category: "teachings",
     fileUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-music/08-This-Jesus...The-Pattern-Tue-26th-Oct.-2010-2.mp3",
     fileMimeType: "audio/mpeg",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/AROME-1.jpeg",
-    topics: ["teaching"],
+    topics: ["sermon", "teaching", "faith"],
     uploadedBy: C.arome,
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-09-05T09:15:00Z"), // 3 months ago
+    updatedAt: new Date("2024-09-05T09:15:00Z"),
   },
 
-  // Audio (Joshua Selman)
+  // Audio Sermons (Joshua Selman) - Changed from "audio" to "sermon"
   {
     title: "EPHPHATHA: The Mystery Of Open Doors - Apostle Joshua Selman",
-    description: "Teaching on open doors",
-    contentType: "audio",
+    description: "Sermon on open doors by Apostle Joshua Selman",
+    contentType: "sermon",
     category: "teachings",
     fileUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-music/EPHPHATHA-The-Mystery-of-Open-Doors-Apostle-Joshua-Selman-koinonia-Abuja-www.spiritnerds.org_.mp3",
     fileMimeType: "audio/mpeg",
     thumbnailUrl:
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev/jevah/media-thumbnails/ca92b62237dad4a46bd9291360c196c5.jpg",
-    topics: ["teaching", "faith"],
+    topics: ["sermon", "teaching", "faith"],
     uploadedBy: C.selman,
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-09-10T16:45:00Z"), // 3 months ago
+    updatedAt: new Date("2024-09-10T16:45:00Z"),
   },
 
   // Ebooks
@@ -218,6 +232,8 @@ const defaultContent = [
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-08-12T08:00:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-12T08:00:00Z"),
   },
   {
     title: "God's Chosen Fast - Arthur Wallis",
@@ -234,6 +250,8 @@ const defaultContent = [
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-08-18T13:15:00Z"), // 4 months ago
+    updatedAt: new Date("2024-08-18T13:15:00Z"),
   },
   {
     title: "Fasting - Jentezen Franklin",
@@ -250,6 +268,8 @@ const defaultContent = [
     isDefaultContent: true,
     isOnboardingContent: true,
     isDownloadable: true,
+    createdAt: new Date("2024-09-08T10:45:00Z"), // 3 months ago
+    updatedAt: new Date("2024-09-08T10:45:00Z"),
   },
 ];
 

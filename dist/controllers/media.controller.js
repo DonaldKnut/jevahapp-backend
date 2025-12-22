@@ -54,6 +54,9 @@ const contaboStreaming_service_1 = __importDefault(require("../service/contaboSt
 const liveRecording_service_1 = __importDefault(require("../service/liveRecording.service"));
 const notification_service_1 = require("../service/notification.service");
 const cache_service_1 = __importDefault(require("../service/cache.service"));
+const enqueue_1 = require("../queues/enqueue");
+const redisCounters_1 = require("../lib/redisCounters");
+const redis_1 = require("../lib/redis");
 const aiContentDescription_service_1 = require("../service/aiContentDescription.service");
 const user_model_1 = require("../models/user.model");
 const contentModeration_service_1 = require("../service/contentModeration.service");
@@ -365,6 +368,25 @@ const uploadMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
         // Invalidate cache for media lists
         yield cache_service_1.default.delPattern("media:public:*");
         yield cache_service_1.default.delPattern("media:all:*");
+        // Enqueue non-blocking post-upload processing + analytics event
+        const mediaIdString = String(media._id);
+        (0, enqueue_1.enqueueMediaPostUpload)({
+            mediaId: mediaIdString,
+            userId,
+            contentType,
+            fileUrl: media.fileUrl,
+            requestId: request.requestId,
+        });
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "media_uploaded",
+            payload: {
+                mediaId: mediaIdString,
+                userId,
+                contentType,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: request.requestId,
+        });
         // Cleanup upload session
         if (contentType !== "live") {
             uploadProgress_service_1.uploadProgressService.clearUploadSession(uploadId);
@@ -424,7 +446,7 @@ const getAllMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
 exports.getAllMedia = getAllMedia;
 // New endpoint specifically for the "All" tab - returns all content for all users
 const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
         if ((request.query.page &&
             isNaN(parseInt(request.query.page))) ||
@@ -446,19 +468,68 @@ const getAllContentForAllTab = (request, response) => __awaiter(void 0, void 0, 
             page: page && page > 0 ? page : undefined,
             limit: limitParam && limitParam > 0 ? limitParam : undefined,
         } : undefined;
-        const result = yield media_service_1.mediaService.getAllContentForAllTab(options);
+        const userIdentifier = request.userId;
+        /**
+         * Per-user feed caching (IDs only) using Upstash Redis:
+         * - Key: feed:user:{userId}
+         * - TTL: ~45s
+         *
+         * On hit: fetch by IDs from MongoDB (DB remains source of truth)
+         * On miss: generate feed, cache IDs, return response
+         */
+        const feedKey = userIdentifier ? `feed:user:${userIdentifier}` : null;
+        if (feedKey) {
+            const cachedIds = yield (0, redis_1.redisSafe)("feedGet", (r) => __awaiter(void 0, void 0, void 0, function* () {
+                const ids = yield r.get(feedKey);
+                return Array.isArray(ids) ? ids : null;
+            }), null);
+            if (cachedIds && cachedIds.length > 0) {
+                const docs = yield media_model_1.Media.find({ _id: { $in: cachedIds } }).lean();
+                const byId = new Map(docs.map((d) => [String(d._id), d]));
+                const ordered = cachedIds.map((id) => byId.get(String(id))).filter(Boolean);
+                // Recommendations remain user-specific and are computed separately.
+                let recommendations = undefined;
+                try {
+                    recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(userIdentifier, {
+                        limitPerSection: 12,
+                        mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
+                    });
+                }
+                catch (_c) {
+                    recommendations = undefined;
+                }
+                response.status(200).json({
+                    success: true,
+                    media: ordered,
+                    total: ordered.length,
+                    recommendations,
+                });
+                return;
+            }
+        }
+        // Global cache (heavy list) briefly using existing Redis/TCP cacheService.
+        // Recommendations remain user-specific and are computed separately.
+        const cacheKey = `media:all-content:${options ? `page=${options.page || 1}:limit=${options.limit || "default"}` : "default"}`;
+        const result = yield cache_service_1.default.getOrSet(cacheKey, () => media_service_1.mediaService.getAllContentForAllTab(options), 60);
         // Optional personalization: include recommendations when user is authenticated
         let recommendations = undefined;
-        const userIdentifier = request.userId;
         try {
             recommendations = yield media_service_1.mediaService.getRecommendationsForAllContent(userIdentifier, {
                 limitPerSection: 12,
-                mood: ((_a = request.query) === null || _a === void 0 ? void 0 : _a.mood) || undefined,
+                mood: ((_b = request.query) === null || _b === void 0 ? void 0 : _b.mood) || undefined,
             });
         }
         catch (err) {
             // Non-blocking failure; proceed without recommendations
             recommendations = undefined;
+        }
+        // Cache IDs for this user feed (best-effort, never blocks)
+        if (feedKey) {
+            const ids = (result.media || []).map((m) => String(m._id)).filter(Boolean);
+            (0, redis_1.redisSafe)("feedSet", (r) => __awaiter(void 0, void 0, void 0, function* () {
+                yield r.set(feedKey, ids, { ex: 45 });
+                return true;
+            }), false).catch(() => { });
         }
         response.status(200).json(Object.assign(Object.assign({ success: true, media: result.media, total: result.total }, (result.pagination && { pagination: result.pagination })), { // Only include if pagination was used
             recommendations }));
@@ -727,7 +798,19 @@ const recordMediaInteraction = (request, response) => __awaiter(void 0, void 0, 
         // If interaction is a view, add to viewed media list
         if (interactionType === "view") {
             yield media_service_1.mediaService.addToViewedMedia(userIdentifier, id);
+            (0, redisCounters_1.incrPostCounter)({ postId: id, field: "views", delta: 1 }).catch(() => { });
         }
+        // Non-blocking analytics event (aggregation/ranking can run offline)
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "media_interaction",
+            payload: {
+                userId: userIdentifier,
+                mediaId: id,
+                interactionType,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: request.requestId,
+        });
         response.status(201).json({
             success: true,
             message: `Recorded ${interactionType} for media ${id}`,
@@ -778,6 +861,18 @@ const trackViewWithDuration = (request, response) => __awaiter(void 0, void 0, v
             mediaIdentifier: mediaId,
             duration,
             isComplete,
+        });
+        (0, redisCounters_1.incrPostCounter)({ postId: mediaId, field: "views", delta: 1 }).catch(() => { });
+        (0, enqueue_1.enqueueAnalyticsEvent)({
+            name: "media_view_duration",
+            payload: {
+                userId,
+                mediaId,
+                duration,
+                isComplete,
+                createdAt: new Date().toISOString(),
+            },
+            requestId: request.requestId,
         });
         response.status(200).json({
             success: true,

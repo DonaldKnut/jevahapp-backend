@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { cacheMiddleware } from "../middleware/cache.middleware";
 import {
   getProfileTabs,
   getUserPhotos,
@@ -20,17 +21,54 @@ const router = express.Router();
  * @query   { page?: number, limit?: number, sort?: "recent" | "popular", contentType?: "all" | "video" | "audio" | "photo" | "post" }
  * @returns { success: boolean, data: Array<ContentItem>, pagination: object }
  */
-router.get("/my-content", verifyToken, apiRateLimiter, getMyContent);
+router.get(
+  "/my-content",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getMyContent
+);
 
-router.get("/user/tabs", verifyToken, apiRateLimiter, getProfileTabs);
-router.get("/user/photos", verifyToken, apiRateLimiter, getUserPhotos);
-router.get("/user/posts", verifyToken, apiRateLimiter, getUserPosts);
-router.get("/user/videos", verifyToken, apiRateLimiter, getUserVideos);
-router.get("/user/audios", verifyToken, apiRateLimiter, getUserAudios);
+router.get(
+  "/user/tabs",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getProfileTabs
+);
+router.get(
+  "/user/photos",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserPhotos
+);
+router.get(
+  "/user/posts",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserPosts
+);
+router.get(
+  "/user/videos",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserVideos
+);
+router.get(
+  "/user/audios",
+  verifyToken,
+  apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  getUserAudios
+);
 router.get(
   "/user/content/:id",
   verifyToken,
   apiRateLimiter,
+  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
   getUserContentById
 );
 

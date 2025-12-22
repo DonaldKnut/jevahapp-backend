@@ -86,7 +86,7 @@ const getChatHistory = (req, res) => __awaiter(void 0, void 0, void 0, function*
             });
             return;
         }
-        const chatHistory = aiChatbot_service_1.default.getChatHistory(userId);
+        const chatHistory = yield aiChatbot_service_1.default.getChatHistory(userId);
         res.status(200).json({
             success: true,
             data: {
@@ -120,7 +120,7 @@ const clearChatHistory = (req, res) => __awaiter(void 0, void 0, void 0, functio
             });
             return;
         }
-        aiChatbot_service_1.default.clearChatHistory(userId);
+        yield aiChatbot_service_1.default.clearChatHistory(userId);
         res.status(200).json({
             success: true,
             message: "Chat history cleared successfully",
@@ -151,7 +151,7 @@ const getSessionStats = (req, res) => __awaiter(void 0, void 0, void 0, function
             });
             return;
         }
-        const stats = aiChatbot_service_1.default.getSessionStats(userId);
+        const stats = yield aiChatbot_service_1.default.getSessionStats(userId);
         res.status(200).json({
             success: true,
             data: stats || {

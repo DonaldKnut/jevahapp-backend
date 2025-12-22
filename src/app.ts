@@ -10,6 +10,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
+import { requestIdMiddleware } from "./middleware/requestId.middleware";
 
 // Import routes
 import userRoutes from "./routes/user.route";
@@ -50,6 +51,7 @@ import playbackSessionRoutes from "./routes/playbackSession.route";
 import commentRoutes from "./routes/comment.route";
 import audioRoutes from "./routes/audio.route";
 import searchRoutes from "./routes/search.route";
+import metricsRoutes from "./routes/metrics.routes";
 // import datingRoutes from "./routes/dating.route";
 
 // Import services and utilities
@@ -62,6 +64,9 @@ import socketManager from "./socket/socketManager";
 // Create Express app
 const app = express();
 const server = createServer(app);
+
+// Request ID must be first so every log line can include it
+app.use(requestIdMiddleware);
 
 // Initialize Socket.IO service
 const socketService = new SocketService(server);
@@ -222,6 +227,7 @@ app.use((req, res, next) => {
     ip: req.ip,
     userAgent: req.get("User-Agent"),
     userId: req.userId || "anonymous",
+    requestId: req.requestId,
   });
 
   // Override res.end to log response
@@ -352,6 +358,8 @@ app.use("/api/media", playbackSessionRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/audio", audioRoutes);
 app.use("/api/search", searchRoutes);
+// NOTE: Protect this at the infrastructure level (private network / internal auth)
+app.use("/api/metrics", metricsRoutes);
 
 // Add a simple test route
 app.get("/api/test", (req, res) => {
@@ -390,6 +398,7 @@ app.use(
       method: req.method,
       url: req.originalUrl,
       userId: req.userId || "anonymous",
+      requestId: (req as any).requestId,
     });
 
     // Don't leak error details in production

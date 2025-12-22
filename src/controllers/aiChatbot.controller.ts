@@ -92,7 +92,7 @@ export const getChatHistory = async (
       return;
     }
 
-    const chatHistory = aiChatbotService.getChatHistory(userId);
+    const chatHistory = await aiChatbotService.getChatHistory(userId);
 
     res.status(200).json({
       success: true,
@@ -132,7 +132,7 @@ export const clearChatHistory = async (
       return;
     }
 
-    aiChatbotService.clearChatHistory(userId);
+    await aiChatbotService.clearChatHistory(userId);
 
     res.status(200).json({
       success: true,
@@ -169,7 +169,7 @@ export const getSessionStats = async (
       return;
     }
 
-    const stats = aiChatbotService.getSessionStats(userId);
+    const stats = await aiChatbotService.getSessionStats(userId);
 
     res.status(200).json({
       success: true,
