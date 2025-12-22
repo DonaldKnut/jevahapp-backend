@@ -10,7 +10,7 @@ You have:
 ## 🔧 **What You Need**
 
 Your Upstash dashboard shows:
-- **Endpoint**: `cunning-grackle-43906.upstash.io`
+- **Endpoint**: `your-database-name.upstash.io` (example)
 - **Port**: `6379`
 - **TLS/SSL**: Enabled
 - **Token**: (you have this)
@@ -24,7 +24,7 @@ Your Upstash dashboard shows:
 3. Look for a section that says **"Connect"** or **"Connection String"**
 4. You should see something like:
    ```
-   rediss://default:YOUR_TOKEN@cunning-grackle-43906.upstash.io:6379
+   rediss://default:YOUR_TOKEN@your-database-name.upstash.io:6379
    ```
 5. Copy that entire string
 
@@ -49,11 +49,11 @@ Add this line to your `.env` file:
 
 ```env
 # Upstash Redis (REST) - for counters/rate limiting (already set)
-UPSTASH_REDIS_REST_URL=https://cunning-grackle-43906.upstash.io
+UPSTASH_REDIS_REST_URL=https://your-database-name.upstash.io
 UPSTASH_REDIS_REST_TOKEN=YOUR_REST_TOKEN
 
 # Upstash Redis (TCP) - for response caching and BullMQ queues
-REDIS_URL=rediss://default:YOUR_TCP_TOKEN@cunning-grackle-43906.upstash.io:6379
+REDIS_URL=rediss://default:YOUR_TCP_TOKEN@your-database-name.upstash.io:6379
 ```
 
 **Note**: The TCP token might be the same as your REST token, or it might be different. Check your Upstash dashboard.
