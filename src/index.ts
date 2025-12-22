@@ -24,7 +24,22 @@ const PORT = parseInt(process.env.PORT || "4000", 10);
 // Disable mongoose buffering globally (before connection)
 mongoose.set("bufferCommands", false);
 
-// Connect to MongoDB with optimized connection pooling
+// Start server immediately so Render can detect the port
+// MongoDB connection will happen in the background
+server.listen(PORT, "0.0.0.0", () => {
+  logger.info(`✅ Server running on port ${PORT}`);
+  logger.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
+  logger.info(`🔌 Socket.IO server ready for real-time connections`);
+  logger.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+
+  if (process.env.NODE_ENV === "production") {
+    logger.info("🚀 Production mode enabled");
+  }
+
+  logger.info("⏳ Connecting to MongoDB...");
+});
+
+// Connect to MongoDB with optimized connection pooling (in background)
 mongoose
   .connect(process.env.MONGODB_URI!, mongooseConfig)
   .then(() => {
@@ -32,25 +47,12 @@ mongoose
       maxPoolSize: mongooseConfig.maxPoolSize,
       minPoolSize: mongooseConfig.minPoolSize,
     });
-
-    // Bind to 0.0.0.0 to allow external connections (required for Render)
-    server.listen(PORT, "0.0.0.0", () => {
-      logger.info(`✅ Server running on port ${PORT}`);
-      logger.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
-      logger.info(`🔌 Socket.IO server ready for real-time connections`);
-      logger.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-
-      if (process.env.NODE_ENV === "production") {
-        logger.info("🚀 Production mode enabled");
-      }
-
-      // Keep the server running
-      logger.info("✅ Server is ready to accept requests!");
-    });
+    logger.info("✅ Server is ready to accept requests!");
   })
   .catch(err => {
     logger.error("❌ MongoDB connection failed:", err);
-    process.exit(1);
+    // Don't exit - server is already running, health check will show DB status
+    logger.warn("⚠️ Server running but MongoDB connection failed. Health check will show degraded status.");
   });
 
 // Handle uncaught exceptions

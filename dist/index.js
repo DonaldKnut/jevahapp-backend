@@ -19,7 +19,19 @@ if (missingVars.length > 0) {
 const PORT = parseInt(process.env.PORT || "4000", 10);
 // Disable mongoose buffering globally (before connection)
 mongoose_1.default.set("bufferCommands", false);
-// Connect to MongoDB with optimized connection pooling
+// Start server immediately so Render can detect the port
+// MongoDB connection will happen in the background
+app_1.server.listen(PORT, "0.0.0.0", () => {
+    logger_1.default.info(`✅ Server running on port ${PORT}`);
+    logger_1.default.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
+    logger_1.default.info(`🔌 Socket.IO server ready for real-time connections`);
+    logger_1.default.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+    if (process.env.NODE_ENV === "production") {
+        logger_1.default.info("🚀 Production mode enabled");
+    }
+    logger_1.default.info("⏳ Connecting to MongoDB...");
+});
+// Connect to MongoDB with optimized connection pooling (in background)
 mongoose_1.default
     .connect(process.env.MONGODB_URI, database_config_1.mongooseConfig)
     .then(() => {
@@ -27,22 +39,12 @@ mongoose_1.default
         maxPoolSize: database_config_1.mongooseConfig.maxPoolSize,
         minPoolSize: database_config_1.mongooseConfig.minPoolSize,
     });
-    // Bind to 0.0.0.0 to allow external connections (required for Render)
-    app_1.server.listen(PORT, "0.0.0.0", () => {
-        logger_1.default.info(`✅ Server running on port ${PORT}`);
-        logger_1.default.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
-        logger_1.default.info(`🔌 Socket.IO server ready for real-time connections`);
-        logger_1.default.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-        if (process.env.NODE_ENV === "production") {
-            logger_1.default.info("🚀 Production mode enabled");
-        }
-        // Keep the server running
-        logger_1.default.info("✅ Server is ready to accept requests!");
-    });
+    logger_1.default.info("✅ Server is ready to accept requests!");
 })
     .catch(err => {
     logger_1.default.error("❌ MongoDB connection failed:", err);
-    process.exit(1);
+    // Don't exit - server is already running, health check will show DB status
+    logger_1.default.warn("⚠️ Server running but MongoDB connection failed. Health check will show degraded status.");
 });
 // Handle uncaught exceptions
 process.on("uncaughtException", error => {
