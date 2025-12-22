@@ -5,6 +5,10 @@ import logger from "../utils/logger";
 import { Bookmark } from "../models/bookmark.model";
 import { MediaInteraction } from "../models/mediaInteraction.model";
 import { enqueueAnalyticsEvent } from "../queues/enqueue";
+import { User } from "../models/user.model";
+import resendEmailService from "../service/resendEmail.service";
+import { NotificationService } from "../service/notification.service";
+import { ReportReason } from "../models/mediaReport.model";
 
 // Toggle like on any content type
 export const toggleContentLike = async (
@@ -676,29 +680,186 @@ export const reportContentComment = async (
 ): Promise<void> => {
   try {
     const { commentId } = req.params;
-    const { reason } = req.body || {};
+    const { reason, description } = req.body as { reason?: ReportReason; description?: string };
     const userId = req.userId;
 
     if (!userId) {
       res.status(401).json({ success: false, message: "Unauthorized" });
       return;
     }
+
     if (!commentId || !Types.ObjectId.isValid(commentId)) {
       res.status(400).json({ success: false, message: "Invalid comment ID" });
       return;
     }
 
+    // Validate reason if provided
+    const validReasons: ReportReason[] = [
+      "inappropriate_content",
+      "non_gospel_content",
+      "explicit_language",
+      "violence",
+      "sexual_content",
+      "blasphemy",
+      "spam",
+      "copyright",
+      "other",
+    ];
+    const reportReason = reason || "other";
+    if (!validReasons.includes(reportReason)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid report reason",
+      });
+      return;
+    }
+
+    // Report the comment (service handles validation for self-reporting and duplicates)
     const result = await contentInteractionService.reportContentComment(
       commentId,
       userId,
-      reason
+      reportReason
     );
-    res.status(200).json({ success: true, data: result });
+
+    // Get reporter information
+    const reporter = await User.findById(userId).select("firstName lastName email username");
+    const reporterName = reporter
+      ? `${reporter.firstName || ""} ${reporter.lastName || ""}`.trim() || reporter.username || reporter.email
+      : "Unknown User";
+
+    // Send email notification to admins on EVERY report
+    try {
+      const admins = await User.find({ role: "admin" }).select("email _id");
+      const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
+
+      if (adminEmails.length > 0) {
+        // Send email notification
+        await resendEmailService.sendAdminCommentReportNotification(
+          adminEmails,
+          result.comment.content,
+          result.media.title,
+          result.media.contentType,
+          result.comment.authorEmail,
+          result.comment.authorName,
+          reporterName,
+          reportReason,
+          description,
+          commentId,
+          result.media.id,
+          result.reportCount
+        );
+
+        // Send in-app notification to all admins
+        for (const admin of admins) {
+          try {
+            await NotificationService.createNotification({
+              userId: admin._id.toString(),
+              type: "content_report",
+              title: "New Comment Report",
+              message: `${reporterName} reported a comment on "${result.media.title}" - Reason: ${reportReason}`,
+              metadata: {
+                commentId: commentId,
+                mediaId: result.media.id,
+                contentType: result.media.contentType,
+                reportReason: reportReason,
+                reportCount: result.reportCount,
+                reporterName,
+                commentAuthor: result.comment.authorName,
+              },
+              priority: result.reportCount >= 3 ? "high" : "medium",
+              relatedId: commentId,
+            });
+          } catch (notifError) {
+            logger.error("Failed to send in-app notification to admin:", notifError);
+          }
+        }
+
+        logger.info("Admin notifications sent for comment report", {
+          commentId,
+          mediaId: result.media.id,
+          adminCount: admins.length,
+          reportCount: result.reportCount,
+        });
+      }
+    } catch (emailError) {
+      logger.error("Failed to send admin notifications for comment report:", emailError);
+      // Don't fail the report submission if email fails
+    }
+
+    // If report count reaches threshold (3+), also send moderation alert
+    if (result.reportCount >= 3) {
+      try {
+        const admins = await User.find({ role: "admin" }).select("email");
+        const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
+
+        if (adminEmails.length > 0) {
+          await resendEmailService.sendAdminModerationAlert(
+            adminEmails,
+            result.media.title,
+            result.media.contentType,
+            result.media.uploaderEmail,
+            {
+              isApproved: false,
+              confidence: 0.7,
+              reason: `Comment has been reported ${result.reportCount} times`,
+              flags: ["multiple_reports", "comment_report"],
+              requiresReview: true,
+            },
+            result.reportCount
+          );
+        }
+      } catch (thresholdEmailError) {
+        logger.error("Failed to send threshold alert for comment:", thresholdEmailError);
+      }
+    }
+
+    logger.info("Comment reported", {
+      commentId,
+      userId,
+      reason: reportReason,
+      reportCount: result.reportCount,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Comment reported successfully",
+      data: {
+        reportCount: result.reportCount,
+        commentId,
+      },
+    });
   } catch (error: any) {
     logger.error("Report comment error", { error: error.message });
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to report comment" });
+
+    // Handle specific validation errors
+    if (error.message === "You cannot report your own comment") {
+      res.status(400).json({
+        success: false,
+        message: "You cannot report your own comment",
+      });
+      return;
+    }
+
+    if (error.message === "You have already reported this comment") {
+      res.status(400).json({
+        success: false,
+        message: "You have already reported this comment",
+      });
+      return;
+    }
+
+    if (error.message === "Comment not found" || error.message === "Invalid comment ID") {
+      res.status(404).json({
+        success: false,
+        message: "Comment not found",
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to report comment",
+    });
   }
 };
 

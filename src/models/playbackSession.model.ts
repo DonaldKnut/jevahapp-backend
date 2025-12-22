@@ -26,7 +26,7 @@ const playbackSessionSchema = new Schema<IPlaybackSession>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
+      // Index defined at schema level (line 96)
     },
     mediaId: {
       type: Schema.Types.ObjectId,
@@ -61,7 +61,7 @@ const playbackSessionSchema = new Schema<IPlaybackSession>(
     isActive: {
       type: Boolean,
       default: true,
-      index: true,
+      // Index defined at schema level (line 96)
     },
     isPaused: {
       type: Boolean,

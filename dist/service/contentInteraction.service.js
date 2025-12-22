@@ -742,20 +742,81 @@ class ContentInteractionService {
     }
     /**
      * Report a comment
+     * Returns comment details, media details, and report count for notifications
      */
     reportContentComment(commentId, userId, reason) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c;
             if (!mongoose_1.Types.ObjectId.isValid(commentId) || !mongoose_1.Types.ObjectId.isValid(userId)) {
                 throw new Error("Invalid comment or user ID");
             }
+            // Fetch comment with populated user and media
+            const commentDoc = yield mediaInteraction_model_1.MediaInteraction.findById(commentId)
+                .populate("user", "firstName lastName email username")
+                .populate("media", "title contentType uploadedBy");
+            if (!commentDoc) {
+                throw new Error("Comment not found");
+            }
+            // Check if comment is actually a comment type
+            if (commentDoc.interactionType !== "comment") {
+                throw new Error("Invalid comment ID");
+            }
+            // Check if user is trying to report their own comment
+            const commentAuthorId = (_a = commentDoc.user) === null || _a === void 0 ? void 0 : _a.toString();
+            if (commentAuthorId === userId) {
+                throw new Error("You cannot report your own comment");
+            }
+            // Check if user already reported this comment
+            const reportedBy = commentDoc.reportedBy || [];
+            const hasAlreadyReported = reportedBy.some((id) => id.toString() === userId);
+            if (hasAlreadyReported) {
+                throw new Error("You have already reported this comment");
+            }
+            // Increment report count and add user to reportedBy array
             const update = yield mediaInteraction_model_1.MediaInteraction.findByIdAndUpdate(commentId, {
                 $inc: { reportCount: 1 },
                 $addToSet: { reportedBy: new mongoose_1.Types.ObjectId(userId) },
-            }, { new: true }).select("reportCount");
+            }, { new: true });
             if (!update) {
-                throw new Error("Comment not found");
+                throw new Error("Failed to update comment report");
             }
-            return { reportCount: update.reportCount || 0 };
+            const newReportCount = update.reportCount || 0;
+            // Get comment author info
+            const author = commentDoc.user;
+            const authorName = ((author === null || author === void 0 ? void 0 : author.firstName) && (author === null || author === void 0 ? void 0 : author.lastName)
+                ? `${author.firstName} ${author.lastName}`.trim()
+                : (author === null || author === void 0 ? void 0 : author.username) || (author === null || author === void 0 ? void 0 : author.email)) || "Unknown User";
+            // Get media info
+            const media = commentDoc.media;
+            const mediaTitle = (media === null || media === void 0 ? void 0 : media.title) || "Unknown Media";
+            const mediaContentType = (media === null || media === void 0 ? void 0 : media.contentType) || "unknown";
+            const mediaId = ((_b = media === null || media === void 0 ? void 0 : media._id) === null || _b === void 0 ? void 0 : _b.toString()) || ((_c = commentDoc.media) === null || _c === void 0 ? void 0 : _c.toString()) || "";
+            // Get media uploader email
+            let uploaderEmail = "Unknown";
+            const mediaUploadedBy = media === null || media === void 0 ? void 0 : media.uploadedBy;
+            if (mediaUploadedBy) {
+                const uploader = yield user_model_1.User.findById(mediaUploadedBy)
+                    .select("email")
+                    .lean();
+                uploaderEmail = (uploader === null || uploader === void 0 ? void 0 : uploader.email) || "Unknown";
+            }
+            return {
+                reportCount: newReportCount,
+                comment: {
+                    id: commentId,
+                    content: commentDoc.content || "",
+                    authorId: commentAuthorId || "",
+                    authorName,
+                    authorEmail: (author === null || author === void 0 ? void 0 : author.email) || "Unknown",
+                    createdAt: commentDoc.createdAt || new Date(),
+                },
+                media: {
+                    id: mediaId,
+                    title: mediaTitle,
+                    contentType: mediaContentType,
+                    uploaderEmail,
+                },
+            };
         });
     }
     /**

@@ -16,7 +16,7 @@ if (missingVars.length > 0) {
     logger_1.default.error(`Missing required environment variables: ${missingVars.join(", ")}`);
     process.exit(1);
 }
-const PORT = process.env.PORT || 4000;
+const PORT = parseInt(process.env.PORT || "4000", 10);
 // Disable mongoose buffering globally (before connection)
 mongoose_1.default.set("bufferCommands", false);
 // Connect to MongoDB with optimized connection pooling
@@ -27,8 +27,10 @@ mongoose_1.default
         maxPoolSize: database_config_1.mongooseConfig.maxPoolSize,
         minPoolSize: database_config_1.mongooseConfig.minPoolSize,
     });
-    app_1.server.listen(PORT, () => {
-        logger_1.default.info(`✅ Server running at http://localhost:${PORT}`);
+    // Bind to 0.0.0.0 to allow external connections (required for Render)
+    app_1.server.listen(PORT, "0.0.0.0", () => {
+        logger_1.default.info(`✅ Server running on port ${PORT}`);
+        logger_1.default.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
         logger_1.default.info(`🔌 Socket.IO server ready for real-time connections`);
         logger_1.default.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
         if (process.env.NODE_ENV === "production") {

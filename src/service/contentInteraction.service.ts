@@ -986,16 +986,64 @@ export class ContentInteractionService {
 
   /**
    * Report a comment
+   * Returns comment details, media details, and report count for notifications
    */
   async reportContentComment(
     commentId: string,
     userId: string,
     reason?: string
-  ): Promise<{ reportCount: number }> {
+  ): Promise<{
+    reportCount: number;
+    comment: {
+      id: string;
+      content: string;
+      authorId: string;
+      authorName: string;
+      authorEmail: string;
+      createdAt: Date;
+    };
+    media: {
+      id: string;
+      title: string;
+      contentType: string;
+      uploaderEmail: string;
+    };
+  }> {
     if (!Types.ObjectId.isValid(commentId) || !Types.ObjectId.isValid(userId)) {
       throw new Error("Invalid comment or user ID");
     }
 
+    // Fetch comment with populated user and media
+    const commentDoc = await MediaInteraction.findById(commentId)
+      .populate("user", "firstName lastName email username")
+      .populate("media", "title contentType uploadedBy");
+
+    if (!commentDoc) {
+      throw new Error("Comment not found");
+    }
+
+    // Check if comment is actually a comment type
+    if (commentDoc.interactionType !== "comment") {
+      throw new Error("Invalid comment ID");
+    }
+
+    // Check if user is trying to report their own comment
+    const commentAuthorId = commentDoc.user?.toString();
+    if (commentAuthorId === userId) {
+      throw new Error("You cannot report your own comment");
+    }
+
+    // Check if user already reported this comment
+    const reportedBy = commentDoc.reportedBy || [];
+    const hasAlreadyReported = reportedBy.some(
+      (id: any) => id.toString() === userId
+    );
+
+    if (hasAlreadyReported) {
+      throw new Error("You have already reported this comment");
+    }
+
+    // Increment report count and add user to reportedBy array
     const update = await MediaInteraction.findByIdAndUpdate(
       commentId,
       {
@@ -1003,13 +1051,54 @@ export class ContentInteractionService {
         $addToSet: { reportedBy: new Types.ObjectId(userId) },
       },
       { new: true }
-    ).select("reportCount");
+    );
 
     if (!update) {
-      throw new Error("Comment not found");
+      throw new Error("Failed to update comment report");
     }
 
-    return { reportCount: update.reportCount || 0 };
+    const newReportCount = update.reportCount || 0;
+
+    // Get comment author info
+    const author = commentDoc.user as any;
+    const authorName =
+      (author?.firstName && author?.lastName
+        ? `${author.firstName} ${author.lastName}`.trim()
+        : author?.username || author?.email) || "Unknown User";
+
+    // Get media info
+    const media = commentDoc.media as any;
+    const mediaTitle = media?.title || "Unknown Media";
+    const mediaContentType = media?.contentType || "unknown";
+    const mediaId = media?._id?.toString() || commentDoc.media?.toString() || "";
+
+    // Get media uploader email
+    let uploaderEmail = "Unknown";
+    const mediaUploadedBy = media?.uploadedBy;
+    if (mediaUploadedBy) {
+      const uploader = await User.findById(mediaUploadedBy)
+        .select("email")
+        .lean();
+      uploaderEmail = (uploader as any)?.email || "Unknown";
+    }
+
+    return {
+      reportCount: newReportCount,
+      comment: {
+        id: commentId,
+        content: commentDoc.content || "",
+        authorId: commentAuthorId || "",
+        authorName,
+        authorEmail: author?.email || "Unknown",
+        createdAt: commentDoc.createdAt || new Date(),
+      },
+      media: {
+        id: mediaId,
+        title: mediaTitle,
+        contentType: mediaContentType,
+        uploaderEmail,
+      },
+    };
   }
 
   /**

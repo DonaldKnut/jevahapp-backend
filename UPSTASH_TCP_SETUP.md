@@ -38,7 +38,7 @@ If you can't find the connection string, build it manually:
 
 **Example**:
 ```
-rediss://default:YOUR_TOKEN_HERE@cunning-grackle-43906.upstash.io:6379
+rediss://default:YOUR_TOKEN_HERE@your-database-name.upstash.io:6379
 ```
 
 Replace `YOUR_TOKEN_HERE` with your actual token from the dashboard.
@@ -49,11 +49,11 @@ Add this line to your `.env` file:
 
 ```env
 # Upstash Redis (REST) - for counters/rate limiting (already set)
-UPSTASH_REDIS_REST_URL=https://your-database-name.upstash.io
+UPSTASH_REDIS_REST_URL=https://cunning-grackle-43906.upstash.io
 UPSTASH_REDIS_REST_TOKEN=YOUR_REST_TOKEN
 
 # Upstash Redis (TCP) - for response caching and BullMQ queues
-REDIS_URL=rediss://default:YOUR_TCP_TOKEN@your-database-name.upstash.io:6379
+REDIS_URL=rediss://default:YOUR_TCP_TOKEN@cunning-grackle-43906.upstash.io:6379
 ```
 
 **Note**: The TCP token might be the same as your REST token, or it might be different. Check your Upstash dashboard.
@@ -109,7 +109,7 @@ Once `REDIS_URL` is set:
 - Make sure you're using the TCP token (might be different from REST token)
 
 ### **Error: "Host not found"**
-- Verify endpoint: `cunning-grackle-43906.upstash.io`
+- Verify endpoint matches your Upstash dashboard
 - Check for typos
 
 ## ✅ **Quick Test**

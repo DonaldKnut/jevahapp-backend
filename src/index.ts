@@ -19,7 +19,7 @@ if (missingVars.length > 0) {
   process.exit(1);
 }
 
-const PORT = process.env.PORT || 4000;
+const PORT = parseInt(process.env.PORT || "4000", 10);
 
 // Disable mongoose buffering globally (before connection)
 mongoose.set("bufferCommands", false);
@@ -33,8 +33,10 @@ mongoose
       minPoolSize: mongooseConfig.minPoolSize,
     });
 
-    server.listen(PORT, () => {
-      logger.info(`✅ Server running at http://localhost:${PORT}`);
+    // Bind to 0.0.0.0 to allow external connections (required for Render)
+    server.listen(PORT, "0.0.0.0", () => {
+      logger.info(`✅ Server running on port ${PORT}`);
+      logger.info(`🌐 Server accessible at http://0.0.0.0:${PORT}`);
       logger.info(`🔌 Socket.IO server ready for real-time connections`);
       logger.info(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
 

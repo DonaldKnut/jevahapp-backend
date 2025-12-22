@@ -40,7 +40,7 @@ const playbackSessionSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "User",
         required: true,
-        index: true,
+        // Index defined at schema level (line 96)
     },
     mediaId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -75,7 +75,7 @@ const playbackSessionSchema = new mongoose_1.Schema({
     isActive: {
         type: Boolean,
         default: true,
-        index: true,
+        // Index defined at schema level (line 96)
     },
     isPaused: {
         type: Boolean,
