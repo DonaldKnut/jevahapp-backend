@@ -104,9 +104,12 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
         try {
             const admins = yield user_model_1.User.find({ role: "admin" }).select("email _id");
             const adminEmails = admins.map(admin => admin.email).filter(Boolean);
-            if (adminEmails.length > 0) {
+            // Always include support@jevahapp.com in the recipient list
+            const supportEmail = "support@jevahapp.com";
+            const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
+            if (allRecipientEmails.length > 0) {
                 // Send email notification
-                yield resendEmail_service_1.default.sendAdminReportNotification(adminEmails, media.title, media.contentType, uploaderEmail, reporterName, reason, description, id, newReportCount);
+                yield resendEmail_service_1.default.sendAdminReportNotification(allRecipientEmails, media.title, media.contentType, uploaderEmail, reporterName, reason, description, id, newReportCount);
                 // Send in-app notification to all admins
                 for (const admin of admins) {
                     try {
@@ -135,6 +138,8 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
                     mediaId: id,
                     reportId: report._id,
                     adminCount: admins.length,
+                    totalRecipientCount: allRecipientEmails.length,
+                    recipientEmails: allRecipientEmails,
                     reportCount: newReportCount,
                 });
             }
@@ -148,8 +153,11 @@ const reportMedia = (request, response) => __awaiter(void 0, void 0, void 0, fun
             try {
                 const admins = yield user_model_1.User.find({ role: "admin" }).select("email");
                 const adminEmails = admins.map(admin => admin.email).filter(Boolean);
-                if (adminEmails.length > 0) {
-                    yield resendEmail_service_1.default.sendAdminModerationAlert(adminEmails, media.title, media.contentType, uploaderEmail, {
+                // Always include support@jevahapp.com in the recipient list
+                const supportEmail = "support@jevahapp.com";
+                const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
+                if (allRecipientEmails.length > 0) {
+                    yield resendEmail_service_1.default.sendAdminModerationAlert(allRecipientEmails, media.title, media.contentType, uploaderEmail, {
                         isApproved: false,
                         confidence: 0.7,
                         reason: `Content has been reported ${newReportCount} times`,

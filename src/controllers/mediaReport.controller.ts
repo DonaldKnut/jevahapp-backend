@@ -110,11 +110,15 @@ export const reportMedia = async (
     try {
       const admins = await User.find({ role: "admin" }).select("email _id");
       const adminEmails = admins.map(admin => admin.email).filter(Boolean);
+      
+      // Always include support@jevahapp.com in the recipient list
+      const supportEmail = "support@jevahapp.com";
+      const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
 
-      if (adminEmails.length > 0) {
+      if (allRecipientEmails.length > 0) {
         // Send email notification
         await resendEmailService.sendAdminReportNotification(
-          adminEmails,
+          allRecipientEmails,
           media.title,
           media.contentType,
           uploaderEmail,
@@ -153,6 +157,8 @@ export const reportMedia = async (
           mediaId: id,
           reportId: report._id,
           adminCount: admins.length,
+          totalRecipientCount: allRecipientEmails.length,
+          recipientEmails: allRecipientEmails,
           reportCount: newReportCount,
         });
       }
@@ -166,10 +172,14 @@ export const reportMedia = async (
       try {
         const admins = await User.find({ role: "admin" }).select("email");
         const adminEmails = admins.map(admin => admin.email).filter(Boolean);
+        
+        // Always include support@jevahapp.com in the recipient list
+        const supportEmail = "support@jevahapp.com";
+        const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
 
-        if (adminEmails.length > 0) {
+        if (allRecipientEmails.length > 0) {
           await resendEmailService.sendAdminModerationAlert(
-            adminEmails,
+            allRecipientEmails,
             media.title,
             media.contentType,
             uploaderEmail,

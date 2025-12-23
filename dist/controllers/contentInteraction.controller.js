@@ -642,9 +642,12 @@ const reportContentComment = (req, res) => __awaiter(void 0, void 0, void 0, fun
         try {
             const admins = yield user_model_1.User.find({ role: "admin" }).select("email _id");
             const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
-            if (adminEmails.length > 0) {
+            // Always include support@jevahapp.com in the recipient list
+            const supportEmail = "support@jevahapp.com";
+            const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
+            if (allRecipientEmails.length > 0) {
                 // Send email notification
-                yield resendEmail_service_1.default.sendAdminCommentReportNotification(adminEmails, result.comment.content, result.media.title, result.media.contentType, result.comment.authorEmail, result.comment.authorName, reporterName, reportReason, description, commentId, result.media.id, result.reportCount);
+                yield resendEmail_service_1.default.sendAdminCommentReportNotification(allRecipientEmails, result.comment.content, result.media.title, result.media.contentType, result.comment.authorEmail, result.comment.authorName, reporterName, reportReason, description, commentId, result.media.id, result.reportCount);
                 // Send in-app notification to all admins
                 for (const admin of admins) {
                     try {
@@ -674,6 +677,8 @@ const reportContentComment = (req, res) => __awaiter(void 0, void 0, void 0, fun
                     commentId,
                     mediaId: result.media.id,
                     adminCount: admins.length,
+                    totalRecipientCount: allRecipientEmails.length,
+                    recipientEmails: allRecipientEmails,
                     reportCount: result.reportCount,
                 });
             }
@@ -687,8 +692,11 @@ const reportContentComment = (req, res) => __awaiter(void 0, void 0, void 0, fun
             try {
                 const admins = yield user_model_1.User.find({ role: "admin" }).select("email");
                 const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
-                if (adminEmails.length > 0) {
-                    yield resendEmail_service_1.default.sendAdminModerationAlert(adminEmails, result.media.title, result.media.contentType, result.media.uploaderEmail, {
+                // Always include support@jevahapp.com in the recipient list
+                const supportEmail = "support@jevahapp.com";
+                const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
+                if (allRecipientEmails.length > 0) {
+                    yield resendEmail_service_1.default.sendAdminModerationAlert(allRecipientEmails, result.media.title, result.media.contentType, result.media.uploaderEmail, {
                         isApproved: false,
                         confidence: 0.7,
                         reason: `Comment has been reported ${result.reportCount} times`,
