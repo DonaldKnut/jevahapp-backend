@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleSave = exports.getTrendingSearches = exports.getSearchSuggestions = exports.recordView = exports.trackPlayback = exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
+exports.getCategories = exports.toggleSave = exports.getTrendingSearches = exports.getSearchSuggestions = exports.recordView = exports.trackPlayback = exports.searchSongs = exports.shareSong = exports.toggleLike = exports.deleteSong = exports.updateSong = exports.createSong = exports.getSongById = exports.getAllSongs = void 0;
 const copyrightFreeSong_service_1 = require("../service/copyrightFreeSong.service");
 const logger_1 = __importDefault(require("../utils/logger"));
 const copyrightFreeSongInteraction_service_1 = require("../service/copyrightFreeSongInteraction.service");
@@ -784,3 +784,44 @@ const toggleSave = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.toggleSave = toggleSave;
+/**
+ * Get categories for copyright-free songs
+ * GET /api/audio/copyright-free/categories
+ *
+ * Returns a list of available categories for filtering songs
+ * Since the CopyrightFreeSong model doesn't have a category field,
+ * this returns default gospel music categories
+ */
+const getCategories = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Since CopyrightFreeSong model doesn't have a category field,
+        // we return a default list of common gospel music categories
+        const defaultCategories = [
+            "Gospel Music",
+            "Traditional Gospel",
+            "Contemporary Gospel",
+            "Worship",
+            "Praise",
+            "Hymns",
+            "Inspirational",
+            "Christian Rock",
+            "Gospel Choir",
+            "Spiritual",
+        ];
+        res.status(200).json({
+            success: true,
+            data: {
+                categories: defaultCategories,
+            },
+        });
+    }
+    catch (error) {
+        logger_1.default.error("Error getting categories:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to retrieve categories",
+            error: error.message,
+        });
+    }
+});
+exports.getCategories = getCategories;

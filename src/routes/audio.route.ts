@@ -14,6 +14,7 @@ import {
   trackPlayback as trackCopyrightFreeSongPlayback,
   recordView as recordViewCopyrightFreeSong,
   toggleSave as toggleSaveCopyrightFreeSong,
+  getCategories as getCopyrightFreeCategories,
 } from "../controllers/copyrightFreeSong.controller";
 import {
   getUserAudioLibrary,
@@ -111,6 +112,19 @@ router.get(
   apiRateLimiter,
   cacheMiddleware(120), // 2 minutes for trending searches
   getTrendingSearchesCopyrightFree
+);
+
+/**
+ * @route   GET /api/audio/copyright-free/categories
+ * @desc    Get categories for copyright-free songs (Public)
+ * @access  Public (No authentication required)
+ * @returns { success: boolean, data: { categories: string[] } }
+ */
+router.get(
+  "/copyright-free/categories",
+  apiRateLimiter,
+  cacheMiddleware(300), // 5 minutes for categories (rarely change)
+  getCopyrightFreeCategories
 );
 
 

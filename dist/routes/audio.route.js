@@ -105,6 +105,14 @@ router.get("/copyright-free/search/suggestions", rateLimiter_1.apiRateLimiter, c
 router.get("/copyright-free/search/trending", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(120), // 2 minutes for trending searches
 copyrightFreeSong_controller_1.getTrendingSearches);
 /**
+ * @route   GET /api/audio/copyright-free/categories
+ * @desc    Get categories for copyright-free songs (Public)
+ * @access  Public (No authentication required)
+ * @returns { success: boolean, data: { categories: string[] } }
+ */
+router.get("/copyright-free/categories", rateLimiter_1.apiRateLimiter, (0, cache_middleware_1.cacheMiddleware)(300), // 5 minutes for categories (rarely change)
+copyrightFreeSong_controller_1.getCategories);
+/**
  * @route   POST /api/audio/copyright-free
  * @desc    Create a copyright-free song (Admin Only)
  * @access  Protected (Admin only)

@@ -830,3 +830,44 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+/**
+ * Get categories for copyright-free songs
+ * GET /api/audio/copyright-free/categories
+ * 
+ * Returns a list of available categories for filtering songs
+ * Since the CopyrightFreeSong model doesn't have a category field,
+ * this returns default gospel music categories
+ */
+export const getCategories = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Since CopyrightFreeSong model doesn't have a category field,
+    // we return a default list of common gospel music categories
+    const defaultCategories = [
+      "Gospel Music",
+      "Traditional Gospel",
+      "Contemporary Gospel",
+      "Worship",
+      "Praise",
+      "Hymns",
+      "Inspirational",
+      "Christian Rock",
+      "Gospel Choir",
+      "Spiritual",
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: {
+        categories: defaultCategories,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error getting categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve categories",
+      error: error.message,
+    });
+  }
+};
+
