@@ -1,0 +1,9 @@
+# Nginx: allow large uploads (up to 300MB) for media API
+# Add inside the server { } block that proxies to the backend, or in http { } for global.
+# Then: sudo nginx -t && sudo systemctl reload nginx
+
+client_max_body_size 300M;
+
+# Optional: increase timeouts for long uploads
+# proxy_read_timeout 300s;
+# proxy_send_timeout 300s;

@@ -1,0 +1,23 @@
+config:
+  target: "http://localhost:4000"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: warmup
+    - duration: 60
+      arrivalRate: 20
+      name: steady
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: health_and_public_content
+    flow:
+      - get:
+          url: "/health"
+      - get:
+          url: "/api/health/warmup"
+      - get:
+          url: "/api/media/public/all-content"
+

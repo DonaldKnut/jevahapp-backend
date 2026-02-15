@@ -1,0 +1,19 @@
+# Resend Email Configuration
+# =========================
+
+# Resend API Key (get from resend.com dashboard)
+RESEND_API_KEY=re_your_api_key_here
+
+# Email Configuration
+RESEND_FROM_EMAIL=support@jevahapp.com
+RESEND_FROM_NAME="Jevah Support"
+
+# SMTP Fallback Configuration (keep existing Zoho settings)
+SMTP_HOST=smtp.zoho.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=support@jevahapp.com
+SMTP_PASS=your_zoho_password_here
+
+# Other existing environment variables...
+# (keep all your existing .env variables here)

@@ -1,0 +1,916 @@
+import { Request, Response } from "express";
+import { Forum } from "../models/forum.model";
+import { ForumPost } from "../models/forumPost.model";
+import { MediaInteraction } from "../models/mediaInteraction.model";
+import { User } from "../models/user.model";
+import mongoose, { Types } from "mongoose";
+import logger from "../utils/logger";
+
+/**
+ * Create Forum (Authenticated Users)
+ */
+export const createForum = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { title, description, categoryId } = req.body || {};
+
+    if (!title || typeof title !== "string" || title.trim().length < 3) {
+      res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
+      return;
+    }
+
+    if (title.length > 100) {
+      res.status(400).json({ success: false, error: "Validation error: title must be less than 100 characters" });
+      return;
+    }
+
+    if (!description || typeof description !== "string" || description.trim().length < 10) {
+      res.status(400).json({ success: false, error: "Validation error: description must be at least 10 characters" });
+      return;
+    }
+
+    if (description.length > 500) {
+      res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
+      return;
+    }
+
+    if (!categoryId || typeof categoryId !== "string" || !Types.ObjectId.isValid(categoryId)) {
+      res.status(400).json({ success: false, error: "Validation error: categoryId is required" });
+      return;
+    }
+
+    // Verify category exists - MUST be a valid category
+    // A category is valid if:
+    // 1. isCategory is explicitly true AND categoryId is null/undefined
+    const category = await Forum.findOne({
+      _id: new Types.ObjectId(categoryId),
+      isActive: true,
+      isCategory: true,  // ✅ MUST be explicitly a category
+      $or: [
+        { categoryId: null },
+        { categoryId: { $exists: false } }
+      ],
+    }).select("title description isCategory");
+
+    if (!category) {
+      // Log what was found (if anything) for debugging
+      const foundItem = await Forum.findById(categoryId);
+      logger.warn("Category validation failed", {
+        categoryId,
+        foundItem: foundItem ? {
+          _id: String(foundItem._id),
+          title: foundItem.title,
+          isCategory: foundItem.isCategory,
+          categoryId: foundItem.categoryId ? String(foundItem.categoryId) : null,
+          isActive: foundItem.isActive,
+        } : null,
+        userId: req.userId,
+      });
+      
+      res.status(400).json({ 
+        success: false, 
+        error: "Validation error: category not found or invalid. Category must have isCategory: true and categoryId: null" 
+      });
+      return;
+    }
+
+    if (!req.userId) {
+      res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
+      return;
+    }
+
+    const forum = await Forum.create({
+      title: title.trim(),
+      description: description.trim(),
+      createdBy: req.userId,
+      isActive: true,
+      isCategory: false,
+      categoryId: category._id,
+      postsCount: 0,
+      participantsCount: 0,
+    });
+
+    await forum.populate([
+      { path: "createdBy", select: "firstName lastName username avatar" },
+      { path: "categoryId", select: "title description" },
+    ]);
+
+    logger.info("Forum created", {
+      forumId: forum._id,
+      createdBy: req.userId,
+      categoryId: category._id,
+      forumIsCategory: forum.isCategory,
+      forumCategoryId: forum.categoryId,
+      forumIsActive: forum.isActive,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: serializeForum(forum),
+    });
+  } catch (error: any) {
+    logger.error("Error creating forum", { error: error.message, userId: req.userId });
+    res.status(500).json({ success: false, error: "Failed to create forum" });
+  }
+};
+
+/**
+ * Get All Forums
+ */
+export const listForums = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+    const viewParam = String(req.query.view || req.query.type || "categories").toLowerCase();
+    const categoryFilter = req.query.categoryId;
+
+    const query: any = { isActive: true };
+
+    // Handle categories view - return only categories (isCategory: true, categoryId: null)
+    if (viewParam === "categories") {
+      query.isCategory = true;
+      query.$or = [
+        { categoryId: null },
+        { categoryId: { $exists: false } }
+      ];
+    }
+    // Handle discussions view - return discussions under a specific category
+    else if (viewParam === "discussions") {
+      // categoryId is required for discussions view
+      if (!categoryFilter || typeof categoryFilter !== "string" || !Types.ObjectId.isValid(categoryFilter)) {
+        res.status(400).json({
+          success: false,
+          error: "categoryId is required when view=discussions"
+        });
+        return;
+      }
+      query.isCategory = false;
+      query.categoryId = new Types.ObjectId(categoryFilter);
+      
+      // Verify category exists before querying
+      const categoryExists = await Forum.findOne({
+        _id: new Types.ObjectId(categoryFilter),
+        isCategory: true,
+        isActive: true
+      });
+      
+      if (!categoryExists) {
+        logger.warn("Category not found for discussions query", {
+          categoryId: categoryFilter,
+          query: JSON.stringify(query)
+        });
+      }
+    }
+    // Handle all view - return all active forums
+    else if (viewParam === "all") {
+      // No additional filtering - return all active forums
+    }
+    // Default to categories if view param is not recognized
+    else {
+      query.isCategory = true;
+      query.$or = [
+        { categoryId: null },
+        { categoryId: { $exists: false } }
+      ];
+    }
+
+    // Log query for debugging
+    if (viewParam === "discussions" && categoryFilter && typeof categoryFilter === "string") {
+      logger.info("Querying discussions", {
+        view: viewParam,
+        categoryId: categoryFilter,
+        categoryIdObjectId: String(new Types.ObjectId(categoryFilter)),
+        query: JSON.stringify(query, null, 2),
+        queryIsCategory: query.isCategory,
+        queryCategoryId: query.categoryId ? String(query.categoryId) : null,
+        queryIsActive: query.isActive,
+      });
+    }
+
+    const [forums, total] = await Promise.all([
+      Forum.find(query)
+        .populate("createdBy", "firstName lastName username avatar")
+        .populate("categoryId", "title description")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Forum.countDocuments(query),
+    ]);
+
+    // Log results for debugging
+    if (viewParam === "discussions") {
+      logger.info("Discussions query results", {
+        categoryId: categoryFilter,
+        count: forums.length,
+        total,
+        forumIds: forums.map((f) => String(f._id)),
+        forums: forums.map((f) => ({
+          _id: String(f._id),
+          title: f.title,
+          isCategory: f.isCategory,
+          categoryId: f.categoryId ? String(f.categoryId._id || f.categoryId) : null,
+          isActive: f.isActive,
+        })),
+      });
+      
+      // Also log ALL forums in database for this category (for debugging)
+      if (categoryFilter && typeof categoryFilter === "string") {
+        const allForumsForCategory = await Forum.find({
+          isActive: true,
+          categoryId: new Types.ObjectId(categoryFilter)
+        }).select("_id title isCategory categoryId isActive");
+        
+        logger.info("All forums in database for category (debug)", {
+          categoryId: categoryFilter,
+          count: allForumsForCategory.length,
+          forums: allForumsForCategory.map((f) => ({
+            _id: String(f._id),
+            title: f.title,
+            isCategory: f.isCategory,
+            categoryId: f.categoryId ? String(f.categoryId) : null,
+            isActive: f.isActive,
+          })),
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        forums: forums.map(serializeForum),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasMore: page * limit < total,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error listing forums", { error: error.message });
+    res.status(500).json({ success: false, error: "Failed to list forums" });
+  }
+};
+
+/**
+ * Create Forum Post
+ */
+export const createForumPost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { forumId } = req.params;
+    const { content, embeddedLinks, tags } = req.body || {};
+
+    // Validate forumId format
+    if (!Types.ObjectId.isValid(forumId)) {
+      res.status(400).json({ success: false, error: "Invalid forum ID" });
+      return;
+    }
+
+    // Check authentication
+    if (!req.userId) {
+      res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
+      return;
+    }
+
+    // Check if forum exists and is active
+    const forum = await Forum.findById(forumId);
+    if (!forum) {
+      res.status(404).json({ success: false, error: "Forum not found or inactive" });
+      return;
+    }
+
+    if (!forum.isActive) {
+      res.status(404).json({ success: false, error: "Forum not found or inactive" });
+      return;
+    }
+
+    if (forum.isCategory) {
+      res.status(400).json({ success: false, error: "Cannot post directly to a category" });
+      return;
+    }
+
+    // Validate content
+    if (!content || typeof content !== "string") {
+      res.status(400).json({ success: false, error: "Validation error: content is required" });
+      return;
+    }
+
+    const trimmedContent = content.trim();
+    if (trimmedContent.length === 0) {
+      res.status(400).json({ success: false, error: "Validation error: content cannot be empty" });
+      return;
+    }
+
+    if (trimmedContent.length > 5000) {
+      res.status(400).json({ success: false, error: "Validation error: content cannot exceed 5000 characters" });
+      return;
+    }
+
+    // Validate embeddedLinks
+    if (embeddedLinks !== undefined) {
+      if (!Array.isArray(embeddedLinks)) {
+        res.status(400).json({ success: false, error: "Validation error: embeddedLinks must be an array" });
+        return;
+      }
+
+      if (embeddedLinks.length > 5) {
+        res.status(400).json({ success: false, error: "Validation error: embeddedLinks cannot exceed 5 items" });
+        return;
+      }
+
+      for (let i = 0; i < embeddedLinks.length; i++) {
+        const link = embeddedLinks[i];
+
+        // Validate URL
+        if (!link.url || typeof link.url !== "string") {
+          res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].url is required` });
+          return;
+        }
+
+        try {
+          new URL(link.url);
+        } catch {
+          res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].url must be a valid URL` });
+          return;
+        }
+
+        // Validate type
+        if (!link.type || !["video", "article", "resource", "other"].includes(link.type)) {
+          res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].type must be one of: video, article, resource, other` });
+          return;
+        }
+
+        // Validate title (optional)
+        if (link.title !== undefined) {
+          if (typeof link.title !== "string") {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].title must be a string` });
+            return;
+          }
+          if (link.title.length > 200) {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].title cannot exceed 200 characters` });
+            return;
+          }
+        }
+
+        // Validate description (optional)
+        if (link.description !== undefined) {
+          if (typeof link.description !== "string") {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].description must be a string` });
+            return;
+          }
+          if (link.description.length > 500) {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].description cannot exceed 500 characters` });
+            return;
+          }
+        }
+
+        // Validate thumbnail (optional)
+        if (link.thumbnail !== undefined) {
+          if (typeof link.thumbnail !== "string") {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].thumbnail must be a string` });
+            return;
+          }
+          try {
+            new URL(link.thumbnail);
+          } catch {
+            res.status(400).json({ success: false, error: `Validation error: embeddedLinks[${i}].thumbnail must be a valid URL` });
+            return;
+          }
+        }
+      }
+    }
+
+    // Validate tags
+    if (tags !== undefined) {
+      if (!Array.isArray(tags)) {
+        res.status(400).json({ success: false, error: "Validation error: tags must be an array" });
+        return;
+      }
+
+      if (tags.length > 10) {
+        res.status(400).json({ success: false, error: "Validation error: tags cannot exceed 10 items" });
+        return;
+      }
+
+      for (let i = 0; i < tags.length; i++) {
+        const tag = tags[i];
+        if (typeof tag !== "string") {
+          res.status(400).json({ success: false, error: `Validation error: tags[${i}] must be a string` });
+          return;
+        }
+
+        const trimmedTag = tag.trim();
+        if (trimmedTag.length === 0) {
+          res.status(400).json({ success: false, error: `Validation error: tags[${i}] must be a non-empty string` });
+          return;
+        }
+
+        if (trimmedTag.length > 50) {
+          res.status(400).json({ success: false, error: `Validation error: tags[${i}] cannot exceed 50 characters` });
+          return;
+        }
+      }
+    }
+
+    // Prepare embeddedLinks for saving
+    const processedEmbeddedLinks = Array.isArray(embeddedLinks)
+      ? embeddedLinks.map((link: any) => ({
+          url: link.url.trim(),
+          title: link.title?.trim() || undefined,
+          description: link.description?.trim() || undefined,
+          thumbnail: link.thumbnail?.trim() || undefined,
+          type: link.type,
+        }))
+      : undefined;
+
+    // Prepare tags for saving
+    const processedTags = Array.isArray(tags)
+      ? tags.map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
+      : undefined;
+
+    // Create post
+    const post = await ForumPost.create({
+      forumId: new mongoose.Types.ObjectId(forumId),
+      userId: req.userId,
+      content: trimmedContent,
+      embeddedLinks: processedEmbeddedLinks,
+      tags: processedTags,
+      likesCount: 0,
+      commentsCount: 0,
+    });
+
+    // Update forum stats - increment postsCount
+    forum.postsCount = (forum.postsCount || 0) + 1;
+
+    // Check if this is user's first post in this forum (for participantsCount)
+    const existingPostsCount = await ForumPost.countDocuments({
+      forumId: forum._id,
+      userId: req.userId,
+    });
+
+    // If this is the first post (count === 1 means only this post exists), increment participantsCount
+    if (existingPostsCount === 1) {
+      forum.participantsCount = (forum.participantsCount || 0) + 1;
+    }
+
+    await forum.save();
+
+    // Populate author and forum
+    await post.populate([
+      { path: "userId", select: "firstName lastName username avatar" },
+      { path: "forumId", select: "title description" },
+    ]);
+
+    logger.info("Forum post created", {
+      postId: post._id,
+      forumId: forum._id,
+      userId: req.userId,
+      contentLength: trimmedContent.length,
+      embeddedLinksCount: processedEmbeddedLinks?.length || 0,
+      tagsCount: processedTags?.length || 0,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: await serializeForumPost(post, req.userId),
+    });
+  } catch (error: any) {
+    logger.error("Error creating forum post", {
+      error: error.message,
+      forumId: req.params.forumId,
+      userId: req.userId,
+    });
+    res.status(500).json({ success: false, error: "Failed to create post" });
+  }
+};
+
+/**
+ * Get Single Forum Post by ID
+ */
+export const getSingleForumPost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { postId } = req.params;
+
+    if (!Types.ObjectId.isValid(postId)) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    // Find post and populate author and forum
+    const post = await ForumPost.findById(postId)
+      .populate("userId", "firstName lastName username avatar")
+      .populate("forumId", "title description");
+
+    if (!post) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    // Serialize post (includes userLiked check)
+    const serializedPost = await serializeForumPost(post, req.userId);
+
+    logger.info("Single forum post fetched", { postId, userId: req.userId });
+
+    res.status(200).json({
+      success: true,
+      data: serializedPost,
+    });
+  } catch (error: any) {
+    logger.error("Error getting single forum post", { error: error.message, postId: req.params.postId });
+    res.status(500).json({ success: false, error: "Failed to fetch post" });
+  }
+};
+
+/**
+ * Get Forum Posts
+ */
+export const getForumPosts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { forumId } = req.params;
+    const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+    const sortBy = String(req.query.sortBy || "createdAt");
+    const sortOrder = String(req.query.sortOrder || "desc") === "asc" ? 1 : -1;
+
+    if (!Types.ObjectId.isValid(forumId)) {
+      res.status(400).json({ success: false, error: "Invalid forum ID" });
+      return;
+    }
+
+    // Check if forum exists
+    const forum = await Forum.findById(forumId);
+    if (!forum || !forum.isActive) {
+      res.status(404).json({ success: false, error: "Forum not found or inactive" });
+      return;
+    }
+
+    // Build sort object
+    const sort: any = {};
+    if (sortBy === "likesCount") sort.likesCount = sortOrder;
+    else if (sortBy === "commentsCount") sort.commentsCount = sortOrder;
+    else sort.createdAt = sortOrder;
+
+    const [posts, total] = await Promise.all([
+      ForumPost.find({ forumId: new Types.ObjectId(forumId) })
+        .populate("userId", "firstName lastName username avatar")
+        .sort(sort)
+        .skip((page - 1) * limit)
+        .limit(limit),
+      ForumPost.countDocuments({ forumId: new Types.ObjectId(forumId) }),
+    ]);
+
+    const userId = req.userId;
+    const formattedPosts = await Promise.all(
+      posts.map(async (post) => await serializeForumPost(post, userId))
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        posts: formattedPosts,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasMore: page * limit < total,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error getting forum posts", { error: error.message, forumId: req.params.forumId });
+    res.status(500).json({ success: false, error: "Failed to get forum posts" });
+  }
+};
+
+/**
+ * Update Forum Post
+ */
+export const updateForumPost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { postId } = req.params;
+    const { content, embeddedLinks, tags } = req.body || {};
+
+    if (!Types.ObjectId.isValid(postId)) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    if (String(post.userId) !== String(req.userId)) {
+      res.status(403).json({ success: false, error: "Forbidden: Only author can edit" });
+      return;
+    }
+
+    if (content !== undefined) {
+      if (typeof content !== "string" || content.trim().length === 0) {
+        res.status(400).json({ success: false, error: "Validation error: content must be a non-empty string" });
+        return;
+      }
+      if (content.length > 5000) {
+        res.status(400).json({ success: false, error: "Validation error: content must be less than 5000 characters" });
+        return;
+      }
+      post.content = content.trim();
+    }
+
+    if (embeddedLinks !== undefined) {
+      if (embeddedLinks === null) {
+        post.embeddedLinks = undefined;
+      } else if (Array.isArray(embeddedLinks)) {
+        if (embeddedLinks.length > 5) {
+          res.status(400).json({ success: false, error: "Validation error: maximum 5 embedded links allowed" });
+          return;
+        }
+        // Validate each link
+        for (const link of embeddedLinks) {
+          if (!link.url || typeof link.url !== "string") {
+            res.status(400).json({ success: false, error: "Validation error: each link must have a valid URL" });
+            return;
+          }
+          try {
+            new URL(link.url);
+          } catch {
+            res.status(400).json({ success: false, error: "Validation error: invalid URL format" });
+            return;
+          }
+          if (!link.type || !["video", "article", "resource", "other"].includes(link.type)) {
+            res.status(400).json({ success: false, error: "Validation error: link type must be video, article, resource, or other" });
+            return;
+          }
+        }
+        post.embeddedLinks = embeddedLinks;
+      } else {
+        res.status(400).json({ success: false, error: "Validation error: embeddedLinks must be an array or null" });
+        return;
+      }
+    }
+
+    if (tags !== undefined) {
+      if (tags === null) {
+        post.tags = undefined;
+      } else if (Array.isArray(tags)) {
+        if (tags.length > 10) {
+          res.status(400).json({ success: false, error: "Validation error: maximum 10 tags allowed" });
+          return;
+        }
+        for (const tag of tags) {
+          if (typeof tag !== "string" || tag.trim().length === 0) {
+            res.status(400).json({ success: false, error: "Validation error: each tag must be a non-empty string" });
+            return;
+          }
+          if (tag.length > 50) {
+            res.status(400).json({ success: false, error: "Validation error: each tag must be less than 50 characters" });
+            return;
+          }
+        }
+        post.tags = tags.map((tag: string) => tag.trim());
+      } else {
+        res.status(400).json({ success: false, error: "Validation error: tags must be an array or null" });
+        return;
+      }
+    }
+
+    await post.save();
+    await post.populate("userId", "firstName lastName username avatar");
+
+    logger.info("Forum post updated", { postId: post._id, userId: req.userId });
+
+    res.status(200).json({
+      success: true,
+      data: await serializeForumPost(post, req.userId),
+    });
+  } catch (error: any) {
+    logger.error("Error updating forum post", { error: error.message, postId: req.params.postId });
+    res.status(500).json({ success: false, error: "Failed to update forum post" });
+  }
+};
+
+/**
+ * Update Forum (Admin Only)
+ */
+export const updateForum = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { forumId } = req.params;
+    const { title, description } = req.body || {};
+
+    if (!Types.ObjectId.isValid(forumId)) {
+      res.status(400).json({ success: false, error: "Invalid forum ID" });
+      return;
+    }
+
+    if (!req.userId) {
+      res.status(401).json({ success: false, error: "Unauthorized: Authentication required" });
+      return;
+    }
+
+    // Check if user is admin
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "admin") {
+      res.status(403).json({ success: false, error: "Forbidden: Admin access required" });
+      return;
+    }
+
+    const forum = await Forum.findById(forumId);
+    if (!forum) {
+      res.status(404).json({ success: false, error: "Forum not found" });
+      return;
+    }
+
+    // Validate and update title if provided
+    if (title !== undefined) {
+      if (typeof title !== "string" || title.trim().length < 3) {
+        res.status(400).json({ success: false, error: "Validation error: title must be at least 3 characters" });
+        return;
+      }
+      if (title.length > 100) {
+        res.status(400).json({ success: false, error: "Validation error: title must be less than 100 characters" });
+        return;
+      }
+      forum.title = title.trim();
+    }
+
+    // Validate and update description if provided
+    if (description !== undefined) {
+      if (typeof description !== "string" || description.trim().length < 10) {
+        res.status(400).json({ success: false, error: "Validation error: description must be at least 10 characters" });
+        return;
+      }
+      if (description.length > 500) {
+        res.status(400).json({ success: false, error: "Validation error: description must be less than 500 characters" });
+        return;
+      }
+      forum.description = description.trim();
+    }
+
+    await forum.save();
+    await forum.populate([
+      { path: "createdBy", select: "firstName lastName username avatar" },
+      { path: "categoryId", select: "title description" },
+    ]);
+
+    logger.info("Forum updated", { forumId: forum._id, updatedBy: req.userId });
+
+    res.status(200).json({
+      success: true,
+      data: serializeForum(forum),
+    });
+  } catch (error: any) {
+    logger.error("Error updating forum", { error: error.message, forumId: req.params.forumId, userId: req.userId });
+    res.status(500).json({ success: false, error: "Failed to update forum" });
+  }
+};
+
+/**
+ * Delete Forum Post
+ */
+export const deleteForumPost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { postId } = req.params;
+
+    if (!Types.ObjectId.isValid(postId)) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    const post = await ForumPost.findById(postId);
+    if (!post) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    // Check if user is author or admin
+    const user = await User.findById(req.userId);
+    const isAuthor = String(post.userId) === String(req.userId);
+    const isAdmin = user?.role === "admin";
+
+    if (!isAuthor && !isAdmin) {
+      res.status(403).json({ success: false, error: "Forbidden: Only author or admin can delete" });
+      return;
+    }
+
+    // Update forum stats
+    const forum = await Forum.findById(post.forumId);
+    if (forum) {
+      forum.postsCount = Math.max(0, (forum.postsCount || 0) - 1);
+      await forum.save();
+    }
+
+    await ForumPost.findByIdAndDelete(postId);
+
+    logger.info("Forum post deleted", { postId, userId: req.userId, isAdmin });
+
+    res.status(200).json({
+      success: true,
+      message: "Post deleted successfully",
+    });
+  } catch (error: any) {
+    logger.error("Error deleting forum post", { error: error.message, postId: req.params.postId });
+    res.status(500).json({ success: false, error: "Failed to delete forum post" });
+  }
+};
+
+/**
+ * Serialize Forum
+ */
+function serializeForum(doc: any) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+  const category = obj.categoryId && typeof obj.categoryId === "object" && obj.categoryId._id
+    ? {
+        id: String(obj.categoryId._id),
+        title: obj.categoryId.title,
+        description: obj.categoryId.description,
+      }
+    : obj.categoryId
+    ? { id: String(obj.categoryId) }
+    : null;
+
+  return {
+    id: String(obj._id),
+    _id: String(obj._id),
+    title: obj.title,
+    description: obj.description,
+    isCategory: obj.isCategory || false,
+    categoryId: obj.categoryId ? String(obj.categoryId._id || obj.categoryId) : null,
+    category,
+    createdBy: String(obj.createdBy?._id || obj.createdBy),
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+    isActive: obj.isActive,
+    postsCount: obj.postsCount || 0,
+    participantsCount: obj.participantsCount || 0,
+    createdByUser:
+      obj.createdBy && typeof obj.createdBy === "object" && obj.createdBy._id
+        ? {
+            _id: String(obj.createdBy._id),
+            username: obj.createdBy.username,
+            avatarUrl: obj.createdBy.avatar,
+            firstName: obj.createdBy.firstName,
+            lastName: obj.createdBy.lastName,
+          }
+        : null,
+  };
+}
+
+/**
+ * Serialize Forum Post with user interaction data
+ */
+async function serializeForumPost(doc: any, userId?: string) {
+  const obj = doc.toObject ? doc.toObject() : doc;
+
+  // Check if user liked this post
+  let userLiked = false;
+  if (userId && Types.ObjectId.isValid(userId)) {
+    const like = await MediaInteraction.findOne({
+      user: userId,
+      media: obj._id,
+      interactionType: "like",
+    });
+    userLiked = !!like;
+  }
+
+  // Format author
+  const author = obj.userId && typeof obj.userId === "object" && obj.userId._id
+    ? {
+        _id: String(obj.userId._id),
+        username: obj.userId.username,
+        firstName: obj.userId.firstName,
+        lastName: obj.userId.lastName,
+        avatarUrl: obj.userId.avatar,
+      }
+    : obj.userId
+      ? { _id: String(obj.userId) }
+      : null;
+
+  // Format forum
+  const forum = obj.forumId && typeof obj.forumId === "object" && obj.forumId._id
+    ? {
+        _id: String(obj.forumId._id),
+        title: obj.forumId.title,
+        description: obj.forumId.description,
+      }
+    : null;
+
+  return {
+    _id: String(obj._id),
+    id: String(obj._id), // ✅ Include both _id and id
+    forumId: String(obj.forumId?._id || obj.forumId),
+    userId: String(obj.userId?._id || obj.userId),
+    content: obj.content,
+    embeddedLinks: obj.embeddedLinks || [],
+    tags: obj.tags || [], // ✅ Include tags
+    createdAt: obj.createdAt ? (obj.createdAt instanceof Date ? obj.createdAt.toISOString() : obj.createdAt) : new Date().toISOString(),
+    updatedAt: obj.updatedAt ? (obj.updatedAt instanceof Date ? obj.updatedAt.toISOString() : obj.updatedAt) : new Date().toISOString(),
+    likesCount: obj.likesCount || 0,
+    commentsCount: obj.commentsCount || 0,
+    userLiked,
+    author,
+    forum, // ✅ Include forum object
+  };
+}
+

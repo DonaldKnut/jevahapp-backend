@@ -1,0 +1,139 @@
+services:
+  # Main Backend API Service
+  - type: web
+    name: jevah-backend
+    env: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_S3_BUCKET
+        sync: false
+      - key: MUX_TOKEN_ID
+        sync: false
+      - key: MUX_TOKEN_SECRET
+        sync: false
+      - key: CONTABO_API_URL
+        sync: false
+      - key: CONTABO_API_TOKEN
+        sync: false
+      - key: CONTABO_CUSTOMER_ID
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      # Azure Text-to-Speech (Ebook TTS)
+      - key: AZURE_TTS_KEY
+        sync: false
+      - key: AZURE_TTS_REGION
+        sync: false
+      - key: AZURE_TTS_ENDPOINT
+        sync: false
+      # Cloudflare R2 Configuration
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_CUSTOM_DOMAIN
+        sync: false
+      # Email Configuration
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FRONTEND_URL
+        value: https://jevah-app.vercel.app
+      - key: API_BASE_URL
+        value: https://jevahapp-backend.onrender.com
+      - key: CORS_ORIGIN
+        value: https://jevah-app.vercel.app
+      - key: LOG_LEVEL
+        value: info
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100
+      - key: UPLOAD_MAX_FILE_SIZE
+        value: 10485760
+      - key: SESSION_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: NEW_RELIC_LICENSE_KEY
+        sync: false
+      - key: NEW_RELIC_APP_NAME
+        value: jevah-backend
+    autoDeploy: true
+    numInstances: 1
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/uploads
+      sizeGB: 10
+
+  # Redis Service for Caching and Sessions
+  - type: redis
+    name: jevah-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+databases:
+  # MongoDB Atlas Database
+  - name: jevah-mongodb-atlas
+    databaseName: jevah
+    user: jevah-user
+    plan: starter
+    region: oregon

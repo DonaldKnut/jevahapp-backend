@@ -1,0 +1,503 @@
+{
+  "churches": [
+    {
+      "id": "glory_christian_ministries",
+      "name": "Glory Christian Ministries",
+      "aliases": ["GCM"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "gcm_surulere_hq",
+          "name": "Headquarters",
+          "addressLine1": "Odolowu Close, Surulere",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4959, "lng": 3.3607 },
+          "aliases": ["GCM HQ Surulere"],
+          "verified": true
+        },
+        {
+          "id": "gcm_badore_ajah",
+          "name": "Badore Ajah",
+          "addressLine1": "Badore, Ajah",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4693, "lng": 3.6063 },
+          "aliases": ["GCM Badore"],
+          "verified": true
+        },
+        {
+          "id": "gcm_apapa",
+          "name": "Apapa",
+          "addressLine1": "Apapa",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4489, "lng": 3.3594 },
+          "aliases": ["GCM Apapa"],
+          "verified": true
+        }
+      ]
+    },
+    {
+      "id": "rccg",
+      "name": "The Redeemed Christian Church of God",
+      "aliases": ["RCCG", "Redeemed"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "rccg_camp_hq",
+          "name": "Redemption Camp (HQ)",
+          "addressLine1": "KM 46 Lagos–Ibadan Expressway",
+          "city": "Mowe",
+          "state": "Ogun",
+          "countryCode": "NG",
+          "location": { "lat": 6.8111, "lng": 3.5072 },
+          "aliases": ["RCCG HQ", "Redemption Camp"],
+          "verified": true
+        },
+        {
+          "id": "rccg_city_of_david",
+          "name": "City of David",
+          "addressLine1": "Victoria Island",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.431, "lng": 3.4337 },
+          "aliases": ["RCCG City of David"],
+          "verified": true
+        },
+        {
+          "id": "rccg_jos",
+          "name": "RCCG Jos Parish",
+          "addressLine1": "Jos",
+          "city": "Jos",
+          "state": "Plateau",
+          "countryCode": "NG",
+          "location": { "lat": 9.8965, "lng": 8.8583 }
+        }
+      ]
+    },
+    {
+      "id": "winners",
+      "name": "Living Faith Church Worldwide",
+      "aliases": ["Winners' Chapel", "Winners Chapel"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "winners_canaanland_hq",
+          "name": "Canaanland (HQ)",
+          "addressLine1": "Canaanland, Ota",
+          "city": "Ota",
+          "state": "Ogun",
+          "countryCode": "NG",
+          "location": { "lat": 6.6885, "lng": 3.1609 },
+          "aliases": ["Faith Tabernacle", "Winners HQ"],
+          "verified": true
+        },
+        {
+          "id": "winners_lekki",
+          "name": "Lekki",
+          "addressLine1": "Lekki",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4321, "lng": 3.54 }
+        }
+      ]
+    },
+    {
+      "id": "daystar",
+      "name": "Daystar Christian Centre",
+      "aliases": ["Daystar"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "daystar_ikosi_hq",
+          "name": "Oregun (HQ)",
+          "addressLine1": "Plot A3C, Ikosi Road, Oregun",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.6112, "lng": 3.3749 },
+          "verified": true
+        },
+        {
+          "id": "daystar_lekki",
+          "name": "Lekki Centre",
+          "addressLine1": "Lekki",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4477, "lng": 3.4726 }
+        }
+      ]
+    },
+    {
+      "id": "house_on_the_rock",
+      "name": "House On The Rock",
+      "aliases": ["HOTR"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "hotr_lekki_hq",
+          "name": "The Rock Cathedral (HQ)",
+          "addressLine1": "Lekki",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.447, "lng": 3.4857 },
+          "verified": true
+        },
+        {
+          "id": "hotr_abuja",
+          "name": "Abuja",
+          "addressLine1": "Abuja",
+          "city": "Abuja",
+          "state": "FCT",
+          "countryCode": "NG",
+          "location": { "lat": 9.0765, "lng": 7.3986 }
+        }
+      ]
+    },
+    {
+      "id": "christ_embassy",
+      "name": "Christ Embassy",
+      "aliases": ["Loveworld"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "ce_ogba",
+          "name": "Ogba",
+          "addressLine1": "Ogba",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.6378, "lng": 3.3375 }
+        },
+        {
+          "id": "ce_lekki",
+          "name": "Lekki",
+          "addressLine1": "Lekki",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4495, "lng": 3.536 }
+        }
+      ]
+    },
+    {
+      "id": "catholic_church_ng",
+      "name": "Catholic Church (Nigeria)",
+      "aliases": ["Catholic"],
+      "denomination": "Catholic",
+      "verified": true,
+      "branches": [
+        {
+          "id": "catholic_holy_cross_cathedral",
+          "name": "Holy Cross Cathedral",
+          "addressLine1": "Catholic Mission St, Lagos Island",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG",
+          "location": { "lat": 6.4513, "lng": 3.3928 },
+          "verified": true
+        },
+        {
+          "id": "catholic_abakaliki",
+          "name": "Abakaliki Cathedral",
+          "addressLine1": "Abakaliki",
+          "city": "Abakaliki",
+          "state": "Ebonyi",
+          "countryCode": "NG",
+          "location": { "lat": 6.3249, "lng": 8.1137 }
+        }
+      ]
+    }
+  ],
+  "moreChurches": [
+    {
+      "id": "deeper_life_bible_church",
+      "name": "Deeper Life Bible Church",
+      "aliases": ["DLBC", "Deeper Life"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "dlbc_gbagada_hq",
+          "name": "Gbagada (HQ)",
+          "addressLine1": "Gbagada",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "dlbc_abuja",
+          "name": "Abuja",
+          "addressLine1": "Garki",
+          "city": "Abuja",
+          "state": "FCT",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "mountain_of_fire_mfm",
+      "name": "Mountain of Fire and Miracles Ministries",
+      "aliases": ["MFM"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "mfm_oty",
+          "name": "Prayer City",
+          "addressLine1": "Lagos–Ibadan Expressway",
+          "city": "Ogun",
+          "state": "Ogun",
+          "countryCode": "NG"
+        },
+        {
+          "id": "mfm_yaba",
+          "name": "Yaba",
+          "addressLine1": "Yaba",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "christ_apostolic_church",
+      "name": "Christ Apostolic Church",
+      "aliases": ["CAC"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "cac_ibadan",
+          "name": "Ibadan",
+          "addressLine1": "Challenge",
+          "city": "Ibadan",
+          "state": "Oyo",
+          "countryCode": "NG"
+        },
+        {
+          "id": "cac_akure",
+          "name": "Akure",
+          "addressLine1": "Akure",
+          "city": "Akure",
+          "state": "Ondo",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "celestial_church_of_christ",
+      "name": "Celestial Church of Christ",
+      "aliases": ["CCC", "Cele"],
+      "denomination": "Aladura",
+      "verified": true,
+      "branches": [
+        {
+          "id": "ccc_ketu",
+          "name": "Ketu",
+          "addressLine1": "Ketu",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "ccc_oshodi",
+          "name": "Oshodi",
+          "addressLine1": "Oshodi",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "cherubim_and_seraphim",
+      "name": "Cherubim and Seraphim",
+      "aliases": ["C&S", "Cherubim & Seraphim"],
+      "denomination": "Aladura",
+      "verified": true,
+      "branches": [
+        {
+          "id": "cs_surulere",
+          "name": "Surulere",
+          "addressLine1": "Surulere",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "cs_ibadan",
+          "name": "Ibadan",
+          "addressLine1": "Ibadan",
+          "city": "Ibadan",
+          "state": "Oyo",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "the_apostolic_church_ng",
+      "name": "The Apostolic Church Nigeria",
+      "aliases": ["TACN", "The Apostolic Church"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "tacn_lawanson_hq",
+          "name": "Lawanson (HQ)",
+          "addressLine1": "Lawanson",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "tacn_aba",
+          "name": "Aba",
+          "addressLine1": "Aba",
+          "city": "Aba",
+          "state": "Abia",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "anglican_church_ng",
+      "name": "Anglican Church (Nigeria)",
+      "aliases": ["Anglican"],
+      "denomination": "Anglican",
+      "verified": true,
+      "branches": [
+        {
+          "id": "anglican_lagos_cathedral",
+          "name": "Cathedral Church of Christ",
+          "addressLine1": "Marina",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "anglican_enugu",
+          "name": "Enugu Cathedral",
+          "addressLine1": "Enugu",
+          "city": "Enugu",
+          "state": "Enugu",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "methodist_church_ng",
+      "name": "Methodist Church Nigeria",
+      "aliases": ["Methodist"],
+      "denomination": "Methodist",
+      "verified": true,
+      "branches": [
+        {
+          "id": "methodist_yaba",
+          "name": "Yaba",
+          "addressLine1": "Yaba",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "methodist_aba",
+          "name": "Aba",
+          "addressLine1": "Aba",
+          "city": "Aba",
+          "state": "Abia",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "assemblies_of_god_ng",
+      "name": "Assemblies of God Nigeria",
+      "aliases": ["Assemblies of God"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "aog_enugu_hq",
+          "name": "Independence Layout",
+          "addressLine1": "Enugu",
+          "city": "Enugu",
+          "state": "Enugu",
+          "countryCode": "NG"
+        },
+        {
+          "id": "aog_owerri",
+          "name": "Owerri",
+          "addressLine1": "Owerri",
+          "city": "Owerri",
+          "state": "Imo",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "foursquare_gospel_church",
+      "name": "Foursquare Gospel Church in Nigeria",
+      "aliases": ["Foursquare"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "foursquare_yaba_hq",
+          "name": "Headquarters",
+          "addressLine1": "13/15 Akinwunmi St",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        },
+        {
+          "id": "foursquare_ikeja",
+          "name": "Ikeja",
+          "addressLine1": "Ikeja",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        }
+      ]
+    },
+    {
+      "id": "koza",
+      "name": "COZA - The Commonwealth of Zion Assembly",
+      "aliases": ["COZA"],
+      "denomination": "Pentecostal",
+      "verified": true,
+      "branches": [
+        {
+          "id": "coza_abuja_hq",
+          "name": "Abuja (HQ)",
+          "addressLine1": "Guzape",
+          "city": "Abuja",
+          "state": "FCT",
+          "countryCode": "NG"
+        },
+        {
+          "id": "coza_lagos",
+          "name": "Lagos",
+          "addressLine1": "Island",
+          "city": "Lagos",
+          "state": "Lagos",
+          "countryCode": "NG"
+        }
+      ]
+    }
+  ]
+}
