@@ -1622,7 +1622,11 @@ export class ContentInteractionService {
     const normalizedContentType = this.normalizeContentType(contentType);
     
     switch (normalizedContentType) {
-      case "media":
+      case "media": {
+        // Redis fallback: toggleLikeFast updates Redis immediately; DB write is async.
+        // If user just liked and reloads before background sync completes, DB has no record.
+        const redisLiked = await getUserLikeState({ userId, contentId });
+        if (redisLiked === true) return true;
         // Handles all Media collection items
         const mediaLike = await MediaInteraction.findOne({
           user: new Types.ObjectId(userId),
@@ -1631,6 +1635,7 @@ export class ContentInteractionService {
           isRemoved: { $ne: true },
         });
         return !!mediaLike;
+      }
       // Removed: devotional likes - will be separate system in future
       // case "devotional": - removed
       case "artist":
@@ -1895,6 +1900,17 @@ export class ContentInteractionService {
           userLikes.forEach(like => {
             userLikesMap.set(like.media.toString(), true);
           });
+          // Redis fallback: toggleLikeFast updates Redis immediately; DB write is async.
+          // For ids not in DB result, check Redis (handles reload before background sync).
+          const notInDb = validIds.filter(id => !userLikesMap.has(id));
+          if (notInDb.length > 0) {
+            const redisChecks = await Promise.all(
+              notInDb.map(id => getUserLikeState({ userId: validUserId, contentId: id }))
+            );
+            notInDb.forEach((id, i) => {
+              if (redisChecks[i] === true) userLikesMap.set(id, true);
+            });
+          }
         // Removed: devotional likes - will be separate system in future
         // else if (contentType === "devotional") { ... } - removed
         } else if (contentType === "artist") {

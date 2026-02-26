@@ -131,6 +131,7 @@ export const toggleContentLike = async (
       success: true,
       message: "Like toggled successfully",
       data: {
+        contentId,
         liked: result.liked,
         likeCount: result.likeCount,
       },
