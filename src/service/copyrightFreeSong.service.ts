@@ -167,6 +167,38 @@ export class CopyrightFreeSongService {
   }
 
   /**
+   * Enforce viewCount >= likeCount invariant. If likeCount > viewCount, set viewCount = likeCount and persist.
+   * Call after like or view updates so the client never sees likes > views.
+   */
+  async ensureViewCountInvariant(songId: string): Promise<void> {
+    try {
+      const song = await CopyrightFreeSong.findById(songId).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+      if (!song) return;
+      const viewCount = song.viewCount ?? 0;
+      const likeCount = song.likeCount ?? 0;
+      if (likeCount > viewCount) {
+        await CopyrightFreeSong.findByIdAndUpdate(songId, {
+          $set: { viewCount: likeCount },
+        });
+        logger.debug("Enforced viewCount >= likeCount invariant", { songId, likeCount, previousViewCount: viewCount });
+      }
+    } catch (error: any) {
+      logger.error("Error ensuring viewCount invariant:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Return viewCount normalized so it is always >= likeCount (for responses without persisting).
+   */
+  static normalizedViewCount(song: { viewCount?: number; likeCount?: number } | null): number {
+    if (!song) return 0;
+    const v = song.viewCount ?? 0;
+    const l = song.likeCount ?? 0;
+    return Math.max(v, l);
+  }
+
+  /**
    * Track playback and increment view count if threshold is met (30 seconds)
    * This is called when playback ends
    */

@@ -59,14 +59,19 @@ export class CopyrightFreeSongInteractionService {
         await this.songService.decrementLikeCount(songId);
       }
 
-      // Get updated counts
+      // Enforce viewCount >= likeCount (so client never sees likes > views)
+      await this.songService.ensureViewCountInvariant(songId);
+
+      // Get updated counts (viewCount may have been raised to likeCount)
       const song = await this.songService.getSongById(songId);
+      const likeCount = song?.likeCount ?? 0;
+      const viewCount = Math.max(song?.viewCount ?? 0, likeCount);
 
       return {
         liked: newLikedState,
-        likeCount: song?.likeCount || 0,
-        shareCount: song?.shareCount || 0,
-        viewCount: song?.viewCount || 0,
+        likeCount,
+        shareCount: song?.shareCount ?? 0,
+        viewCount,
       };
     } catch (error: any) {
       logger.error("Error toggling like:", error);
@@ -199,6 +204,9 @@ export class CopyrightFreeSongInteractionService {
 
       const now = new Date();
 
+      // Qualified play: count as view only if (durationMs >= 3000) OR (progressPct >= 25) OR (isComplete === true)
+      const isQualified = durationMs >= 3000 || progressPct >= 25 || isComplete === true;
+
       // Check if user already viewed this song (outside transaction for early return)
       const existingInteraction = await CopyrightFreeSongInteraction.findOne({
         userId: userIdObj,
@@ -217,17 +225,29 @@ export class CopyrightFreeSongInteractionService {
         existingInteraction.lastViewedAt = now;
         await existingInteraction.save();
 
-        // Return current count (NOT incremented)
-        const updatedSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount").lean() as { viewCount?: number } | null;
+        await this.songService.ensureViewCountInvariant(songId);
+        const updatedSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+        const viewCount = Math.max(updatedSong?.viewCount ?? 0, updatedSong?.likeCount ?? 0);
         return {
-          viewCount: (updatedSong?.viewCount as number) || 0,
+          viewCount,
           hasViewed: true,
           isNewView: false,
         };
       }
 
-      // User hasn't viewed → Create new view record and increment count
-      // Use transaction to ensure atomicity
+      // User hasn't viewed yet: only count if play is qualified
+      if (!isQualified) {
+        await this.songService.ensureViewCountInvariant(songId);
+        const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+        return {
+          viewCount: Math.max(currentSong?.viewCount ?? 0, currentSong?.likeCount ?? 0),
+          hasViewed: false,
+          isNewView: false,
+        };
+      }
+
+      // User hasn't viewed and play is qualified → Create new view record and increment count
+      // Use transaction when supported (replica set); otherwise fallback to non-transactional path
       const session = await mongoose.startSession();
 
       try {
@@ -259,8 +279,8 @@ export class CopyrightFreeSongInteractionService {
             existingViewInTx.lastViewedAt = now;
             await existingViewInTx.save({ session });
 
-            const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount").session(session).lean() as { viewCount?: number } | null;
-            viewCount = (currentSong?.viewCount as number) || 0;
+            const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").session(session).lean() as { viewCount?: number; likeCount?: number } | null;
+            viewCount = Math.max(currentSong?.viewCount ?? 0, currentSong?.likeCount ?? 0);
             isNewView = false;
             return; // Exit transaction early
           }
@@ -325,8 +345,12 @@ export class CopyrightFreeSongInteractionService {
           viewCount = (updatedSong?.viewCount as number) || 0;
         });
 
+        await this.songService.ensureViewCountInvariant(songId);
+        const afterInvariant = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+        const normalized = Math.max(afterInvariant?.viewCount ?? 0, afterInvariant?.likeCount ?? 0);
+
         return {
-          viewCount,
+          viewCount: normalized,
           hasViewed: true,
           isNewView,
         };
@@ -354,9 +378,11 @@ export class CopyrightFreeSongInteractionService {
               await existingView.save();
             }
 
-            const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount").lean() as { viewCount?: number } | null;
+            await this.songService.ensureViewCountInvariant(songId);
+            const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+            const normalized = Math.max(currentSong?.viewCount ?? 0, currentSong?.likeCount ?? 0);
             return {
-              viewCount: (currentSong?.viewCount as number) || 0,
+              viewCount: normalized,
               hasViewed: true,
               isNewView: false,
             };
@@ -373,7 +399,22 @@ export class CopyrightFreeSongInteractionService {
           }
         }
 
-        // Re-throw transaction errors
+        // Transaction not supported (e.g. standalone MongoDB without replica set) → fallback
+        if (this.isTransactionUnsupportedError(error)) {
+          await session.endSession();
+          logger.warn("Transactions not supported, using fallback for view recording", {
+            userId,
+            songId,
+            message: error.message,
+          });
+          return this.recordViewWithoutTransaction(userIdObj, songIdObj, song, {
+            durationMs,
+            progressPct,
+            isComplete,
+          });
+        }
+
+        // Re-throw other transaction errors
         logger.error("Error in transaction while recording view:", {
           error: error.message,
           stack: error.stack,
@@ -391,7 +432,25 @@ export class CopyrightFreeSongInteractionService {
         await session.endSession();
       }
     } catch (error: any) {
-      // Enhanced error logging with all relevant details
+      // Transaction failed before or after withTransaction (e.g. startSession failed)
+      if (this.isTransactionUnsupportedError(error)) {
+        logger.warn("Transactions not supported, using fallback for view recording", {
+          userId,
+          songId,
+          message: error.message,
+        });
+        const userIdObj = new Types.ObjectId(userId);
+        const songIdObj = new Types.ObjectId(songId);
+        const song = await CopyrightFreeSong.findById(songIdObj);
+        if (!song) throw new Error("Song not found");
+        return this.recordViewWithoutTransaction(userIdObj, songIdObj, song, {
+          durationMs,
+          progressPct,
+          isComplete,
+        });
+      }
+
+      // Enhanced error logging for all other errors
       logger.error("Error recording view:", {
         error: error.message,
         stack: error.stack,
@@ -408,8 +467,124 @@ export class CopyrightFreeSongInteractionService {
         errorType: error.constructor.name,
       });
 
-      // Re-throw to be handled by controller
       throw error;
+    }
+  }
+
+  /**
+   * True if the error indicates MongoDB transactions are not available (e.g. standalone without replica set).
+   */
+  private isTransactionUnsupportedError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error.message || "").toLowerCase();
+    const code = error.code ?? error.codeName;
+    return (
+      code === 72 ||
+      code === 251 ||
+      code === "IllegalOperation" ||
+      msg.includes("replica set") ||
+      msg.includes("transaction numbers are only allowed") ||
+      msg.includes("transaction is not supported")
+    );
+  }
+
+  /**
+   * Record a view without using MongoDB transactions (fallback for standalone deployments).
+   * Uses findOneAndUpdate with condition hasViewed != true and handles duplicate key on race.
+   */
+  private async recordViewWithoutTransaction(
+    userIdObj: Types.ObjectId,
+    songIdObj: Types.ObjectId,
+    song: { _id: Types.ObjectId },
+    payload: { durationMs?: number; progressPct?: number; isComplete?: boolean }
+  ): Promise<{ viewCount: number; hasViewed: boolean; isNewView: boolean }> {
+    const { durationMs = 0, progressPct = 0, isComplete = false } = payload;
+    const now = new Date();
+
+    const existingInteraction = await CopyrightFreeSongInteraction.findOne({
+      userId: userIdObj,
+      songId: songIdObj,
+    });
+
+    if (existingInteraction?.hasViewed) {
+      const maxDurationMs = Math.max(existingInteraction.durationMs || 0, durationMs || 0);
+      const maxProgressPct = Math.max(existingInteraction.progressPct || 0, progressPct || 0);
+      existingInteraction.durationMs = maxDurationMs;
+      existingInteraction.progressPct = maxProgressPct;
+      existingInteraction.isComplete = existingInteraction.isComplete || isComplete;
+      existingInteraction.lastViewedAt = now;
+      await existingInteraction.save();
+
+      await this.songService.ensureViewCountInvariant(songIdObj.toString());
+      const updatedSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+      const viewCount = Math.max(updatedSong?.viewCount ?? 0, updatedSong?.likeCount ?? 0);
+      return {
+        viewCount,
+        hasViewed: true,
+        isNewView: false,
+      };
+    }
+
+    const maxDurationMs = Math.max(existingInteraction?.durationMs || 0, durationMs || 0);
+    const maxProgressPct = Math.max(existingInteraction?.progressPct || 0, progressPct || 0);
+    const updatedIsComplete = (existingInteraction?.isComplete || false) || isComplete;
+
+    try {
+      const oldDoc = await CopyrightFreeSongInteraction.findOneAndUpdate(
+        { userId: userIdObj, songId: songIdObj, hasViewed: { $ne: true } },
+        {
+          $set: {
+            hasViewed: true,
+            lastViewedAt: now,
+            durationMs: maxDurationMs,
+            progressPct: maxProgressPct,
+            isComplete: updatedIsComplete,
+          },
+          $setOnInsert: {
+            userId: userIdObj,
+            songId: songIdObj,
+            hasLiked: false,
+            hasShared: false,
+            viewedAt: now,
+          },
+        },
+        { upsert: true, new: false, runValidators: true }
+      );
+
+      await CopyrightFreeSong.findByIdAndUpdate(songIdObj, { $inc: { viewCount: 1 } });
+      await this.songService.ensureViewCountInvariant(songIdObj.toString());
+      const updatedSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+      const viewCount = Math.max(updatedSong?.viewCount ?? 0, updatedSong?.likeCount ?? 0);
+      return {
+        viewCount,
+        hasViewed: true,
+        isNewView: true,
+      };
+    } catch (err: any) {
+      if (err.code === 11000 || (err.message && String(err.message).includes("duplicate"))) {
+        const existingView = await CopyrightFreeSongInteraction.findOne({
+          userId: userIdObj,
+          songId: songIdObj,
+        });
+        if (existingView) {
+          const maxD = Math.max(existingView.durationMs || 0, durationMs || 0);
+          const maxP = Math.max(existingView.progressPct || 0, progressPct || 0);
+          existingView.durationMs = maxD;
+          existingView.progressPct = maxP;
+          existingView.isComplete = existingView.isComplete || isComplete;
+          existingView.lastViewedAt = now;
+          await existingView.save();
+        }
+        await this.songService.ensureViewCountInvariant(songIdObj.toString());
+        const currentSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;
+        const viewCount = Math.max(currentSong?.viewCount ?? 0, currentSong?.likeCount ?? 0);
+        return {
+          viewCount,
+          hasViewed: true,
+          isNewView: false,
+        };
+      }
+      throw err;
     }
   }
 }

@@ -31,15 +31,21 @@ export const getAllSongs = async (req: Request, res: Response): Promise<void> =>
 
     const result = await songService.getAllSongs(page, limit, category);
 
-    // Normalize payload to include a stable `audioUrl` field for clients.
+    // Normalize payload: audioUrl, views/likes aliases, and viewCount >= likeCount invariant
     const songs = (result.songs || []).map((s: any) => {
       const fileUrl = normalizeUrl(s.fileUrl);
+      const viewCount = CopyrightFreeSongService.normalizedViewCount(s);
+      const likeCount = s.likeCount ?? s.likes ?? 0;
       return {
         ...s,
         id: s._id?.toString?.() || s.id,
         artist: s.singer,
-        audioUrl: fileUrl, // preferred for playback
-        fileUrl, // keep original field for backward compatibility
+        audioUrl: fileUrl,
+        fileUrl,
+        viewCount,
+        views: viewCount,
+        likeCount,
+        likes: likeCount,
       };
     });
 
@@ -98,6 +104,8 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
       isLiked = await interactionService.isLiked(userId, songId);
     }
 
+    const viewCount = CopyrightFreeSongService.normalizedViewCount(song as any);
+    const likeCount = (song as any).likeCount ?? (song as any).likes ?? 0;
     res.status(200).json({
       success: true,
       data: {
@@ -106,6 +114,10 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
         artist: (song as any).singer,
         audioUrl: normalizeUrl((song as any).fileUrl),
         fileUrl: normalizeUrl((song as any).fileUrl),
+        viewCount,
+        views: viewCount,
+        likeCount,
+        likes: likeCount,
         isLiked,
       },
     });
@@ -279,15 +291,24 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const mongoose = await import("mongoose");
+    if (!songId || !mongoose.Types.ObjectId.isValid(songId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
     const { liked, likeCount, shareCount, viewCount } = await interactionService.toggleLike(userId, songId);
 
-    // Get updated song to ensure we have latest counts
+    // Get updated song to ensure we have latest counts (invariant already applied by service)
     const updatedSong = await songService.getSongById(songId);
-
-    // listenCount doesn't exist in CopyrightFreeSong model, return 0 (optional field)
+    const outViewCount = Math.max(updatedSong?.viewCount ?? viewCount, updatedSong?.likeCount ?? likeCount);
     const listenCount = 0;
 
-    // Emit realtime update to all clients viewing this song
+    // Emit realtime update with invariant viewCount
     try {
       const { getIO } = await import("../socket/socketManager");
       const io = getIO();
@@ -295,8 +316,8 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
         const roomKey = `content:audio:${songId}`;
         io.to(roomKey).emit("copyright-free-song-interaction-updated", {
           songId,
-          likeCount: updatedSong?.likeCount || likeCount,
-          viewCount: updatedSong?.viewCount || viewCount,
+          likeCount: updatedSong?.likeCount ?? likeCount,
+          viewCount: outViewCount,
           liked,
           listenCount,
         });
@@ -304,7 +325,8 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
         logger.debug("Emitted realtime like update", {
           songId,
           roomKey,
-          likeCount: updatedSong?.likeCount || likeCount,
+          likeCount: updatedSong?.likeCount ?? likeCount,
+          viewCount: outViewCount,
         });
       }
     } catch (socketError: any) {
@@ -319,13 +341,29 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
       success: true,
       data: {
         liked,
-        likeCount: updatedSong?.likeCount || likeCount,
-        viewCount: updatedSong?.viewCount || viewCount,
+        likeCount: updatedSong?.likeCount ?? likeCount,
+        viewCount: outViewCount,
         listenCount,
       },
     });
   } catch (error: any) {
     logger.error("Error toggling like:", error);
+    if (error.name === "CastError" || (error.message && String(error.message).includes("ObjectId"))) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+    if (error.message === "Song not found" || error.message?.includes("Song not found")) {
+      res.status(404).json({
+        success: false,
+        message: "Song not found",
+        code: "NOT_FOUND",
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       message: "Failed to toggle like",
@@ -343,6 +381,16 @@ export const shareSong = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({
         success: false,
         message: "Authentication required",
+      });
+      return;
+    }
+
+    const mongoose = await import("mongoose");
+    if (!songId || !mongoose.Types.ObjectId.isValid(songId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID format",
+        code: "BAD_REQUEST",
       });
       return;
     }
@@ -451,11 +499,15 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
       // Enrich songs with user-specific data
       enrichedSongs = result.songs.map((song: any, index: number) => {
         const songObj = song as any;
+        const viewCount = CopyrightFreeSongService.normalizedViewCount(songObj);
+        const likeCount = songObj.likeCount ?? songObj.likes ?? 0;
         return {
           ...songObj,
           id: songObj._id?.toString() || songObj.id,
-          views: songObj.viewCount || 0, // For compatibility
-          likes: songObj.likeCount || 0, // For compatibility
+          viewCount,
+          views: viewCount,
+          likeCount,
+          likes: likeCount,
           isLiked: userLikes[index] || false,
           isInLibrary: userBookmarks[index] || false,
           isPublicDomain: true,
@@ -469,11 +521,15 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
       // For non-authenticated users, add default values
       enrichedSongs = result.songs.map((song: any) => {
         const songObj = song as any;
+        const viewCount = CopyrightFreeSongService.normalizedViewCount(songObj);
+        const likeCount = songObj.likeCount ?? songObj.likes ?? 0;
         return {
           ...songObj,
           id: songObj._id?.toString() || songObj.id,
-          views: songObj.viewCount || 0,
-          likes: songObj.likeCount || 0,
+          viewCount,
+          views: viewCount,
+          likeCount,
+          likes: likeCount,
           isLiked: false,
           isInLibrary: false,
           isPublicDomain: true,
@@ -721,11 +777,12 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Generic server error (per spec)
-    // Include error code in development mode for debugging
     const isDevelopment = process.env.NODE_ENV === "development";
+    const message = isDevelopment ? error.message : "Failed to record view. Please try again.";
     res.status(500).json({
       success: false,
-      error: isDevelopment ? error.message : "Failed to record view",
+      message,
+      error: message,
       code: "SERVER_ERROR",
       ...(isDevelopment && error.code ? { errorCode: error.code } : {}),
     });
@@ -869,6 +926,16 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const mongoose = await import("mongoose");
+    if (!songId || !mongoose.Types.ObjectId.isValid(songId)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
+
     const { UnifiedBookmarkService } = await import("../service/unifiedBookmark.service");
     const result = await UnifiedBookmarkService.toggleBookmark(userId, songId);
 
@@ -912,6 +979,14 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
     });
   } catch (error: any) {
     logger.error("Error toggling save:", error);
+    if (error.name === "CastError" || (error.message && String(error.message).includes("ObjectId"))) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid song ID format",
+        code: "BAD_REQUEST",
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       message: "Failed to toggle save",

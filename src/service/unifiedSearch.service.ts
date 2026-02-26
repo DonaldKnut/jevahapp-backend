@@ -280,8 +280,11 @@ export class UnifiedSearchService {
       });
     });
 
-    // Transform copyright-free song results
+    // Transform copyright-free song results (viewCount >= likeCount invariant)
     copyrightFreeResults.forEach((item: any) => {
+      const v = item.viewCount ?? 0;
+      const l = item.likeCount ?? 0;
+      const viewCount = Math.max(v, l);
       combined.push({
         id: item._id?.toString() || item.id,
         _id: item._id?.toString(),
@@ -293,10 +296,10 @@ export class UnifiedSearchService {
         audioUrl: item.fileUrl,
         fileUrl: item.fileUrl,
         duration: item.duration,
-        viewCount: item.viewCount || 0,
-        views: item.viewCount || 0,
-        likeCount: item.likeCount || 0,
-        likes: item.likeCount || 0,
+        viewCount,
+        views: viewCount,
+        likeCount: l,
+        likes: l,
         createdAt: item.createdAt,
         uploadedBy: item.uploadedBy?._id?.toString() || item.uploadedBy || "system",
         isPublicDomain: true,
