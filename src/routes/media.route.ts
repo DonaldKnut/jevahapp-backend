@@ -98,15 +98,15 @@ router.get(
 
 /**
  * @route   GET /api/media/public/all-content
- * @desc    Retrieve ALL media content for the "All" tab with pagination and filtering (PUBLIC - no authentication required)
+ * @desc    Global feed: ALL content on the platform (everyone's uploads), same as /api/media/all-content. Recency-ordered; new uploads appear when approved/live. No filter by uploader.
  * @access  Public (No authentication required)
- * @query   { page?: number (default: 1), limit?: number (default: 50, max: 100), contentType?: string (default: "ALL"), category?: string, minViews?: number, minLikes?: number, dateFrom?: ISO8601, dateTo?: ISO8601, search?: string, sort?: string (default: "createdAt"), order?: "asc" | "desc" (default: "desc"), mood?: string }
- * @returns { success: boolean, data: { media: object[], pagination: { page: number, limit: number, total: number, totalPages: number, hasNextPage: boolean, hasPreviousPage: boolean } }, recommendations?: object }
+ * @query   { page?, limit?, contentType?, category?, minViews?, minLikes?, dateFrom?, dateTo?, search?, sort? (default: "createdAt"), order? (default: "desc"), mood? }
+ * @returns { success: boolean, data: { media: object[], pagination }, recommendations?: object }
  */
 router.get(
   "/public/all-content",
   apiRateLimiter,
-  cacheMiddleware(900), // Cache public "All" tab for 15 minutes (aggressive caching for stable data)
+  cacheMiddleware(30), // Short TTL so new approved content appears quickly
   getPublicAllContent
 );
 
@@ -208,7 +208,7 @@ router.get("/", verifyToken, apiRateLimiter, getAllMedia);
 
 /**
  * @route   GET /api/media/all-content
- * @desc    Retrieve ALL media content for the "All" tab with pagination and filtering (Protected)
+ * @desc    Global feed: ALL content on the platform (everyone's uploads), same as /api/media/public/all-content. Recency-ordered; new uploads appear when approved/live. No filter by uploader.
  * @access  Protected (Authenticated users only)
  * @query   { page?: number (default: 1), limit?: number (default: 50, max: 100), contentType?: string (default: "ALL"), category?: string, minViews?: number, minLikes?: number, dateFrom?: ISO8601, dateTo?: ISO8601, search?: string, sort?: string (default: "createdAt"), order?: "asc" | "desc" (default: "desc"), mood?: string }
  * @returns { success: boolean, data: { media: object[], pagination: { page: number, limit: number, total: number, totalPages: number, hasNextPage: boolean, hasPreviousPage: boolean } }, recommendations?: object }

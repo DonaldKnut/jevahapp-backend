@@ -591,8 +591,8 @@ export const uploadMedia = async (
       media.moderationStatus = "pending";
     }
 
-    // Invalidate cache for public all-content endpoint
-    await cacheService.del("media:public:all-content");
+    // Invalidate cache for public all-content endpoint (all query variants)
+    await cacheService.delPattern("media:public:all-content*");
     // Also invalidate other media caches if they exist
     await cacheService.delPattern("media:all:*");
 
@@ -688,7 +688,7 @@ export const getAllMedia = async (
   }
 };
 
-// New endpoint specifically for the "All" tab - returns all content for all users
+// Global feed: all content on the platform (everyone's uploads). Used by both /api/media/all-content and /api/media/public/all-content. No filter by uploader; ordered by recency (or sort param). New uploads appear as soon as approved/live.
 export const getAllContentForAllTab = async (
   request: Request,
   response: Response
@@ -2444,10 +2444,24 @@ export const getPublicAllContent = async (
     if (dateTo) options.dateTo = dateTo;
     if (search) options.search = search;
 
-    // Simple cache key as specified
-    const cacheKey = "media:public:all-content";
+    // Cache key includes query params so pagination/filters return correct data
+    const cacheKeyHash = JSON.stringify({
+      page: options.page,
+      limit: options.limit,
+      contentType: options.contentType,
+      category: options.category,
+      minViews: options.minViews,
+      minLikes: options.minLikes,
+      dateFrom: options.dateFrom,
+      dateTo: options.dateTo,
+      search: options.search,
+      sort: options.sort,
+      order: options.order,
+      mood,
+    });
+    const cacheKey = `media:public:all-content:${Buffer.from(cacheKeyHash).toString("base64").slice(0, 48)}`;
 
-    // Cache for 30 seconds (short TTL as specified) with cache visibility headers
+    // Cache for 30 seconds (short TTL) so new uploads appear soon after approved
     const result = await cacheService.getOrSetWithHeaders(
       cacheKey,
       async () => {
@@ -3532,7 +3546,7 @@ async function moderateContentAsync(
 
     // Invalidate cache when content becomes publicly visible (approved)
     if (moderationResult.isApproved) {
-      await cacheService.del("media:public:all-content");
+      await cacheService.delPattern("media:public:all-content*");
     }
 
     // Get report count

@@ -608,7 +608,7 @@ export const updateModerationStatus = async (
 
     // Invalidate cache when content becomes publicly visible (approved)
     if (status === "approved") {
-      await cacheService.del("media:public:all-content");
+      await cacheService.delPattern("media:public:all-content*");
     }
 
     // Log admin action

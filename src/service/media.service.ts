@@ -389,7 +389,11 @@ export class MediaService {
       const skip = (page - 1) * limit;
 
       // Build match query for filtering
-      const matchQuery: Record<string, any> = {};
+      // Global feed: all content on the platform (everyone's uploads). No filter by uploader. Exclude hidden/rejected so approved/live content appears as soon as visible.
+      const matchQuery: Record<string, any> = {
+        isHidden: { $ne: true },
+        moderationStatus: { $ne: "rejected" },
+      };
 
       // Content type filter
       if (options?.contentType && options.contentType !== "ALL") {
