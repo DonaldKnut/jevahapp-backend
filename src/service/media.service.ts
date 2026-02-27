@@ -1712,11 +1712,6 @@ export class MediaService {
         throw new Error("Media file not available for download");
       }
 
-      // Check if media is marked as downloadable (if such flag exists)
-      if (media.isDownloadable === false) {
-        throw new Error("This media is not available for download");
-      }
-
       // Generate signed download URL from Cloudflare R2
       const { default: fileUploadService } = await import(
         "./fileUpload.service"
