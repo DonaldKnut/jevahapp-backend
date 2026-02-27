@@ -76,15 +76,15 @@ class FileUploadService {
       // If contentId is provided, use spec-compliant structure for better caching
       let objectKey: string;
       if (contentId && filename) {
-        // Immutable URL: jevah/media/{type}/{contentId}/{filename}.ext
-        objectKey = `jevah/media/${folderPath.replace("media-", "")}/${contentId}/${filename}${extension}`;
+        // Immutable URL: jevah/media-videos/{contentId}-{filename}.ext (matching old structure format)
+        objectKey = `jevah/${folderPath}/${contentId}-${filename}${extension}`;
       } else if (contentId) {
         // Use contentId but default filename
         const defaultFilename = isVideoOrAudio ? "video" : isDocument ? "document" : "image";
-        objectKey = `jevah/media/${folderPath.replace("media-", "")}/${contentId}/${defaultFilename}${extension}`;
+        objectKey = `jevah/${folderPath}/${contentId}-${defaultFilename}${extension}`;
       } else {
         // Fallback to old structure for backward compatibility
-        objectKey = `jevah/${folderPath}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}${extension}`;
+        objectKey = `jevah/${folderPath}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}${extension}`;
       }
 
       console.log("Uploading to Cloudflare R2:", {
