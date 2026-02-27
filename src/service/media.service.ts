@@ -139,10 +139,10 @@ export class MediaService {
           `File and file MIME type are required for ${data.contentType} content type`
         );
       }
-      
+
       // Map sermon to videos for MIME type validation (sermons are videos)
       const contentTypeForValidation = data.contentType === "sermon" ? "videos" : data.contentType;
-      
+
       if (!validMimeTypes[contentTypeForValidation as keyof typeof validMimeTypes].includes(data.fileMimeType)) {
         throw new Error(
           `Invalid file MIME type for ${data.contentType}: ${data.fileMimeType}`
@@ -180,7 +180,7 @@ export class MediaService {
         // Map contentType to folder structure
         const contentTypeFolder = data.contentType === "sermon" ? "videos" : data.contentType;
         const filename = contentTypeFolder === "videos" ? "video" : contentTypeFolder === "music" ? "audio" : "document";
-        
+
         const uploadResult = await fileUploadService.uploadMedia(
           data.file,
           `media-${contentTypeFolder}`,
@@ -271,8 +271,25 @@ export class MediaService {
     }
   }
 
-  async getAllMedia(filters: any = {}) {
+  async getAllMedia(filters: any = {}, options: { enforceModeration?: boolean; actingUserId?: string } = { enforceModeration: true }) {
     const query: any = {};
+
+    // Apply strict moderation if enforced (defaulted to true for safety)
+    const shouldEnforce = options.enforceModeration !== false;
+
+    if (shouldEnforce) {
+      if (options.actingUserId) {
+        // Show only approved OR content uploaded by the current user
+        query.$or = [
+          { moderationStatus: "approved", isHidden: { $ne: true } },
+          { uploadedBy: new Types.ObjectId(options.actingUserId) }
+        ];
+      } else {
+        // Show only approved content
+        query.moderationStatus = "approved";
+        query.isHidden = { $ne: true };
+      }
+    }
 
     if (filters.search) {
       query.title = { $regex: filters.search, $options: "i" };
@@ -383,16 +400,17 @@ export class MediaService {
       // Default: page 1, limit 50 (mobile-optimized to save data/airtime)
       const page = options?.page && options.page > 0 ? options.page : 1;
       const rawLimit = options?.limit && options.limit > 0 ? options.limit : 50;
-      
+
       // Clamp for mobile-friendly payloads (min 10, max 100)
       const limit = Math.min(Math.max(rawLimit, 10), 100);
       const skip = (page - 1) * limit;
 
       // Build match query for filtering
-      // Global feed: all content on the platform (everyone's uploads). No filter by uploader. Exclude hidden/rejected so approved/live content appears as soon as visible.
+      // Global feed: all content on the platform (everyone's uploads). No filter by uploader.
+      // STRICT FILTERING: Only show approved content that hasn't been hidden.
       const matchQuery: Record<string, any> = {
         isHidden: { $ne: true },
-        moderationStatus: { $ne: "rejected" },
+        moderationStatus: "approved",
       };
 
       // Content type filter
@@ -758,7 +776,7 @@ export class MediaService {
           metadata: { abTestVariant },
         });
       }
-    } catch {}
+    } catch { }
 
     // 2) Enhanced personalized For You with collaborative filtering
     try {
@@ -842,7 +860,7 @@ export class MediaService {
           },
         });
       }
-    } catch {}
+    } catch { }
 
     // 3) Because you watched/listened/read (similar to last item with topic embeddings)
     try {
@@ -874,9 +892,9 @@ export class MediaService {
           const enhancedSimilar = similar.map((media: any) => {
             const topicSimilarity = userProfile
               ? recommendationEngineService["calculateTopicSimilarity"](
-                  lv.topics || [],
-                  media.topics || []
-                )
+                lv.topics || [],
+                media.topics || []
+              )
               : 0;
 
             return {
@@ -898,7 +916,7 @@ export class MediaService {
           });
         }
       }
-    } catch {}
+    } catch { }
 
     // 4) Trending now (recent window)
     try {
@@ -932,7 +950,7 @@ export class MediaService {
           });
         }
       }
-    } catch {}
+    } catch { }
 
     // 5) Quick picks (random explore with light filtering by mood/type when provided)
     try {
@@ -955,7 +973,7 @@ export class MediaService {
           metadata: { abTestVariant },
         });
       }
-    } catch {}
+    } catch { }
 
     // Reorder sections based on A/B test variant
     const orderedSections = sectionOrdering
@@ -965,18 +983,27 @@ export class MediaService {
     return { sections: orderedSections };
   }
 
-  async getMediaByIdentifier(mediaIdentifier: string) {
+  async getMediaByIdentifier(mediaIdentifier: string, options: { actingUserId?: string; userRole?: string } = {}) {
     if (!Types.ObjectId.isValid(mediaIdentifier)) {
       throw new Error("Invalid media identifier");
     }
 
     const media = await Media.findById(mediaIdentifier)
       .select(
-        "title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl topics uploadedBy duration fileSize width height bitrate createdAt updatedAt isDownloadable downloadUrl shareUrl viewThreshold"
+        "title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl topics uploadedBy duration fileSize width height bitrate createdAt updatedAt isDownloadable downloadUrl shareUrl viewThreshold moderationStatus isHidden"
       )
       .populate("uploadedBy", "firstName lastName avatar");
     if (!media) {
       throw new Error("Media not found");
+    }
+
+    // Security check: If not approved and not admin/uploader, don't return media
+    const isUploader = options.actingUserId && media.uploadedBy && (media.uploadedBy as any)._id.toString() === options.actingUserId;
+    const isAdmin = options.userRole === "admin";
+    const isApproved = media.moderationStatus === "approved" && !media.isHidden;
+
+    if (!isApproved && !isUploader && !isAdmin) {
+      throw new Error("Media not found or under review");
     }
 
     // Transform to match spec: ensure imageUrl is returned (aliased from coverImageUrl)
@@ -1082,12 +1109,12 @@ export class MediaService {
               count: 1,
               interactions: data.duration
                 ? [
-                    {
-                      timestamp: new Date(),
-                      duration: data.duration,
-                      isComplete: false,
-                    },
-                  ]
+                  {
+                    timestamp: new Date(),
+                    duration: data.duration,
+                    isComplete: false,
+                  },
+                ]
                 : [],
             },
           ],
@@ -1578,7 +1605,7 @@ export class MediaService {
           );
 
           // Add to viewed media (non-blocking, can fail silently)
-          this.addToViewedMedia(userIdentifier, mediaIdentifier).catch(() => {});
+          this.addToViewedMedia(userIdentifier, mediaIdentifier).catch(() => { });
 
           // Send email notification in background (non-blocking)
           if ((media as any).uploadedBy?.toString() !== userIdentifier) {
@@ -1595,12 +1622,12 @@ export class MediaService {
                     artist.email,
                     (media as any).title,
                     artist.firstName ||
-                      artist.artistProfile?.artistName ||
-                      "Artist"
-                  ).catch(() => {});
+                    artist.artistProfile?.artistName ||
+                    "Artist"
+                  ).catch(() => { });
                 }
               })
-              .catch(() => {}); // Never block on email
+              .catch(() => { }); // Never block on email
           }
         }
 
@@ -1633,13 +1660,13 @@ export class MediaService {
         ...media.toObject(),
         userAction: userAction
           ? {
-              isFavorited: userAction.actionType === "favorite",
-              isShared: userAction.actionType === "share",
-            }
+            isFavorited: userAction.actionType === "favorite",
+            isShared: userAction.actionType === "share",
+          }
           : {
-              isFavorited: false,
-              isShared: false,
-            },
+            isFavorited: false,
+            isShared: false,
+          },
       };
     } catch (error) {
       throw error;
@@ -1678,47 +1705,47 @@ export class MediaService {
       const objectKey = this.extractObjectKeyFromUrl(media.fileUrl);
       if (!objectKey) {
         // If we can't extract object key, use public URL as fallback
-      console.log("[Download Service] Could not extract object key, using public URL as fallback");
-      const downloadUrl = media.fileUrl;
-      const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour from now
-      const contentType = this.getContentTypeFromMedia(media);
+        console.log("[Download Service] Could not extract object key, using public URL as fallback");
+        const downloadUrl = media.fileUrl;
+        const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour from now
+        const contentType = this.getContentTypeFromMedia(media);
 
-      // Prepare response data
-      const responseData = {
-        success: true,
-        downloadUrl,
-        fileName: media.title || "Untitled",
-        fileSize: media.fileSize || fileSize || 0,
-        contentType,
-        mediaId: media._id.toString(),
-        downloadId: `dl_${media._id.toString()}`,
-        expiresAt: expiresAt.toISOString(),
-      };
-
-      // Try to add to offline downloads (non-critical)
-      try {
-        await this.addToOfflineDownloads(userId, mediaId, {
+        // Prepare response data
+        const responseData = {
+          success: true,
+          downloadUrl,
           fileName: media.title || "Untitled",
           fileSize: media.fileSize || fileSize || 0,
           contentType,
-          downloadUrl,
-        });
-      } catch (offlineError) {
-        console.warn("[Download Service] Failed to add to offline downloads (non-critical):", {
-          error: offlineError instanceof Error ? offlineError.message : String(offlineError),
-        });
-        // Continue - download URL is still valid
-      }
+          mediaId: media._id.toString(),
+          downloadId: `dl_${media._id.toString()}`,
+          expiresAt: expiresAt.toISOString(),
+        };
 
-      // Always return the download URL, even if recording failed
-      return responseData;
-    }
+        // Try to add to offline downloads (non-critical)
+        try {
+          await this.addToOfflineDownloads(userId, mediaId, {
+            fileName: media.title || "Untitled",
+            fileSize: media.fileSize || fileSize || 0,
+            contentType,
+            downloadUrl,
+          });
+        } catch (offlineError) {
+          console.warn("[Download Service] Failed to add to offline downloads (non-critical):", {
+            error: offlineError instanceof Error ? offlineError.message : String(offlineError),
+          });
+          // Continue - download URL is still valid
+        }
+
+        // Always return the download URL, even if recording failed
+        return responseData;
+      }
 
       // Generate signed URL with 1 hour expiration
       // If signed URL generation fails, fall back to public URL
       let downloadUrl: string;
       let expiresAt: Date;
-      
+
       try {
         const expiresInSeconds = 3600; // 1 hour
         downloadUrl = await fileUploadService.getPresignedGetUrl(
@@ -1759,7 +1786,7 @@ export class MediaService {
           mediaId,
           fileName: media.title || "Untitled",
         });
-        
+
         await this.addToOfflineDownloads(userId, mediaId, {
           fileName: media.title || "Untitled",
           fileSize: media.fileSize || fileSize || 0,
@@ -1821,7 +1848,7 @@ export class MediaService {
 
       // Parse URL
       const urlObj = new URL(url);
-      
+
       // Extract pathname and remove leading slash
       let pathname = urlObj.pathname;
       if (pathname.startsWith("/")) {
@@ -2011,7 +2038,7 @@ export class MediaService {
           ebook: "ebook",
         };
         const backendContentType = contentTypeMap[filters.contentType] || filters.contentType;
-        
+
         downloads = downloads.filter((d: any) => {
           const mediaContentType = d.mediaId?.contentType || d.contentType;
           return mediaContentType === backendContentType;
@@ -2045,15 +2072,15 @@ export class MediaService {
         // Include media object with fileUrl for playback
         media: download.mediaId
           ? {
-              _id: download.mediaId._id,
-              title: download.mediaId.title,
-              description: download.mediaId.description,
-              thumbnailUrl: download.mediaId.thumbnailUrl,
-              fileUrl: download.mediaId.fileUrl, // For playback - always available
-              contentType: download.mediaId.contentType,
-              duration: download.mediaId.duration,
-              category: download.mediaId.category,
-            }
+            _id: download.mediaId._id,
+            title: download.mediaId.title,
+            description: download.mediaId.description,
+            thumbnailUrl: download.mediaId.thumbnailUrl,
+            fileUrl: download.mediaId.fileUrl, // For playback - always available
+            contentType: download.mediaId.contentType,
+            duration: download.mediaId.duration,
+            category: download.mediaId.category,
+          }
           : undefined,
         createdAt: download.downloadDate,
         updatedAt: download.downloadDate,

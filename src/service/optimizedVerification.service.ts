@@ -166,15 +166,18 @@ export class OptimizedVerificationService {
     // Determine optimal sampling strategy based on video length
     // For safety: Always check beginning, and check middle/end for longer videos
     const shouldSampleMultiple = duration > 120; // If longer than 2 minutes, sample multiple segments
-    
+
+    // Extract frames for better coverage: Dynamic count based on duration
+    // Rule: ~1 frame every 2 minutes (120s), min 3, max 15
+    const frameCount = Math.min(15, Math.max(3, Math.floor(duration / 120) + 2));
+
     // Run audio extraction and frame extraction in parallel for speed
     const [audioResult, framesResult] = await Promise.all([
       // Extract audio sample(s) - multiple segments for longer videos to catch inappropriate content anywhere
       shouldSampleMultiple
         ? this.extractMultipleAudioSamples(videoBuffer, videoMimeType, duration)
         : this.extractAudioSample(videoBuffer, videoMimeType, Math.min(60, duration)),
-      // Extract 3 frames for better coverage: beginning, middle, end
-      this.extractVideoFramesOptimized(videoBuffer, videoMimeType, 3, duration),
+      this.extractVideoFramesOptimized(videoBuffer, videoMimeType, frameCount, duration),
     ]);
 
     reportProgress(50, "analyzing", "Transcribing audio...");
@@ -185,7 +188,7 @@ export class OptimizedVerificationService {
       // If multiple samples, combine transcripts
       if (Array.isArray(audioResult)) {
         const transcripts = await Promise.all(
-          audioResult.map(sample => 
+          audioResult.map(sample =>
             transcriptionService.transcribeAudio(sample.audioBuffer, "audio/mp3")
           )
         );
@@ -197,7 +200,7 @@ export class OptimizedVerificationService {
         );
         transcript = transcriptionResult.transcript;
       }
-      
+
       logger.info("Video transcription completed", {
         transcriptLength: transcript.length,
         uploadId,
@@ -233,7 +236,7 @@ export class OptimizedVerificationService {
     // For longer audio files, sample multiple segments to catch inappropriate content
     // For safety: Always check beginning, and check middle/end for longer files
     const shouldSampleMultiple = duration > 120; // If longer than 2 minutes
-    
+
     const audioSample = shouldSampleMultiple
       ? await this.extractMultipleAudioSamples(audioBuffer, audioMimeType, duration)
       : await this.extractAudioSample(audioBuffer, audioMimeType, Math.min(60, duration));
@@ -245,7 +248,7 @@ export class OptimizedVerificationService {
       // If multiple samples, combine transcripts
       if (Array.isArray(audioSample)) {
         const transcripts = await Promise.all(
-          audioSample.map(sample => 
+          audioSample.map(sample =>
             transcriptionService.transcribeAudio(
               sample.audioBuffer,
               audioMimeType === "audio/mpeg" ? "audio/mp3" : audioMimeType
@@ -260,7 +263,7 @@ export class OptimizedVerificationService {
         );
         transcript = transcriptionResult.transcript;
       }
-      
+
       logger.info("Audio transcription completed", {
         transcriptLength: transcript.length,
         uploadId,
@@ -419,22 +422,22 @@ export class OptimizedVerificationService {
   ): Promise<Array<{ audioBuffer: Buffer; duration?: number }>> {
     const samples: Array<{ audioBuffer: Buffer; duration?: number }> = [];
     const sampleDuration = 60; // 60 seconds per sample
-    
+
     // Sample 1: Beginning (first 60 seconds) - catches immediate inappropriate content
     samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, 0));
-    
+
     // Sample 2: Middle (around midpoint) - catches mid-video issues
     if (totalDuration > 180) {
       const middleStart = Math.max(0, (totalDuration / 2) - 30);
       samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, middleStart));
     }
-    
+
     // Sample 3: End (last 60 seconds) - catches inappropriate endings
     if (totalDuration > 120) {
       const endStart = Math.max(0, totalDuration - sampleDuration);
       samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, endStart));
     }
-    
+
     return samples;
   }
 
@@ -466,7 +469,7 @@ export class OptimizedVerificationService {
       const command = startOffset > 0
         ? `ffmpeg -i "${inputPath}" -ss ${startOffset} -t ${maxDuration} -vn -acodec libmp3lame -ar 44100 -ac 2 -y "${outputPath}"`
         : `ffmpeg -i "${inputPath}" -t ${maxDuration} -vn -acodec libmp3lame -ar 44100 -ac 2 -y "${outputPath}"`;
-      
+
       await execAsync(command);
 
       // Read extracted audio
@@ -502,7 +505,7 @@ export class OptimizedVerificationService {
     const tempId = `frames-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const inputPath = path.join(this.tempDir, `${tempId}-input`);
     const framesDir = path.join(this.tempDir, tempId);
-    
+
     if (!fs.existsSync(framesDir)) {
       fs.mkdirSync(framesDir, { recursive: true });
     }
@@ -512,7 +515,7 @@ export class OptimizedVerificationService {
       fs.writeFileSync(inputPath, videoBuffer);
 
       const frames: string[] = [];
-      
+
       // Extract frames at strategic points for maximum coverage
       // Critical: Always check beginning to catch immediate inappropriate content
       const timestamps: number[] = [];
@@ -569,7 +572,7 @@ export class OptimizedVerificationService {
             this.cleanupFile(path.join(framesDir, file));
           });
           fs.rmdirSync(framesDir);
-        } catch {}
+        } catch { }
       }
       logger.error("Error extracting video frames:", error);
       throw new Error(`Frame extraction failed: ${error.message}`);
@@ -596,7 +599,7 @@ export class OptimizedVerificationService {
       const durationCommand = `ffprobe -i "${inputPath}" -show_entries format=duration -v quiet -of csv="p=0"`;
       const { stdout } = await execAsync(durationCommand);
       const duration = parseFloat(stdout.trim()) || 10;
-      
+
       this.cleanupFile(inputPath);
       return duration;
     } catch (error) {
@@ -626,7 +629,7 @@ export class OptimizedVerificationService {
       const durationCommand = `ffprobe -i "${inputPath}" -show_entries format=duration -v quiet -of csv="p=0"`;
       const { stdout } = await execAsync(durationCommand);
       const duration = parseFloat(stdout.trim()) || 60;
-      
+
       this.cleanupFile(inputPath);
       return duration;
     } catch (error) {

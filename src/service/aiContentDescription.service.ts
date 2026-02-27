@@ -189,7 +189,7 @@ export class AIContentDescriptionService {
       media.topics && media.topics.length > 0
         ? media.topics.join(", ")
         : "spiritual content";
-    
+
     // Build context about available multimodal content
     let multimodalContext = "";
     if (media.thumbnail) {
@@ -220,48 +220,21 @@ export class AIContentDescriptionService {
     const randomElement =
       randomElements[Math.floor(Math.random() * randomElements.length)];
 
-    return `You are an AI assistant helping to create engaging, varied descriptions for Christian media content. Generate content that feels natural and human-like.
+    return `You are an expert Christian Content Curator. Your goal is to write unique, high-quality, and deeply insightful descriptions. 
 
-**Content Details:**
-- Title: "${media.title}"
-- Type: ${media.contentType}
-- Category: ${category}
-- Topics: ${topics}
-- Author: ${authorName}
-- Current Description: "${media.description || "No existing description"}"
-${multimodalContext}
-**Your Task:**
-${multimodalContext ? "**IMPORTANT**: Use the provided images (thumbnail/video frames) and transcript to create an ACCURATE description based on the ACTUAL CONTENT. Analyze what you see and hear, not just the title. Be specific about what the content contains based on the visual and audio analysis.\n\n" : ""}
-Generate TWO outputs in this exact format:
+**CRITICAL INSTRUCTION**: 
+${multimodalContext ? "Analyze the provided VISUALS (frames/thumbnail) and TRANSCRIPT. Do NOT rely solely on the title. Describe specifically what is happening, what is being discussed, and the unique spiritual value of THIS specific content. Avoid generic phrases like 'uplifting video' or 'inspiring message' unless the content truly warrants it." : "Generate a deeply insightful description based on the title and metadata provided. Focus on spiritual impact and specific biblical themes."}
 
-DESCRIPTION: [Write a fresh, engaging description that is different from any existing description. Make it 2-3 sentences, maximum 180 characters. Use varied language and avoid repetitive phrases. Make it feel natural and human-written.]
+**Format Required (Strictly follow this labels):**
+DESCRIPTION: [A concise, powerful description (2-3 sentences, max 180 chars) that captures the heart of the message.]
+BIBLE_VERSES: [Provide exactly 2-3 relevant Bible references, e.g., 'John 3:16, Romans 8:28'.]
+ENHANCED_DESCRIPTION: [A more profound, visually descriptive summary (3-4 sentences, max 250 chars) that highlights the spiritual depth ${randomElement}.]
 
-BIBLE_VERSES: [Provide exactly 2-3 relevant Bible verses (book chapter:verse format) that relate to this content. Examples: "John 3:16", "Psalm 23:1-3", "Romans 8:28". Only include the references, not the full text.]
-
-ENHANCED_DESCRIPTION: [Create an alternative, more detailed description (3-4 sentences, maximum 250 characters) that provides deeper spiritual insight ${randomElement}.]
-
-**Guidelines:**
-- Vary your language and avoid repetitive phrases
-- Make descriptions feel natural and conversational
-- Include relevant biblical themes
-- Focus on spiritual benefits and impact
-- Use appropriate Christian terminology
-- Be respectful and reverent in tone
-- Make each description unique and engaging
-
-**Content Type Focus:**
-- Videos: Focus on visual content, spiritual teachings, worship experiences, inspiration, biblical insights. Use words like "watch", "experience", "visual journey", "see", "witness". Emphasize the visual and emotional impact.
-- Audio: Focus on listening experience, powerful messages, spiritual encouragement. Use words like "listen", "hear", "audio message", "sound", "voice". Emphasize the auditory and inspirational impact.
-- Music: Focus on worship, praise, spiritual encouragement, connection with God through music. Use words like "worship", "praise", "song", "melody", "harmony", "musical". Emphasize the worship and spiritual connection.
-- Books/eBooks: Focus on spiritual growth, biblical wisdom, practical Christian living, reading experience. Use words like "read", "learn", "discover", "book", "guide", "resource". Emphasize knowledge and spiritual growth.
-- Teachings: Focus on biblical insights, spiritual development, faith building, learning. Use words like "teach", "learn", "understand", "biblical wisdom", "spiritual growth". Emphasize education and understanding.
-- Sermon: Focus on preaching, biblical messages, spiritual guidance, church teachings. Use words like "sermon", "preach", "message", "biblical teaching", "spiritual guidance". Emphasize the preaching and teaching aspect.
-- Devotional: Focus on daily devotion, prayer, spiritual reflection, personal growth. Use words like "devotion", "prayer", "reflection", "daily", "spiritual growth". Emphasize personal spiritual development.
-- Podcast: Focus on audio discussions, conversations, spiritual topics, listening experience. Use words like "podcast", "conversation", "discussion", "listen", "episode". Emphasize the conversational and educational aspect.
-
-**IMPORTANT**: Tailor your description specifically to the content type provided. If it's a video, write about watching and visual experience. If it's music, write about worship and musical experience. If it's a book, write about reading and learning. Make it clear what type of content this is.
-
-Generate content that feels authentic and varied, not robotic or templated.`;
+**Tone & Perspective:**
+- Be specific, not vague.
+- Use the provided transcript to pull out key quotes or specific topics.
+- Tailor the language to the content type: ${media.contentType}.
+- Avoid being robotic. Make it feel human and curated.`;
   }
 
   /**
@@ -302,33 +275,29 @@ Generate content that feels authentic and varied, not robotic or templated.`;
     enhancedDescription: string;
   } {
     try {
-      // Extract DESCRIPTION
-      const descriptionMatch = aiResponse.match(
-        /DESCRIPTION:\s*([\s\S]+?)(?=BIBLE_VERSES:|ENHANCED_DESCRIPTION:|$)/
-      );
-      const description = descriptionMatch
-        ? this.cleanDescription(descriptionMatch[1])
-        : this.generateFallbackDescription(media);
+      // More robust parsing: handle Markdown formatting, bolding, and varying whitespace
+      const getSection = (label: string, nextLabels: string[]) => {
+        const pattern = new RegExp(
+          `\\*\\*?${label}:?\\*\\*?\\s*([\\s\\S]+?)(?=\\*\\*?(?:${nextLabels.join("|")}):?|$)`,
+          "i"
+        );
+        const match = aiResponse.match(pattern);
+        return match ? match[1].trim() : null;
+      };
 
-      // Extract BIBLE_VERSES
-      const versesMatch = aiResponse.match(
-        /BIBLE_VERSES:\s*([\s\S]+?)(?=ENHANCED_DESCRIPTION:|$)/
-      );
-      const versesText = versesMatch ? versesMatch[1] : "";
+      const description = getSection("DESCRIPTION", ["BIBLE_VERSES", "ENHANCED_DESCRIPTION"])
+        || this.generateFallbackDescription(media);
+
+      const versesText = getSection("BIBLE_VERSES", ["ENHANCED_DESCRIPTION"]) || "";
       const bibleVerses = this.extractBibleVerses(versesText);
 
-      // Extract ENHANCED_DESCRIPTION
-      const enhancedMatch = aiResponse.match(
-        /ENHANCED_DESCRIPTION:\s*([\s\S]+?)$/
-      );
-      const enhancedDescription = enhancedMatch
-        ? this.cleanDescription(enhancedMatch[1])
-        : this.generateFallbackDescription(media);
+      const enhancedDescription = getSection("ENHANCED_DESCRIPTION", [])
+        || this.generateFallbackDescription(media);
 
       return {
-        description,
+        description: this.cleanDescription(description),
         bibleVerses,
-        enhancedDescription,
+        enhancedDescription: this.cleanDescription(enhancedDescription),
       };
     } catch (error) {
       logger.error("Error parsing AI response:", error);

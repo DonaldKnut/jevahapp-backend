@@ -275,7 +275,7 @@ export const uploadMedia = async (
 
     // Validate file size limits based on content type
     const fileSizeInMB = file.size / (1024 * 1024); // Convert bytes to MB
-    
+
     if (contentType === "videos" || contentType === "sermon") {
       // Sermons/Videos: Maximum 300MB per file
       if (fileSizeInMB > UPLOAD_LIMITS.FILE_SIZE.SERMON_MB) {
@@ -429,7 +429,7 @@ export const uploadMedia = async (
         );
       } catch (error: any) {
         logger.error("Pre-upload verification error:", error);
-        
+
         // Send error progress
         uploadProgressService.sendProgress(
           {
@@ -460,7 +460,7 @@ export const uploadMedia = async (
         const status = verificationResult.moderationResult.requiresReview
           ? "under_review"
           : "rejected";
-        
+
         logger.warn("Content rejected during pre-upload verification", {
           status,
           reason: verificationResult.moderationResult.reason,
@@ -566,21 +566,28 @@ export const uploadMedia = async (
 
     // Update media with pre-upload verification result (if verification was performed)
     if (verificationResult) {
+      // Logic for moderation status:
+      // 1. If AI approves AND doesn't require review -> approved (visible)
+      // 2. If AI approves BUT requires review -> under_review (hidden)
+      const requiresReview = verificationResult.moderationResult.requiresReview;
+      const status = requiresReview ? "under_review" : "approved";
+      const isHidden = requiresReview;
+
       const updateData: any = {
-        moderationStatus: "approved",
+        moderationStatus: status,
         moderationResult: {
           ...verificationResult.moderationResult,
           moderatedAt: new Date(),
         },
-        isHidden: false,
+        isHidden: isHidden,
       };
 
       await Media.findByIdAndUpdate(media._id, updateData);
-      
+
       // Update media object for response
-      media.moderationStatus = "approved";
+      media.moderationStatus = status;
       media.moderationResult = updateData.moderationResult;
-      media.isHidden = false;
+      media.isHidden = isHidden;
     } else {
       // For live content, set to pending (will be moderated separately if needed)
       const updateData: any = {
@@ -639,12 +646,12 @@ export const uploadMedia = async (
     });
   } catch (error: any) {
     logger.error("Upload media error", { error: error?.message });
-    
+
     // Cleanup upload session on error (only if variables are available)
     if (request.body && request.body.contentType && request.body.contentType !== "live") {
       const errorUploadId = request.headers['x-upload-id'] as string || undefined;
       const errorUserId = request.userId || "";
-      
+
       if (errorUploadId && errorUserId) {
         uploadProgressService.sendProgress(
           {
@@ -774,8 +781,8 @@ export const getAllContentForAllTab = async (
       sort: options.sort,
       order: options.order,
     });
-    
-    const feedKey = userIdentifier 
+
+    const feedKey = userIdentifier
       ? `feed:user:${userIdentifier}:${Buffer.from(cacheKeyHash).toString('base64').slice(0, 32)}`
       : `feed:global:${Buffer.from(cacheKeyHash).toString('base64').slice(0, 32)}`;
 
@@ -797,7 +804,7 @@ export const getAllContentForAllTab = async (
     if (cachedFeed && cachedFeed.media && Array.isArray(cachedFeed.media) && cachedFeed.media.length > 0) {
       // Cache HIT: Return immediately without DB access
       const duration = Date.now() - startTime;
-      
+
       // Optional: Fetch recommendations (non-blocking, can fail silently)
       let recommendations: any = undefined;
       if (userIdentifier) {
@@ -809,7 +816,7 @@ export const getAllContentForAllTab = async (
           }
         ).then(recs => {
           // Recommendations are optional, don't block response
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       response.status(200).json({
@@ -869,11 +876,11 @@ export const getAllContentForAllTab = async (
         return true;
       },
       false
-    ).catch(() => {}); // Never block on cache write
+    ).catch(() => { }); // Never block on cache write
 
     // Log performance metrics (lightweight, only for slow requests)
     const duration = Date.now() - startTime;
-    
+
     if (duration > 500) {
       logger.warn("Slow feed query", {
         duration,
@@ -1199,7 +1206,7 @@ export const recordMediaInteraction = async (
     // If interaction is a view, add to viewed media list
     if (interactionType === "view") {
       await mediaService.addToViewedMedia(userIdentifier, id);
-      incrPostCounter({ postId: id, field: "views", delta: 1 }).catch(() => {});
+      incrPostCounter({ postId: id, field: "views", delta: 1 }).catch(() => { });
     }
 
     // Non-blocking analytics event (aggregation/ranking can run offline)
@@ -1270,7 +1277,7 @@ export const trackViewWithDuration = async (
 
     // Fast path: Update Redis counter immediately, return response
     const viewCount = await incrPostCounter({ postId: mediaId, field: "views", delta: 1 });
-    
+
     // Return immediately with optimistic response
     response.status(200).json({
       success: true,
@@ -1460,8 +1467,8 @@ export const downloadMedia = async (
         return;
       }
 
-      if (error.message.includes("not available for download") || 
-          error.message.includes("not available for download")) {
+      if (error.message.includes("not available for download") ||
+        error.message.includes("not available for download")) {
         response.status(403).json({
           success: false,
           error: "DOWNLOAD_NOT_ALLOWED",
@@ -2357,12 +2364,14 @@ export const getPublicMedia = async (
   try {
     const filters = request.query;
     const cacheKey = `media:public:${JSON.stringify(filters)}`;
-    
-    // Cache for 5 minutes (300 seconds)
+
+    // Cache for 15 minutes (900 seconds)
     const result = await cacheService.getOrSet(
       cacheKey,
       async () => {
-        const mediaList = await mediaService.getAllMedia(filters);
+        const mediaList = await mediaService.getAllMedia(filters, {
+          actingUserId: request.userId
+        });
         return {
           success: true,
           media: mediaList.media,
@@ -2559,13 +2568,16 @@ export const getPublicMediaByIdentifier = async (
     }
 
     const cacheKey = `media:public:${id}`;
-    
+
     // Cache for 10 minutes (600 seconds)
     const result = await cacheService.getOrSet(
       cacheKey,
       async () => {
-        const media = await mediaService.getMediaByIdentifier(id);
-        
+        const media = await mediaService.getMediaByIdentifier(id, {
+          actingUserId: request.userId,
+          userRole: request.userRole
+        });
+
         if (!media) {
           return {
             success: false,
@@ -2898,7 +2910,7 @@ export const getOnboardingContent = async (
         content: onboardingContent
           .filter(
             item =>
-              item.contentType === "music" || 
+              item.contentType === "music" ||
               item.contentType === "sermon" ||
               item.contentType === "audio"
           )
@@ -3255,7 +3267,7 @@ async function extractTextFromEPUB(epubBuffer: Buffer): Promise<string> {
     // EPUB structure: content is usually in OEBPS/ or OPS/ folder
     // Look for .html, .xhtml, or .htm files
     const contentFiles: string[] = [];
-    
+
     zipData.forEach((relativePath: string, file: any) => {
       if (
         !file.dir &&
@@ -3281,7 +3293,7 @@ async function extractTextFromEPUB(epubBuffer: Buffer): Promise<string> {
             .replace(/<[^>]+>/g, " ") // Remove HTML tags
             .replace(/\s+/g, " ") // Normalize whitespace
             .trim();
-          
+
           if (textContent) {
             fullText += textContent + "\n";
           }
@@ -3338,7 +3350,7 @@ async function verifyContentBeforeUpload(
   if (contentType === "videos" && fileMimeType.startsWith("video")) {
     try {
       logger.info("Processing video: extracting audio and frames");
-      
+
       // Extract audio for transcription
       const audioResult = await mediaProcessingService.extractAudio(
         file,
@@ -3394,7 +3406,7 @@ async function verifyContentBeforeUpload(
   if (contentType === "books") {
     try {
       logger.info("Processing book: extracting text");
-      
+
       if (fileMimeType === "application/pdf") {
         // Extract text from PDF
         const pdfText = await extractTextFromPDF(file);
@@ -3525,8 +3537,8 @@ async function moderateContentAsync(
       moderationStatus: moderationResult.isApproved
         ? "approved"
         : moderationResult.requiresReview
-        ? "under_review"
-        : "rejected",
+          ? "under_review"
+          : "rejected",
       moderationResult: {
         ...moderationResult,
         moderatedAt: new Date(),
@@ -3736,28 +3748,11 @@ export const generateMediaDescription = async (
     const file = files?.file?.[0];
     const thumbnail = files?.thumbnail?.[0];
 
-    // Validate file size for AI description generation (more restrictive than upload limit)
+    // Process uploaded files for multimodal analysis (optional)
+    // We now allow analysis for all files up to the system limit, 
+    // but the analysis itself stays light (first 3 mins only).
     if (file && file.buffer) {
-      const fileSizeMB = file.size / (1024 * 1024);
-      if (fileSizeMB > AI_DESCRIPTION_LIMITS.MAX_FILE_SIZE_MB) {
-        logger.warn(`File too large for AI analysis (${fileSizeMB.toFixed(1)}MB > ${AI_DESCRIPTION_LIMITS.MAX_FILE_SIZE_MB}MB)`);
-        // Continue with text-only generation - don't fail the request
-        response.status(200).json({
-          success: true,
-          description: aiContentDescriptionService.getFallbackDescription({
-            _id: "temp-id",
-            title: title.trim(),
-            contentType: contentType,
-            category: category || undefined,
-            topics: Array.isArray(topics) ? topics : typeof topics === "string" ? [topics] : undefined,
-            authorInfo: authorInfo,
-          }),
-          bibleVerses: [],
-          message: `File too large for AI analysis (${fileSizeMB.toFixed(1)}MB). Maximum ${AI_DESCRIPTION_LIMITS.MAX_FILE_SIZE_MB}MB. Generated description from title only.`,
-          warning: "FILE_TOO_LARGE_FOR_ANALYSIS",
-        });
-        return;
-      }
+      logger.info(`Processing file for AI analysis (${(file.size / (1024 * 1024)).toFixed(1)}MB)`);
     }
 
     // Process thumbnail if provided
@@ -3783,7 +3778,7 @@ export const generateMediaDescription = async (
         // For video content, extract frames and transcribe (limited duration)
         if ((contentType === "videos" || contentType === "sermon") && fileMimeType.startsWith("video/")) {
           logger.info("Processing video for AI description generation (limited to first 3 minutes)");
-          
+
           // Extract video frames (from first portion of video)
           try {
             const framesResult = await mediaProcessingService.extractVideoFrames(
@@ -3803,7 +3798,7 @@ export const generateMediaDescription = async (
               file.buffer,
               fileMimeType
             );
-            
+
             // Limit transcription to first 3 minutes if duration is available
             // Note: Transcription service should handle this, but we log it
             const transcriptionResult = await transcriptionService.transcribeAudio(
@@ -3811,13 +3806,13 @@ export const generateMediaDescription = async (
               "audio/mp3"
             );
             transcript = transcriptionResult.transcript;
-            
+
             // Truncate transcript if too long (safety measure)
             if (transcript.length > 2000) {
               transcript = transcript.substring(0, 2000) + "...";
               logger.info("Transcript truncated to 2000 chars for cost control");
             }
-            
+
             logger.info(`Transcribed video audio (${transcript.length} chars)`);
           } catch (transcribeError) {
             logger.warn("Failed to transcribe video:", transcribeError);
@@ -3826,20 +3821,20 @@ export const generateMediaDescription = async (
         // For audio/music content, transcribe (limited duration)
         else if ((contentType === "music" || contentType === "audio") && fileMimeType.startsWith("audio/")) {
           logger.info("Processing audio for AI description generation (limited to first 3 minutes)");
-          
+
           try {
             const transcriptionResult = await transcriptionService.transcribeAudio(
               file.buffer,
               fileMimeType
             );
             transcript = transcriptionResult.transcript;
-            
+
             // Truncate transcript if too long (safety measure)
             if (transcript.length > 2000) {
               transcript = transcript.substring(0, 2000) + "...";
               logger.info("Transcript truncated to 2000 chars for cost control");
             }
-            
+
             logger.info(`Transcribed audio (${transcript.length} chars)`);
           } catch (transcribeError) {
             logger.warn("Failed to transcribe audio:", transcribeError);
@@ -3873,7 +3868,7 @@ export const generateMediaDescription = async (
     };
 
     let aiResponse: Awaited<ReturnType<typeof generateDescription>>;
-    
+
     try {
       // Race between AI generation and timeout
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -3924,7 +3919,7 @@ export const generateMediaDescription = async (
     });
   } catch (error: any) {
     logger.error("Generate media description error:", error);
-    
+
     // Return fallback description on any error (don't fail the request)
     try {
       const fallbackDescription = aiContentDescriptionService.getFallbackDescription({
@@ -3932,13 +3927,13 @@ export const generateMediaDescription = async (
         title: request.body.title?.trim() || "Media",
         contentType: request.body.contentType || "content",
         category: request.body.category,
-        topics: Array.isArray(request.body.topics) 
-          ? request.body.topics 
-          : typeof request.body.topics === "string" 
-            ? [request.body.topics] 
+        topics: Array.isArray(request.body.topics)
+          ? request.body.topics
+          : typeof request.body.topics === "string"
+            ? [request.body.topics]
             : undefined,
       });
-      
+
       response.status(200).json({
         success: true,
         description: fallbackDescription,
