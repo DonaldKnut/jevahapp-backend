@@ -72,19 +72,18 @@ class FileUploadService {
         throw new Error(`Unsupported MIME type: ${mimeType}`);
       }
 
-      // Generate immutable URL structure: media/{type}/{contentId}/filename.ext
-      // If contentId is provided, use spec-compliant structure for better caching
+      // Generate immutable URL structure: {folderPath}/{contentId}-{filename}.ext
       let objectKey: string;
       if (contentId && filename) {
-        // Immutable URL: jevah/media-videos/{contentId}-{filename}.ext (matching old structure format)
-        objectKey = `jevah/${folderPath}/${contentId}-${filename}${extension}`;
+        // Flat structure: media-videos/{contentId}-{filename}.ext
+        objectKey = `${folderPath}/${contentId}-${filename}${extension}`;
       } else if (contentId) {
         // Use contentId but default filename
         const defaultFilename = isVideoOrAudio ? "video" : isDocument ? "document" : "image";
-        objectKey = `jevah/${folderPath}/${contentId}-${defaultFilename}${extension}`;
+        objectKey = `${folderPath}/${contentId}-${defaultFilename}${extension}`;
       } else {
         // Fallback to old structure for backward compatibility
-        objectKey = `jevah/${folderPath}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}${extension}`;
+        objectKey = `${folderPath}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}${extension}`;
       }
 
       console.log("Uploading to Cloudflare R2:", {
@@ -203,13 +202,15 @@ class FileUploadService {
     const publicDevUrl =
       process.env.R2_PUBLIC_DEV_URL ||
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+    const bucketName = process.env.R2_BUCKET || "jevah";
 
-    // Ensure the generated public URL uses the exact identical Object Key.
-    if (objectKey.startsWith("jevah/")) {
+    // For R2 public dev URLs, the path starts with the bucket name
+    // Ensure we don't double-prefix if objectKey somehow already has it
+    if (objectKey.startsWith(`${bucketName}/`)) {
       return `${publicDevUrl}/${objectKey}`;
     }
 
-    return `${publicDevUrl}/jevah/${objectKey}`;
+    return `${publicDevUrl}/${bucketName}/${objectKey}`;
   }
 }
 
