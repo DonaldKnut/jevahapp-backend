@@ -76,15 +76,15 @@ class FileUploadService {
       // If contentId is provided, use spec-compliant structure for better caching
       let objectKey: string;
       if (contentId && filename) {
-        // Immutable URL: media/{type}/{contentId}/{filename}.ext
-        objectKey = `media/${folderPath.replace("media-", "")}/${contentId}/${filename}${extension}`;
+        // Immutable URL: jevah/media/{type}/{contentId}/{filename}.ext
+        objectKey = `jevah/media/${folderPath.replace("media-", "")}/${contentId}/${filename}${extension}`;
       } else if (contentId) {
         // Use contentId but default filename
         const defaultFilename = isVideoOrAudio ? "video" : isDocument ? "document" : "image";
-        objectKey = `media/${folderPath.replace("media-", "")}/${contentId}/${defaultFilename}${extension}`;
+        objectKey = `jevah/media/${folderPath.replace("media-", "")}/${contentId}/${defaultFilename}${extension}`;
       } else {
         // Fallback to old structure for backward compatibility
-        objectKey = `${folderPath}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}${extension}`;
+        objectKey = `jevah/${folderPath}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}${extension}`;
       }
 
       console.log("Uploading to Cloudflare R2:", {
@@ -96,7 +96,7 @@ class FileUploadService {
       // Prepare optimized headers for streaming media
       const metadata: Record<string, string> = {};
       let cacheControl = "public, max-age=31536000, immutable";
-      
+
       // Video/Audio streaming optimizations
       if (isVideoOrAudio) {
         // For streaming media, ensure Range requests are supported (R2 supports this by default)
@@ -142,14 +142,13 @@ class FileUploadService {
     } catch (error: any) {
       console.error("Cloudflare R2 upload error:", error);
       throw new Error(
-        `Failed to upload ${
-          mimeType.startsWith("video")
-            ? "video"
-            : mimeType.startsWith("audio")
-              ? "audio"
-              : mimeType.startsWith("image")
-                ? "image"
-                : "document"
+        `Failed to upload ${mimeType.startsWith("video")
+          ? "video"
+          : mimeType.startsWith("audio")
+            ? "audio"
+            : mimeType.startsWith("image")
+              ? "image"
+              : "document"
         }: ${error.message}`
       );
     }
@@ -201,15 +200,12 @@ class FileUploadService {
       return `https://${customDomain}/${objectKey}`;
     }
 
-    // Use the same format as seeded content: pub-xxx.r2.dev/jevah/...
-    // Note: This maintains backward compatibility with existing URLs
     const publicDevUrl =
       process.env.R2_PUBLIC_DEV_URL ||
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
 
-    // If objectKey already starts with "media/", don't add "/jevah/" prefix
-    // Otherwise, keep backward compatibility
-    if (objectKey.startsWith("media/")) {
+    // Ensure the generated public URL uses the exact identical Object Key.
+    if (objectKey.startsWith("jevah/")) {
       return `${publicDevUrl}/${objectKey}`;
     }
 
