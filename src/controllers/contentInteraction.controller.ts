@@ -138,7 +138,7 @@ export const toggleContentLike = async (
     });
   } catch (error: any) {
     const { contentId, contentType } = req.params;
-    
+
     logger.error("Toggle content like error", {
       error: error.message,
       stack: error.stack,
@@ -184,13 +184,13 @@ export const toggleContentLike = async (
           : error.message,
         data: error.message.includes("content type")
           ? {
-              contentType,
-              validTypes: validContentTypes,
-            }
+            contentType,
+            validTypes: validContentTypes,
+          }
           : {
-              contentId: contentId || undefined,
-              contentType: contentType || undefined,
-            },
+            contentId: contentId || undefined,
+            contentType: contentType || undefined,
+          },
       });
       return;
     }
@@ -347,18 +347,6 @@ export const getContentMetadata = async (
       contentType
     );
 
-    // Fetch bookmark count if content type supports it
-    let bookmarkCount = 0;
-    if (["media", "ebook", "podcast", "merch"].includes(contentType)) {
-      try {
-        bookmarkCount = await Bookmark.countDocuments({
-          media: new Types.ObjectId(contentId),
-        });
-      } catch (error) {
-        // Ignore bookmark count errors
-      }
-    }
-
     // hasViewed is optional; we only compute it when authenticated (within the current dedupe window).
     // This avoids inflating DB queries for public traffic.
     let hasViewed = false;
@@ -391,7 +379,7 @@ export const getContentMetadata = async (
       data: {
         contentId: metadata.id,
         likes: metadata.stats?.likes || 0,
-        saves: bookmarkCount || 0,
+        saves: metadata.stats?.saves || 0, // Using atomic count from service
         shares: metadata.stats?.shares || 0,
         views: metadata.stats?.views || 0,
         comments: metadata.stats?.comments || 0,
@@ -717,7 +705,7 @@ export const getContentComments = async (
     // Generate ETag for caching (based on contentId, page, limit, sortBy)
     const etag = `"${resolvedContentId}-${page}-${limit}-${sortBy}"`;
     res.setHeader("ETag", etag);
-    
+
     // Check If-None-Match header for 304 Not Modified
     const ifNoneMatch = req.headers["if-none-match"];
     if (ifNoneMatch === etag) {
@@ -895,7 +883,7 @@ export const reportContentComment = async (
     try {
       const admins = await User.find({ role: "admin" }).select("email _id");
       const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
-      
+
       // Always include support@jevahapp.com in the recipient list
       const supportEmail = "support@jevahapp.com";
       const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];
@@ -961,7 +949,7 @@ export const reportContentComment = async (
       try {
         const admins = await User.find({ role: "admin" }).select("email");
         const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
-        
+
         // Always include support@jevahapp.com in the recipient list
         const supportEmail = "support@jevahapp.com";
         const allRecipientEmails = [...new Set([...adminEmails, supportEmail])];

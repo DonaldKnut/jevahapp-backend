@@ -52,6 +52,7 @@ export interface IMedia extends Document {
   shareCount: number;
   likeCount: number;
   commentCount: number;
+  bookmarkCount: number; // Added for atomic save tracking
   isLive?: boolean;
   liveStreamStatus?: LiveStreamStatus;
   streamKey?: string;
@@ -96,16 +97,16 @@ export interface IMedia extends Document {
   // Library fields
   isInLibrary?: boolean;
   libraryAddedAt?: Date;
-  
+
   // Default content fields
   isDefaultContent?: boolean;
   isOnboardingContent?: boolean;
-  
+
   // Copyright-free audio library fields (YouTube Audio Library style)
   isPublicDomain?: boolean; // For copyright-free songs
   speaker?: string; // For audio content (speaker/preacher/artist name)
   year?: number; // Year of creation/release
-  
+
   // Content moderation fields
   moderationStatus?: "pending" | "approved" | "rejected" | "under_review";
   moderationResult?: {
@@ -129,7 +130,7 @@ export interface IMedia extends Document {
     updatedAt?: Date;
     error?: string;
   };
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -432,93 +433,93 @@ const mediaSchema = new Schema<IMedia>(
       min: 0,
       max: 100,
     },
-      // Library fields
-  isInLibrary: {
-    type: Boolean,
-    default: false,
-  },
-  libraryAddedAt: {
-    type: Date,
-  },
-  // Default content fields
-  isDefaultContent: {
-    type: Boolean,
-    default: false,
-  },
-  isOnboardingContent: {
-    type: Boolean,
-    default: false,
-  },
-  // Copyright-free audio library fields (YouTube Audio Library style)
-  isPublicDomain: {
-    type: Boolean,
-    default: false,
-    index: true,
-  },
-  speaker: {
-    type: String,
-    trim: true,
-  },
-  year: {
-    type: Number,
-    min: 1000,
-    max: new Date().getFullYear() + 1,
-  },
-  // Content moderation fields
-  moderationStatus: {
-    type: String,
-    enum: ["pending", "approved", "rejected", "under_review"],
-    default: "pending",
-    index: true,
-  },
-  moderationResult: {
-    isApproved: {
+    // Library fields
+    isInLibrary: {
       type: Boolean,
       default: false,
     },
-    confidence: {
-      type: Number,
-      min: 0,
-      max: 1,
-    },
-    reason: {
-      type: String,
-    },
-    flags: {
-      type: [String],
-      default: [],
-    },
-    requiresReview: {
-      type: Boolean,
-      default: false,
-    },
-    moderatedAt: {
+    libraryAddedAt: {
       type: Date,
     },
-  },
-  reportCount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-  isHidden: {
-    type: Boolean,
-    default: false,
-    index: true,
-  },
-
-  // Background processing (BullMQ)
-  processing: {
-    status: {
-      type: String,
-      enum: ["idle", "queued", "processing", "completed", "failed"],
-      default: "idle",
+    // Default content fields
+    isDefaultContent: {
+      type: Boolean,
+      default: false,
+    },
+    isOnboardingContent: {
+      type: Boolean,
+      default: false,
+    },
+    // Copyright-free audio library fields (YouTube Audio Library style)
+    isPublicDomain: {
+      type: Boolean,
+      default: false,
       index: true,
     },
-    jobType: { type: String },
-    updatedAt: { type: Date },
-    error: { type: String },
-  },
+    speaker: {
+      type: String,
+      trim: true,
+    },
+    year: {
+      type: Number,
+      min: 1000,
+      max: new Date().getFullYear() + 1,
+    },
+    // Content moderation fields
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "under_review"],
+      default: "pending",
+      index: true,
+    },
+    moderationResult: {
+      isApproved: {
+        type: Boolean,
+        default: false,
+      },
+      confidence: {
+        type: Number,
+        min: 0,
+        max: 1,
+      },
+      reason: {
+        type: String,
+      },
+      flags: {
+        type: [String],
+        default: [],
+      },
+      requiresReview: {
+        type: Boolean,
+        default: false,
+      },
+      moderatedAt: {
+        type: Date,
+      },
+    },
+    reportCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    isHidden: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    // Background processing (BullMQ)
+    processing: {
+      status: {
+        type: String,
+        enum: ["idle", "queued", "processing", "completed", "failed"],
+        default: "idle",
+        index: true,
+      },
+      jobType: { type: String },
+      updatedAt: { type: Date },
+      error: { type: String },
+    },
   },
   {
     timestamps: true,

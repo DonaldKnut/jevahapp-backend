@@ -49,16 +49,15 @@ export class UnifiedBookmarkService {
         if (existingBookmark) {
           // Remove bookmark (unsave)
           await Bookmark.findByIdAndDelete(existingBookmark._id, { session });
-          bookmarked = false;
-
-          logger.info("Bookmark removed", {
-            userId,
+          await Media.findByIdAndUpdate(
             mediaId,
-            bookmarkId: existingBookmark._id,
-          });
+            { $inc: { bookmarkCount: -1 } },
+            { session }
+          );
+          bookmarked = false;
         } else {
           // Add bookmark (save)
-          const newBookmark = await Bookmark.create(
+          await Bookmark.create(
             [
               {
                 user: new Types.ObjectId(userId),
@@ -67,13 +66,12 @@ export class UnifiedBookmarkService {
             ],
             { session }
           );
-          bookmarked = true;
-
-          logger.info("Bookmark created", {
-            userId,
+          await Media.findByIdAndUpdate(
             mediaId,
-            bookmarkId: newBookmark[0]._id,
-          });
+            { $inc: { bookmarkCount: 1 } },
+            { session }
+          );
+          bookmarked = true;
         }
       });
 
@@ -165,9 +163,8 @@ export class UnifiedBookmarkService {
    */
   static async getBookmarkCount(mediaId: string): Promise<number> {
     try {
-      return await Bookmark.countDocuments({
-        media: new Types.ObjectId(mediaId),
-      });
+      const media = await Media.findById(mediaId).select("bookmarkCount").lean();
+      return (media as any)?.bookmarkCount || 0;
     } catch (error: any) {
       logger.error("Failed to get bookmark count", {
         mediaId,
@@ -381,10 +378,12 @@ export class UnifiedBookmarkService {
             });
 
             if (!existing) {
-              const created = await Bookmark.create({
+              await Bookmark.create({
                 user: new Types.ObjectId(userId),
                 media: new Types.ObjectId(mediaId),
               });
+              // Atomic increment
+              await Media.findByIdAndUpdate(mediaId, { $inc: { bookmarkCount: 1 } });
               // Fire-and-forget notification for each added bookmark
               try {
                 await NotificationService.notifyContentBookmark(
@@ -401,10 +400,14 @@ export class UnifiedBookmarkService {
               }
             }
           } else {
-            await Bookmark.findOneAndDelete({
+            const deleted = await Bookmark.findOneAndDelete({
               user: new Types.ObjectId(userId),
               media: new Types.ObjectId(mediaId),
             });
+            if (deleted) {
+              // Atomic decrement
+              await Media.findByIdAndUpdate(mediaId, { $inc: { bookmarkCount: -1 } });
+            }
           }
 
           results.push({

@@ -25,7 +25,7 @@ export async function incrPostCounter(params: {
       const next = await r.incrby(key, delta);
       // Set TTL on first increment (24 hours)
       if (delta > 0) {
-        await r.expire(key, 86400).catch(() => {});
+        await r.expire(key, 86400).catch(() => { });
       }
       return typeof next === "number" ? next : Number(next);
     },
@@ -49,6 +49,23 @@ export async function getPostCounter(params: {
     },
     null
   );
+}
+
+export async function setPostCounter(params: {
+  postId: string;
+  field: "likes" | "views" | "comments";
+  count: number;
+}): Promise<void> {
+  const { postId, field, count } = params;
+  const key = `post:${postId}:${field}`;
+
+  await redisSafe(
+    "counterSet",
+    async (r) => {
+      await r.set(key, count, { ex: 86400 }); // 24 hours TTL
+    },
+    undefined
+  ).catch(() => { });
 }
 
 /**
@@ -93,6 +110,6 @@ export async function setUserLikeState(params: {
       }
     },
     undefined
-  ).catch(() => {}); // Never block on Redis write
+  ).catch(() => { }); // Never block on Redis write
 }
 

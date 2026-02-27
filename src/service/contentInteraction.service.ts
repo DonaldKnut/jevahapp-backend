@@ -8,18 +8,19 @@ import { NotificationService } from "./notification.service";
 import viralContentService from "./viralContent.service";
 import mentionDetectionService from "./mentionDetection.service";
 import logger from "../utils/logger";
+import { Like } from "../models/like.model";
 import { Bookmark } from "../models/bookmark.model";
-import { getUserLikeState, setUserLikeState, getPostCounter, incrPostCounter } from "../lib/redisCounters";
+import { getUserLikeState, setUserLikeState, getPostCounter, setPostCounter, incrPostCounter } from "../lib/redisCounters";
 
 export interface ContentInteractionInput {
   userId: string;
   contentId: string;
   contentType:
-    | "media"
-    | "artist"
-    | "merch"
-    | "ebook"
-    | "podcast"; // Note: devotional likes removed - will be separate system
+  | "media"
+  | "artist"
+  | "merch"
+  | "ebook"
+  | "podcast"; // Note: devotional likes removed - will be separate system
   actionType: "like" | "comment" | "share" | "favorite" | "bookmark";
   content?: string; // For comments
   parentCommentId?: string; // For nested comments
@@ -42,6 +43,7 @@ export interface ContentMetadata {
     shares: number;
     views: number;
     downloads?: number;
+    saves: number;
   };
   userInteraction: {
     hasLiked: boolean;
@@ -117,38 +119,35 @@ export class ContentInteractionService {
   ): Promise<{ contentId: string; liked: boolean; likeCount: number }> {
     // Normalize contentType: ebook and podcast are just Media collection items
     const normalizedContentType = this.normalizeContentType(contentType);
-    
+
     // Validate content type (devotional likes removed - will be separate system in future)
     const validContentTypes = ["media", "artist", "merch"];
     if (!validContentTypes.includes(normalizedContentType)) {
       throw new Error(`Unsupported content type: ${contentType}`);
     }
 
+    // Get current total from cache
+    let currentTotal = await getPostCounter({ postId: contentId, field: "likes" });
+
+    // If cache is empty, we MUST fetch from DB to avoid "reverting to 1"
+    if (currentTotal === null) {
+      currentTotal = await this.getLikeCount(contentId, normalizedContentType);
+      // Initialize Redis with DB count
+      await setPostCounter({ postId: contentId, field: "likes", count: currentTotal });
+    }
+
     // Check current like state in Redis (fast)
     const currentLiked = await getUserLikeState({ userId, contentId });
-    
+
     // Toggle state (optimistic)
     const newLiked = currentLiked === null ? true : !currentLiked;
-    
-    // Update Redis immediately (non-blocking)
+
+    // Update Redis state immediately
     setUserLikeState({ userId, contentId, liked: newLiked });
-    
-    // Update counter in Redis
+
+    // Perform atomic increment in Redis
     const delta = newLiked ? 1 : -1;
-    const newCount = await incrPostCounter({ postId: contentId, field: "likes", delta });
-    
-    // Get base count from DB if Redis doesn't have it (fallback)
-    let likeCount = newCount;
-    if (likeCount === null) {
-      // Fallback to DB count (slower, but ensures correctness)
-      likeCount = await this.getLikeCount(contentId, normalizedContentType);
-      // Update Redis with DB count
-      if (likeCount !== null) {
-        const redisCount = likeCount + delta;
-        incrPostCounter({ postId: contentId, field: "likes", delta: redisCount - likeCount }).catch(() => {});
-        likeCount = redisCount;
-      }
-    }
+    const likeCount = await incrPostCounter({ postId: contentId, field: "likes", delta });
 
     // Emit real-time update (non-blocking)
     try {
@@ -268,7 +267,7 @@ export class ContentInteractionService {
         const redisCount = await getPostCounter({ postId: contentId, field: "likes" });
         if (redisCount === null || Math.abs(redisCount - likeCount) > 5) {
           // Redis is out of sync, update it (but don't block)
-          incrPostCounter({ postId: contentId, field: "likes", delta: likeCount - (redisCount || 0) }).catch(() => {});
+          incrPostCounter({ postId: contentId, field: "likes", delta: likeCount - (redisCount || 0) }).catch(() => { });
         }
       }
 
@@ -605,7 +604,7 @@ export class ContentInteractionService {
         const io = require("../socket/socketManager").getIO();
         if (io) {
           const roomKey = `content:${normalizedContentType}:${contentId}`;
-          
+
           // Get updated comment count (including replies)
           const topLevelCount = await MediaInteraction.countDocuments({
             media: new Types.ObjectId(contentId),
@@ -622,7 +621,7 @@ export class ContentInteractionService {
             parentCommentId: { $exists: true },
           });
           const commentCount = topLevelCount + replyCount;
-          
+
           const payload = {
             contentId,
             contentType: normalizedContentType, // Use normalized contentType
@@ -635,7 +634,7 @@ export class ContentInteractionService {
           // Also emit the full comment for immediate UI updates
           io.to(roomKey).emit("new-comment", formattedComment);
         }
-      } catch {}
+      } catch { }
 
       return formattedComment;
     } finally {
@@ -653,9 +652,9 @@ export class ContentInteractionService {
     // Calculate reactions count
     const reactionsCount = comment.reactions
       ? Object.values(comment.reactions as Record<string, any[]>).reduce(
-          (sum: number, arr: any[]) => sum + arr.length,
-          0
-        )
+        (sum: number, arr: any[]) => sum + arr.length,
+        0
+      )
       : 0;
 
     const likeReactions = comment.reactions?.["like"] || [];
@@ -671,21 +670,21 @@ export class ContentInteractionService {
       // Provide both 'user' and 'author' for frontend compatibility
       user: comment.user
         ? {
-            _id: comment.user._id || comment.user,
-            id: (comment.user._id || comment.user).toString(),
-            firstName: comment.user.firstName || "",
-            lastName: comment.user.lastName || "",
-            username: comment.user.username || comment.user.firstName?.toLowerCase()?.replace(/\s+/g, "_") || null,
-            avatar: comment.user.avatar || null,
-          }
+          _id: comment.user._id || comment.user,
+          id: (comment.user._id || comment.user).toString(),
+          firstName: comment.user.firstName || "",
+          lastName: comment.user.lastName || "",
+          username: comment.user.username || comment.user.firstName?.toLowerCase()?.replace(/\s+/g, "_") || null,
+          avatar: comment.user.avatar || null,
+        }
         : null,
       author: comment.user
         ? {
-            _id: comment.user._id || comment.user,
-            firstName: comment.user.firstName || "",
-            lastName: comment.user.lastName || "",
-            avatar: comment.user.avatar || null,
-          }
+          _id: comment.user._id || comment.user,
+          firstName: comment.user.firstName || "",
+          lastName: comment.user.lastName || "",
+          avatar: comment.user.avatar || null,
+        }
         : null,
       createdAt: comment.createdAt,
       timestamp: comment.createdAt, // Alias (ISO string)
@@ -695,8 +694,8 @@ export class ContentInteractionService {
       replyCount: comment.replyCount || 0,
       parentCommentId: comment.parentCommentId
         ? (typeof comment.parentCommentId === "string"
-            ? comment.parentCommentId
-            : comment.parentCommentId._id?.toString() || comment.parentCommentId.toString())
+          ? comment.parentCommentId
+          : comment.parentCommentId._id?.toString() || comment.parentCommentId.toString())
         : undefined,
       replies: [], // Will be populated if includeReplies is true
       isLiked: false, // Will be set by formatCommentWithIsLiked if userId provided
@@ -727,7 +726,7 @@ export class ContentInteractionService {
     }
 
     const userIdObj = new Types.ObjectId(userId);
-    
+
     // Check if user liked this comment
     const likeReactions = comment.reactions?.["like"] || [];
     const isLiked = likeReactions.some(
@@ -982,7 +981,7 @@ export class ContentInteractionService {
 
     // Handle reactions - Mongoose Maps can be Map or plain object when loaded
     let reactions: any = comment.reactions;
-    
+
     // Convert to Map if it's a plain object
     if (!(reactions instanceof Map)) {
       reactions = new Map(Object.entries(reactions || {}));
@@ -1021,8 +1020,8 @@ export class ContentInteractionService {
     // Calculate total likes (sum of all reaction types, or just "like" if it exists)
     const likeReactions = reactions.get("like") || [];
     const reactionTotal = reactions.get(reactionType) || [];
-    const totalLikes = reactionType === "like" 
-      ? likeReactions.length 
+    const totalLikes = reactionType === "like"
+      ? likeReactions.length
       : (reactions.get("like") || []).length;
 
     logger.info("Comment reaction toggled", {
@@ -1130,7 +1129,7 @@ export class ContentInteractionService {
           content: sanitized,
         });
       }
-    } catch {}
+    } catch { }
 
     return updated;
   }
@@ -1309,7 +1308,7 @@ export class ContentInteractionService {
         if (contentType) {
           const contentId = comment.media.toString();
           const roomKey = `content:${contentType}:${contentId}`;
-          
+
           // Get updated comment count (including replies)
           const topLevelCount = await MediaInteraction.countDocuments({
             media: new Types.ObjectId(contentId),
@@ -1326,7 +1325,7 @@ export class ContentInteractionService {
             parentCommentId: { $exists: true },
           });
           const commentCount = topLevelCount + replyCount;
-          
+
           // Emit content:comment event with updated count (per spec)
           io.to(roomKey).emit("content:comment", {
             contentId,
@@ -1336,7 +1335,7 @@ export class ContentInteractionService {
             commentCount,
           });
         }
-        
+
         // Also emit legacy events for backwards compatibility
         io.emit("comment-removed", { commentId });
         if (comment.parentCommentId) {
@@ -1346,7 +1345,7 @@ export class ContentInteractionService {
           });
         }
       }
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -1447,12 +1446,12 @@ export class ContentInteractionService {
       contentType,
       author: author
         ? {
-            id: author._id.toString(),
-            name:
-              author.firstName + " " + author.lastName ||
-              author.artistProfile?.artistName,
-            avatar: author.avatar,
-          }
+          id: author._id.toString(),
+          name:
+            author.firstName + " " + author.lastName ||
+            author.artistProfile?.artistName,
+          avatar: author.avatar,
+        }
         : undefined,
       stats,
       userInteraction,
@@ -1470,7 +1469,7 @@ export class ContentInteractionService {
   ): Promise<any> {
     // Normalize contentType: ebook and podcast are just Media collection items
     const normalizedContentType = this.normalizeContentType(contentType);
-    
+
     switch (normalizedContentType) {
       case "media":
         // Handles all Media collection items (videos, music, audio, ebook, podcast, etc.)
@@ -1497,6 +1496,7 @@ export class ContentInteractionService {
           shares: media?.shareCount || 0,
           views: media?.viewCount || 0,
           downloads: media?.downloadCount || 0,
+          saves: media?.bookmarkCount || 0, // Added atomic bookmarkCount
         };
       case "artist":
         const artist = await User.findById(contentId);
@@ -1530,6 +1530,7 @@ export class ContentInteractionService {
           comments: merchCommentCount, // Includes replies per spec
           shares: merch?.shareCount || 0,
           views: merch?.viewCount || 0,
+          saves: merch?.bookmarkCount || 0, // Added atomic bookmarkCount
           sales: 0, // TODO: Implement sales tracking
         };
       default:
@@ -1620,19 +1621,18 @@ export class ContentInteractionService {
 
     // Normalize contentType: ebook and podcast are just Media collection items
     const normalizedContentType = this.normalizeContentType(contentType);
-    
+
     switch (normalizedContentType) {
       case "media": {
-        // Redis fallback: toggleLikeFast updates Redis immediately; DB write is async.
-        // If user just liked and reloads before background sync completes, DB has no record.
+        // Redis fallback: handles reload before background sync
         const redisLiked = await getUserLikeState({ userId, contentId });
         if (redisLiked === true) return true;
-        // Handles all Media collection items
-        const mediaLike = await MediaInteraction.findOne({
-          user: new Types.ObjectId(userId),
-          media: new Types.ObjectId(contentId),
-          interactionType: "like",
-          isRemoved: { $ne: true },
+        if (redisLiked === false) return false;
+
+        // DB source of truth: using dedicated Like model
+        const mediaLike = await Like.findOne({
+          userId: new Types.ObjectId(userId),
+          contentId: new Types.ObjectId(contentId),
         });
         return !!mediaLike;
       }
@@ -1794,12 +1794,12 @@ export class ContentInteractionService {
         default:
           return 0;
       }
-      
+
       // Cache DB result in Redis for future requests (24 hours TTL)
       if (dbCount > 0) {
-        incrPostCounter({ postId: contentId, field: "likes", delta: dbCount }).catch(() => {});
+        incrPostCounter({ postId: contentId, field: "likes", delta: dbCount }).catch(() => { });
       }
-      
+
       return dbCount;
     } catch (error: any) {
       logger.error("Failed to get like count", {
@@ -1816,10 +1816,8 @@ export class ContentInteractionService {
    */
   private async getBookmarkCount(contentId: string): Promise<number> {
     try {
-      const total = await Bookmark.countDocuments({
-        media: new Types.ObjectId(contentId),
-      });
-      return total || 0;
+      const media = await Media.findById(contentId).select("bookmarkCount").lean();
+      return (media as any)?.bookmarkCount || 0;
     } catch (error: any) {
       logger.error("Failed to get bookmark count", {
         contentId,
@@ -1886,19 +1884,17 @@ export class ContentInteractionService {
         // Batch query for likes (efficient - single query)
         // Normalize contentType: ebook and podcast are just Media collection items
         const normalizedContentType = this.normalizeContentType(contentType || "");
-        
+
         if (normalizedContentType === "media") {
-          // Handles all Media collection items
-          const userLikes = await MediaInteraction.find({
-            user: userIdObj,
-            media: { $in: contentIdsObj },
-            interactionType: "like",
-            isRemoved: { $ne: true },
+          // Handles all Media collection items - use the dedicated Like model
+          const userLikes = await Like.find({
+            userId: userIdObj,
+            contentId: { $in: contentIdsObj },
           })
-            .select("media")
+            .select("contentId")
             .lean();
           userLikes.forEach(like => {
-            userLikesMap.set(like.media.toString(), true);
+            userLikesMap.set(like.contentId.toString(), true);
           });
           // Redis fallback: toggleLikeFast updates Redis immediately; DB write is async.
           // For ids not in DB result, check Redis (handles reload before background sync).
@@ -1911,8 +1907,8 @@ export class ContentInteractionService {
               if (redisChecks[i] === true) userLikesMap.set(id, true);
             });
           }
-        // Removed: devotional likes - will be separate system in future
-        // else if (contentType === "devotional") { ... } - removed
+          // Removed: devotional likes - will be separate system in future
+          // else if (contentType === "devotional") { ... } - removed
         } else if (contentType === "artist") {
           const user = await User.findById(userIdObj).select("following").lean() as any;
           if (user?.following && Array.isArray(user.following)) {
@@ -2012,7 +2008,7 @@ export class ContentInteractionService {
     try {
       // Normalize contentType: ebook and podcast are just Media collection items
       const normalizedContentType = this.normalizeContentType(contentType);
-      
+
       switch (normalizedContentType) {
         case "media":
           // Handles all Media collection items
@@ -2058,7 +2054,7 @@ export class ContentInteractionService {
     try {
       // Normalize contentType: ebook and podcast are just Media collection items
       const normalizedContentType = this.normalizeContentType(contentType);
-      
+
       switch (normalizedContentType) {
         case "media":
         case "merch":
@@ -2086,8 +2082,8 @@ export class ContentInteractionService {
   }
 
   /**
-   * Toggle media like
-   */
+ * Toggle media like (Atomic & Globally Consistent)
+ */
   private async toggleMediaLike(
     userId: string,
     contentId: string,
@@ -2096,63 +2092,48 @@ export class ContentInteractionService {
     const userObjId = new Types.ObjectId(userId);
     const contentObjId = new Types.ObjectId(contentId);
 
-    // Defensive dedupe:
-    // If multiple active like rows exist, toggle must remove ALL of them.
-    const activeLikes = await MediaInteraction.find({
-      user: userObjId,
-      media: contentObjId,
-      interactionType: "like",
-      isRemoved: { $ne: true },
-    })
-      .session(session)
-      .select("_id")
-      .lean();
+    // Check if like exists in dedicated collection
+    const existingLike = await Like.findOne({
+      userId: userObjId,
+      contentId: contentObjId,
+    }).session(session);
 
-    const activeCount = activeLikes.length;
-    if (activeCount > 0) {
-      await MediaInteraction.updateMany(
-        { _id: { $in: activeLikes.map((l: any) => l._id) } },
-        { $set: { isRemoved: true, lastInteraction: new Date() } },
-        { session }
+    if (existingLike) {
+      // UNLIKE: Remove record and atomic decrement
+      await Like.findByIdAndDelete(existingLike._id).session(session);
+      await Media.findByIdAndUpdate(
+        contentId,
+        { $inc: { likeCount: -1 } },
+        { session, runValidators: true }
       );
-      await this.applyLikeDeltaToMedia(contentId, -activeCount, session);
       return false;
     }
 
-    // Like - restore a soft-deleted like if possible, otherwise create a new one
-    const softDeletedLike = await MediaInteraction.findOne({
-      user: userObjId,
-      media: contentObjId,
-      interactionType: "like",
-      isRemoved: true,
-    })
-      .session(session)
-      .sort({ lastInteraction: -1, updatedAt: -1, createdAt: -1 });
-
-    if (softDeletedLike) {
-      await MediaInteraction.findByIdAndUpdate(
-        softDeletedLike._id,
-        { isRemoved: false, lastInteraction: new Date() },
-        { session }
-      );
-    } else {
-      await MediaInteraction.create(
+    // LIKE: Create record and atomic increment
+    try {
+      await Like.create(
         [
           {
-            user: userObjId,
-            media: contentObjId,
-            interactionType: "like",
-            lastInteraction: new Date(),
-            count: 1,
-            isRemoved: false,
+            userId: userObjId,
+            contentId: contentObjId,
+            contentType: "media",
           },
         ],
         { session }
       );
+      await Media.findByIdAndUpdate(
+        contentId,
+        { $inc: { likeCount: 1 } },
+        { session, runValidators: true }
+      );
+      return true;
+    } catch (error: any) {
+      // Handle racing duplicate key errors gracefully
+      if (error.code === 11000) {
+        return true; // Already liked by someone else's racing request
+      }
+      throw error;
     }
-
-    await this.applyLikeDeltaToMedia(contentId, 1, session);
-    return true;
   }
 
   // Removed: toggleDevotionalLike - devotional likes will be separate system in future
@@ -2340,10 +2321,10 @@ export class ContentInteractionService {
     if (media) {
       return "media"; // All Media collection items use "media" endpoint
     }
-    
+
     const devotional = await Devotional.findById(mediaId);
     if (devotional) return "devotional";
-    
+
     return null;
   }
 
@@ -2377,29 +2358,26 @@ export class ContentInteractionService {
 
     if (["media", "ebook", "podcast"].includes(contentType)) {
       const filter = {
-        media: new Types.ObjectId(contentId),
-        interactionType: "like" as const,
-        isRemoved: { $ne: true },
+        contentId: new Types.ObjectId(contentId),
       };
 
       const [total, rows] = await Promise.all([
-        MediaInteraction.countDocuments(filter),
-        MediaInteraction.find(filter)
-          .sort({ lastInteraction: -1, createdAt: -1 })
+        Like.countDocuments(filter),
+        Like.find(filter)
+          .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
-          .populate("user", "firstName lastName email avatar avatarUpload")
-          .select("user lastInteraction createdAt")
+          .populate("userId", "firstName lastName email avatar avatarUpload")
           .lean(),
       ]);
 
       const items = (rows || []).map((r: any) => {
-        const u = r.user || {};
+        const u = r.userId || {};
         const username =
           `${u.firstName || ""} ${u.lastName || ""}`.trim() ||
           (u.email ? String(u.email).split("@")[0] : "user");
         const avatarUrl = u.avatarUpload || u.avatar || null;
-        const likedAt = new Date(r.lastInteraction || r.createdAt).toISOString();
+        const likedAt = new Date(r.createdAt).toISOString();
         return {
           userId: u._id?.toString?.() || "",
           username,

@@ -1057,11 +1057,8 @@ export class MediaService {
   }
 
   async recordInteraction(data: MediaInteractionInput) {
-    if (
-      !Types.ObjectId.isValid(data.userIdentifier) ||
-      !Types.ObjectId.isValid(data.mediaIdentifier)
-    ) {
-      throw new Error("Invalid user or media identifier");
+    if (!Types.ObjectId.isValid(data.mediaIdentifier)) {
+      throw new Error("Invalid media identifier");
     }
 
     const media = await Media.findById(data.mediaIdentifier);
@@ -1087,40 +1084,64 @@ export class MediaService {
     const session: ClientSession = await Media.startSession();
     try {
       const interaction = await session.withTransaction(async () => {
-        const existingInteraction = await MediaInteraction.findOne({
-          user: new Types.ObjectId(data.userIdentifier),
-          media: new Types.ObjectId(data.mediaIdentifier),
-          interactionType: data.interactionType,
-        }).session(session);
+        const isUserAuth = Types.ObjectId.isValid(data.userIdentifier);
+        let interactionResult = null;
 
-        if (existingInteraction) {
-          throw new Error(
-            `User has already ${data.interactionType} this media`
-          );
+        if (isUserAuth) {
+          const userIdObj = new Types.ObjectId(data.userIdentifier);
+          const existingInteraction = await MediaInteraction.findOne({
+            user: userIdObj,
+            media: new Types.ObjectId(data.mediaIdentifier),
+            interactionType: data.interactionType,
+          }).session(session);
+
+          if (!existingInteraction) {
+            const created = await MediaInteraction.create(
+              [
+                {
+                  user: userIdObj,
+                  media: new Types.ObjectId(data.mediaIdentifier),
+                  interactionType: data.interactionType,
+                  lastInteraction: new Date(),
+                  count: 1,
+                  interactions: data.duration
+                    ? [
+                      {
+                        timestamp: new Date(),
+                        duration: data.duration,
+                        isComplete: false,
+                      },
+                    ]
+                    : [],
+                },
+              ],
+              { session }
+            );
+            interactionResult = created[0];
+          } else {
+            // Update existing interaction but don't error - allow count increment
+            await MediaInteraction.updateOne(
+              { _id: existingInteraction._id },
+              {
+                $inc: { count: 1 },
+                $set: { lastInteraction: new Date() },
+                $push: {
+                  interactions: data.duration
+                    ? {
+                      timestamp: new Date(),
+                      duration: data.duration,
+                      isComplete: false,
+                    }
+                    : undefined,
+                },
+              },
+              { session }
+            );
+            interactionResult = existingInteraction;
+          }
         }
 
-        const interaction = await MediaInteraction.create(
-          [
-            {
-              user: new Types.ObjectId(data.userIdentifier),
-              media: new Types.ObjectId(data.mediaIdentifier),
-              interactionType: data.interactionType,
-              lastInteraction: new Date(),
-              count: 1,
-              interactions: data.duration
-                ? [
-                  {
-                    timestamp: new Date(),
-                    duration: data.duration,
-                    isComplete: false,
-                  },
-                ]
-                : [],
-            },
-          ],
-          { session }
-        );
-
+        // Atomic global count increment (always happens, even for anonymous or repeat views)
         const updateField: { [key: string]: number } = {};
         if (data.interactionType === "view") updateField.viewCount = 1;
         if (data.interactionType === "listen") updateField.listenCount = 1;
@@ -1133,7 +1154,7 @@ export class MediaService {
           { session }
         );
 
-        return interaction[0];
+        return interactionResult;
       });
 
       return interaction;
