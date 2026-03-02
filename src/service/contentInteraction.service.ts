@@ -259,16 +259,14 @@ export class ContentInteractionService {
         }
       });
 
-      // Read the updated like count after transaction commits
-      const likeCount = await this.getLikeCount(contentId, normalizedContentType);
+      // Read the updated like count DIRECTLY from DB after transaction commits
+      // This ensures we get the accurate count, not a stale Redis value
+      const likeCount = await this.getLikeCountFromDB(contentId, normalizedContentType);
 
-      // Sync Redis counter with DB (background sync)
+      // Sync Redis counter with the fresh DB count (background sync)
+      // Set the Redis counter to match the DB exactly
       if (likeCount !== null) {
-        const redisCount = await getPostCounter({ postId: contentId, field: "likes" });
-        if (redisCount === null || Math.abs(redisCount - likeCount) > 5) {
-          // Redis is out of sync, update it (but don't block)
-          incrPostCounter({ postId: contentId, field: "likes", delta: likeCount - (redisCount || 0) }).catch(() => { });
-        }
+        setPostCounter({ postId: contentId, field: "likes", count: likeCount }).catch(() => { });
       }
 
       // Send notification if content was liked (background, non-blocking)
@@ -1803,6 +1801,41 @@ export class ContentInteractionService {
       return dbCount;
     } catch (error: any) {
       logger.error("Failed to get like count", {
+        contentId,
+        contentType,
+        error: error.message,
+      });
+      return 0;
+    }
+  }
+
+  /**
+   * Get like count directly from DB (no Redis cache)
+   * Used after write operations to ensure accurate count
+   */
+  private async getLikeCountFromDB(
+    contentId: string,
+    contentType: string
+  ): Promise<number> {
+    try {
+      switch (contentType) {
+        case "media":
+          // Handles all Media collection items (videos, music, audio, ebook, podcast, etc.)
+          const media = await Media.findById(contentId).select("likeCount").lean();
+          return (media as any)?.likeCount || 0;
+        // Removed: devotional likes - will be separate system in future
+        // case "devotional": - removed
+        case "artist":
+          const artist = await User.findById(contentId).select("artistProfile.followerCount").lean();
+          return ((artist as any)?.artistProfile?.followerCount) || 0;
+        case "merch":
+          const merch = await Media.findById(contentId).select("favoriteCount").lean();
+          return (merch as any)?.favoriteCount || 0;
+        default:
+          return 0;
+      }
+    } catch (error: any) {
+      logger.error("Failed to get like count from DB", {
         contentId,
         contentType,
         error: error.message,

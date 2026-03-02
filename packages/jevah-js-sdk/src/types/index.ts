@@ -277,6 +277,119 @@ export interface AIMessageRequest {
   message: string;
 }
 
+// Content Interaction Types (Like System)
+
+export type ContentType = "media" | "artist" | "merch" | "ebook" | "podcast";
+
+export interface ToggleLikeResponse {
+  contentId: string;
+  liked: boolean;
+  likeCount: number;
+}
+
+export interface ContentMetadata {
+  contentId: string;
+  likes: number;
+  saves: number;
+  shares: number;
+  views: number;
+  comments: number;
+  userInteractions: {
+    liked: boolean;
+    saved: boolean;
+    shared: boolean;
+    viewed: boolean;
+  };
+}
+
+export interface BatchContentMetadata {
+  [contentId: string]: ContentMetadata;
+}
+
+export interface BatchMetadataRequest {
+  contentIds: string[];
+  contentType: ContentType;
+}
+
+export interface Comment {
+  id: string;
+  content: string;
+  authorId: string;
+  userId: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string | null;
+    avatar: string | null;
+  };
+  author: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+  };
+  createdAt: string;
+  timestamp: string;
+  likes: number;
+  likesCount: number;
+  replyCount: number;
+  isLiked: boolean;
+  replies: Comment[];
+  parentCommentId?: string;
+}
+
+export interface CommentsResponse {
+  comments: Comment[];
+  total: number;
+  totalComments: number;
+  hasMore: boolean;
+  page: number;
+  limit: number;
+}
+
+export interface AddCommentRequest {
+  content: string;
+  parentCommentId?: string;
+}
+
+export interface ShareContentRequest {
+  platform?: string;
+  message?: string;
+}
+
+export interface ShareContentResponse {
+  shared: boolean;
+  shareCount: number;
+  shareUrls?: Record<string, string>;
+}
+
+export interface ContentLiker {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  likedAt: string;
+}
+
+export interface ContentLikersResponse {
+  items: ContentLiker[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export interface RecordViewRequest {
+  durationMs?: number;
+  progressPct?: number;
+  isComplete?: boolean;
+}
+
+export interface RecordViewResponse {
+  viewCount: number;
+  hasViewed: boolean;
+}
+
 // Configuration types
 export interface JevahConfig {
   baseURL?: string;
