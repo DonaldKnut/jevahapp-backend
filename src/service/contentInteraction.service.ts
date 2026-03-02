@@ -11,6 +11,7 @@ import logger from "../utils/logger";
 import { Like } from "../models/like.model";
 import { Bookmark } from "../models/bookmark.model";
 import { getUserLikeState, setUserLikeState, getPostCounter, setPostCounter, incrPostCounter } from "../lib/redisCounters";
+import { redisSafe } from "../lib/redis";
 
 export interface ContentInteractionInput {
   userId: string;
@@ -268,6 +269,9 @@ export class ContentInteractionService {
       if (likeCount !== null) {
         setPostCounter({ postId: contentId, field: "likes", count: likeCount }).catch(() => { });
       }
+
+      // Invalidate feed caches so fresh data is served (background, non-blocking)
+      this.invalidateFeedCaches(contentId, userId).catch(() => { });
 
       // Send notification if content was liked (background, non-blocking)
       if (liked) {
@@ -1857,6 +1861,50 @@ export class ContentInteractionService {
         error: error.message,
       });
       return 0;
+    }
+  }
+
+  /**
+   * Invalidate feed caches when content is liked/unliked
+   * This ensures feed shows updated like counts immediately
+   */
+  private async invalidateFeedCaches(contentId: string, userId: string): Promise<void> {
+    try {
+      // Delete feed cache keys that might contain this content
+      // Pattern: feed:user:{userId}:* and feed:global:*
+      await redisSafe(
+        "feedInvalidate",
+        async (r) => {
+          // Find and delete user's personal feed caches
+          const userFeedPattern = `feed:user:${userId}:*`;
+          const userKeys = await r.keys(userFeedPattern);
+          if (userKeys.length > 0) {
+            await r.del(...userKeys);
+          }
+
+          // Also delete global feed caches (content appears in global feeds)
+          const globalFeedPattern = "feed:global:*";
+          const globalKeys = await r.keys(globalFeedPattern);
+          if (globalKeys.length > 0) {
+            await r.del(...globalKeys);
+          }
+
+          logger.debug("Invalidated feed caches", {
+            contentId,
+            userId,
+            userKeysCount: userKeys.length,
+            globalKeysCount: globalKeys.length,
+          });
+        },
+        undefined
+      );
+    } catch (error: any) {
+      // Log but don't fail the like operation
+      logger.warn("Failed to invalidate feed caches", {
+        contentId,
+        userId,
+        error: error.message,
+      });
     }
   }
 
