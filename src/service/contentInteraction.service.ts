@@ -2180,12 +2180,20 @@ export class ContentInteractionService {
     }).session(session);
 
     if (existingLike) {
-      // UNLIKE: Remove record and atomic decrement
+      // UNLIKE: Remove record and atomic decrement (never below 0)
       await Like.findByIdAndDelete(existingLike._id).session(session);
       await Media.findByIdAndUpdate(
         contentId,
-        { $inc: { likeCount: -1 } },
-        { session, runValidators: true }
+        [
+          {
+            $set: {
+              likeCount: {
+                $max: [0, { $subtract: [{ $ifNull: ["$likeCount", 0] }, 1] }]
+              }
+            }
+          }
+        ],
+        { session }
       );
       return false;
     }

@@ -1,22 +1,81 @@
 # Like Count Fix - Backend Update Notice
 
-**Status:** ✅ FIXED & DEPLOYED  
+**Status:** ✅ CODE FIXED & PUSHED | ⏳ PENDING: Data Migration  
 **Date:** March 2, 2026  
 **Issue:** `POST /api/content/:type/:id/like` returning `likeCount: 0` after successful like
 
 ---
 
-## What Was Fixed
+## Root Cause
 
-### Problem 1: Like Count Response
-The `toggleLike` endpoint was returning stale `likeCount: 0` from Redis cache instead of the fresh database value.
+The backend code was fixed, but **existing Media documents have stale `likeCount: 0`** because:
 
-**Fix:** Now reads directly from database after transaction commits.
+1. The old code wasn't updating `Media.likeCount` when likes were created
+2. Likes were stored in the `Like` collection correctly
+3. But `Media.likeCount` remained at 0 for all existing content
+4. The feed reads from `Media.likeCount`, so it shows 0
 
-### Problem 2: Feed Cache Staleness
-The feed (`GET /api/media/all-content`) was cached for 10 minutes and not invalidated on like/unlike, showing old counts.
+**The fix is deployed, but existing data needs migration.**
 
-**Fix:** Feed caches are now invalidated immediately on like/unlike.
+---
+
+## Current Status
+
+| Component | Status |
+|-----------|--------|
+| Backend code fix | ✅ Deployed |
+| New likes update Media.likeCount | ✅ Working |
+| Feed cache invalidation | ✅ Working |
+| Existing data migration | ⏳ Pending |
+
+---
+
+## Temporary Frontend Workaround (Until Migration)
+
+Until the data migration runs, use **batch-metadata endpoint** to get accurate like counts:
+
+```typescript
+// After loading feed, fetch accurate counts from batch-metadata
+async function getAccurateLikeCounts(contentIds: string[]) {
+  const response = await fetch('/api/content/batch-metadata', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contentIds,
+      contentType: 'media'
+    })
+  });
+  
+  const result = await response.json();
+  
+  // Returns accurate counts from Like collection
+  return result.data; // { [contentId]: { likes: 5, ... } }
+}
+
+// Merge with feed data
+const feed = await fetch('/api/media/all-content').then(r => r.json());
+const accurateCounts = await getAccurateLikeCounts(
+  feed.data.media.map(m => m._id)
+);
+
+const feedWithAccurateCounts = feed.data.media.map(item => ({
+  ...item,
+  likeCount: accurateCounts[item._id]?.likes ?? item.likeCount
+}));
+```
+
+---
+
+## After Migration (Expected Soon)
+
+Once the migration runs, `Media.likeCount` will be synced with actual likes and:
+
+- Feed will show correct counts directly
+- No workaround needed
+- Like/unlike will update counts in real-time
 
 ---
 
