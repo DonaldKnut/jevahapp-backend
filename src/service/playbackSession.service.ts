@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { PlaybackSession } from "../models/playbackSession.model";
 import { Media } from "../models/media.model";
 import { Library } from "../models/library.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction, IInteraction } from "../models/interaction.model";
 import logger from "../utils/logger";
 
 export interface StartPlaybackData {
@@ -315,7 +315,7 @@ export class PlaybackSessionService {
       const viewThreshold = 30; // seconds
       if (session.totalWatchTime >= viewThreshold || endPosition >= viewThreshold) {
         // Record interaction (view or listen)
-        await MediaInteraction.findOneAndUpdate(
+        await Interaction.findOneAndUpdate(
           {
             user: session.userId,
             media: session.mediaId,

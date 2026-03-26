@@ -1,8 +1,8 @@
 import mongoose, { Types, ClientSession } from "mongoose";
-import { MediaInteraction } from "../models/mediaInteraction.model";
 import { Media } from "../models/media.model";
 import { User } from "../models/user.model";
 import { Devotional } from "../models/devotional.model";
+import { Interaction } from "../models/interaction.model";
 // Removed: import { DevotionalLike } from "../models/devotionalLike.model"; - devotional likes will be separate system
 import { NotificationService } from "./notification.service";
 import viralContentService from "./viralContent.service";
@@ -473,7 +473,7 @@ export class ContentInteractionService {
           commentData.parentCommentId = new Types.ObjectId(parentCommentId);
         }
 
-        const comment = await MediaInteraction.create([commentData], {
+        const comment = await Interaction.create([commentData], {
           session,
         });
 
@@ -495,7 +495,7 @@ export class ContentInteractionService {
 
         // If this is a reply, increment parent's replyCount
         if (commentData.parentCommentId) {
-          await MediaInteraction.findByIdAndUpdate(
+          await Interaction.findByIdAndUpdate(
             commentData.parentCommentId,
             { $inc: { replyCount: 1 } },
             { session }
@@ -518,7 +518,7 @@ export class ContentInteractionService {
         if (parentCommentId && Types.ObjectId.isValid(parentCommentId)) {
           try {
             const parentComment =
-              await MediaInteraction.findById(parentCommentId).select("user");
+              await Interaction.findById(parentCommentId).select("user");
             if (parentComment && parentComment.user.toString() !== userId) {
               const replier = await User.findById(userId).select(
                 "firstName lastName email"
@@ -592,7 +592,7 @@ export class ContentInteractionService {
       }
 
       // Populate user info for response
-      const populatedComment = await MediaInteraction.findById(comment._id)
+      const populatedComment = await Interaction.findById(comment._id)
         .populate("user", "firstName lastName avatar")
         .populate("parentCommentId", "content user")
         .lean();
@@ -608,14 +608,14 @@ export class ContentInteractionService {
           const roomKey = `content:${normalizedContentType}:${contentId}`;
 
           // Get updated comment count (including replies)
-          const topLevelCount = await MediaInteraction.countDocuments({
+          const topLevelCount = await Interaction.countDocuments({
             media: new Types.ObjectId(contentId),
             interactionType: "comment",
             isRemoved: { $ne: true },
             isHidden: { $ne: true },
             parentCommentId: { $exists: false },
           });
-          const replyCount = await MediaInteraction.countDocuments({
+          const replyCount = await Interaction.countDocuments({
             media: new Types.ObjectId(contentId),
             interactionType: "comment",
             isRemoved: { $ne: true },
@@ -757,7 +757,7 @@ export class ContentInteractionService {
     commentId: Types.ObjectId,
     limit: number = 50
   ): Promise<any[]> {
-    const replies = await MediaInteraction.find({
+    const replies = await Interaction.find({
       parentCommentId: commentId,
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -792,7 +792,7 @@ export class ContentInteractionService {
 
     const skip = (page - 1) * limit;
 
-    // For now, we'll use MediaInteraction for both media and devotional
+    // For now, we'll use Interaction for both media and devotional
     // TODO: Create a more generic ContentInteraction model in the future
     // Return top-level comments with nested replies array
     if (sortBy === "top") {
@@ -835,11 +835,11 @@ export class ContentInteractionService {
         { $limit: limit },
       ];
 
-      const comments = await MediaInteraction.aggregate(pipeline);
+      const comments = await Interaction.aggregate(pipeline);
 
       // Populate user after aggregation
       const ids = comments.map((c: any) => c._id);
-      const withUsers = await MediaInteraction.find({ _id: { $in: ids } })
+      const withUsers = await Interaction.find({ _id: { $in: ids } })
         .populate("user", "firstName lastName avatar")
         .lean();
       const map: any = new Map(
@@ -861,7 +861,7 @@ export class ContentInteractionService {
       );
 
       // Count total comments INCLUDING replies (per spec: commentCount = topLevelCount + replyCount)
-      const topLevelCount = await MediaInteraction.countDocuments({
+      const topLevelCount = await Interaction.countDocuments({
         media: new Types.ObjectId(contentId),
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -869,7 +869,7 @@ export class ContentInteractionService {
         parentCommentId: { $exists: false },
       });
 
-      const replyCount = await MediaInteraction.countDocuments({
+      const replyCount = await Interaction.countDocuments({
         media: new Types.ObjectId(contentId),
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -899,7 +899,7 @@ export class ContentInteractionService {
 
     const sortStageStr = sortBy === "oldest" ? "createdAt" : "-createdAt";
 
-    const comments = await MediaInteraction.find({
+    const comments = await Interaction.find({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -923,7 +923,7 @@ export class ContentInteractionService {
     );
 
     // Count total comments INCLUDING replies (per spec: commentCount = topLevelCount + replyCount)
-    const topLevelCount = await MediaInteraction.countDocuments({
+    const topLevelCount = await Interaction.countDocuments({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -931,7 +931,7 @@ export class ContentInteractionService {
       parentCommentId: { $exists: false },
     });
 
-    const replyCount = await MediaInteraction.countDocuments({
+    const replyCount = await Interaction.countDocuments({
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -971,7 +971,7 @@ export class ContentInteractionService {
       throw new Error("Invalid comment or user ID");
     }
 
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       _id: new Types.ObjectId(commentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -1051,7 +1051,7 @@ export class ContentInteractionService {
 
     const skip = (page - 1) * limit;
 
-    const replies = await MediaInteraction.find({
+    const replies = await Interaction.find({
       parentCommentId: new Types.ObjectId(commentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -1063,7 +1063,7 @@ export class ContentInteractionService {
       .limit(limit)
       .lean();
 
-    const total = await MediaInteraction.countDocuments({
+    const total = await Interaction.countDocuments({
       parentCommentId: new Types.ObjectId(commentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -1096,7 +1096,7 @@ export class ContentInteractionService {
       throw new Error("Comment content is required");
     }
 
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       _id: new Types.ObjectId(commentId),
       user: new Types.ObjectId(userId),
       interactionType: "comment",
@@ -1110,11 +1110,11 @@ export class ContentInteractionService {
     }
 
     const { text: sanitized } = this.sanitizeCommentContent(newContent);
-    await MediaInteraction.findByIdAndUpdate(commentId, {
+    await Interaction.findByIdAndUpdate(commentId, {
       content: sanitized,
     });
 
-    const updatedDoc = await MediaInteraction.findById(commentId).populate(
+    const updatedDoc = await Interaction.findById(commentId).populate(
       "user",
       "firstName lastName avatar"
     );
@@ -1166,7 +1166,7 @@ export class ContentInteractionService {
     }
 
     // Fetch comment with populated user and media
-    const commentDoc = await MediaInteraction.findById(commentId)
+    const commentDoc = await Interaction.findById(commentId)
       .populate("user", "firstName lastName email username")
       .populate("media", "title contentType uploadedBy");
 
@@ -1196,7 +1196,7 @@ export class ContentInteractionService {
     }
 
     // Increment report count and add user to reportedBy array
-    const update = await MediaInteraction.findByIdAndUpdate(
+    const update = await Interaction.findByIdAndUpdate(
       commentId,
       {
         $inc: { reportCount: 1 },
@@ -1261,7 +1261,7 @@ export class ContentInteractionService {
       throw new Error("Invalid comment or user ID");
     }
 
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       _id: commentId,
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -1282,7 +1282,7 @@ export class ContentInteractionService {
     }
 
     // Soft delete the comment
-    await MediaInteraction.findByIdAndUpdate(commentId, {
+    await Interaction.findByIdAndUpdate(commentId, {
       isRemoved: true,
       content: "[Comment removed]",
     });
@@ -1296,7 +1296,7 @@ export class ContentInteractionService {
 
     // If it was a reply, decrement parent's replyCount
     if (comment.parentCommentId) {
-      await MediaInteraction.findByIdAndUpdate(comment.parentCommentId, {
+      await Interaction.findByIdAndUpdate(comment.parentCommentId, {
         $inc: { replyCount: -1 },
       });
     }
@@ -1312,14 +1312,14 @@ export class ContentInteractionService {
           const roomKey = `content:${contentType}:${contentId}`;
 
           // Get updated comment count (including replies)
-          const topLevelCount = await MediaInteraction.countDocuments({
+          const topLevelCount = await Interaction.countDocuments({
             media: new Types.ObjectId(contentId),
             interactionType: "comment",
             isRemoved: { $ne: true },
             isHidden: { $ne: true },
             parentCommentId: { $exists: false },
           });
-          const replyCount = await MediaInteraction.countDocuments({
+          const replyCount = await Interaction.countDocuments({
             media: new Types.ObjectId(contentId),
             interactionType: "comment",
             isRemoved: { $ne: true },
@@ -1365,7 +1365,7 @@ export class ContentInteractionService {
       throw new Error("Invalid comment or user ID");
     }
 
-    const updated = await MediaInteraction.findByIdAndUpdate(
+    const updated = await Interaction.findByIdAndUpdate(
       commentId,
       {
         isHidden: true,
@@ -1477,14 +1477,14 @@ export class ContentInteractionService {
         // Handles all Media collection items (videos, music, audio, ebook, podcast, etc.)
         const media = await Media.findById(contentId);
         // Calculate commentCount including replies (per spec)
-        const mediaTopLevelCount = await MediaInteraction.countDocuments({
+        const mediaTopLevelCount = await Interaction.countDocuments({
           media: new Types.ObjectId(contentId),
           interactionType: "comment",
           isRemoved: { $ne: true },
           isHidden: { $ne: true },
           parentCommentId: { $exists: false },
         });
-        const mediaReplyCount = await MediaInteraction.countDocuments({
+        const mediaReplyCount = await Interaction.countDocuments({
           media: new Types.ObjectId(contentId),
           interactionType: "comment",
           isRemoved: { $ne: true },
@@ -1512,14 +1512,14 @@ export class ContentInteractionService {
       case "merch":
         const merch = await Media.findById(contentId);
         // Calculate commentCount including replies (per spec)
-        const merchTopLevelCount = await MediaInteraction.countDocuments({
+        const merchTopLevelCount = await Interaction.countDocuments({
           media: new Types.ObjectId(contentId),
           interactionType: "comment",
           isRemoved: { $ne: true },
           isHidden: { $ne: true },
           parentCommentId: { $exists: false },
         });
-        const merchReplyCount = await MediaInteraction.countDocuments({
+        const merchReplyCount = await Interaction.countDocuments({
           media: new Types.ObjectId(contentId),
           interactionType: "comment",
           isRemoved: { $ne: true },
@@ -1647,7 +1647,7 @@ export class ContentInteractionService {
         ) || false;
       case "merch":
         // Merch uses "favorite" interactionType, not "like"
-        const merchFavorite = await MediaInteraction.findOne({
+        const merchFavorite = await Interaction.findOne({
           user: new Types.ObjectId(userId),
           media: new Types.ObjectId(contentId),
           interactionType: "favorite",
@@ -1672,7 +1672,7 @@ export class ContentInteractionService {
       return false;
     }
 
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       user: new Types.ObjectId(userId),
       media: new Types.ObjectId(contentId),
       interactionType: "comment",
@@ -1693,7 +1693,7 @@ export class ContentInteractionService {
       return false;
     }
 
-    const share = await MediaInteraction.findOne({
+    const share = await Interaction.findOne({
       user: new Types.ObjectId(userId),
       media: new Types.ObjectId(contentId),
       interactionType: "share",
@@ -1714,7 +1714,7 @@ export class ContentInteractionService {
       return false;
     }
 
-    const favorite = await MediaInteraction.findOne({
+    const favorite = await Interaction.findOne({
       user: new Types.ObjectId(userId),
       media: new Types.ObjectId(contentId),
       interactionType: "favorite",
@@ -2000,7 +2000,7 @@ export class ContentInteractionService {
             });
           }
         } else if (contentType === "merch") {
-          const userFavorites = await MediaInteraction.find({
+          const userFavorites = await Interaction.find({
             user: userIdObj,
             media: { $in: contentIdsObj },
             interactionType: "favorite",
@@ -2025,7 +2025,7 @@ export class ContentInteractionService {
         });
 
         // Batch query for shares (efficient - single query)
-        const userShares = await MediaInteraction.find({
+        const userShares = await Interaction.find({
           user: userIdObj,
           media: { $in: contentIdsObj },
           interactionType: "share",
@@ -2038,7 +2038,7 @@ export class ContentInteractionService {
         });
 
         // Batch query for views (efficient - single query)
-        const userViews = await MediaInteraction.find({
+        const userViews = await Interaction.find({
           user: userIdObj,
           media: { $in: contentIdsObj },
           interactionType: "view",
@@ -2290,7 +2290,7 @@ export class ContentInteractionService {
     contentId: string,
     session: ClientSession
   ): Promise<boolean> {
-    const existingFavorite = await MediaInteraction.findOne({
+    const existingFavorite = await Interaction.findOne({
       user: new Types.ObjectId(userId),
       media: new Types.ObjectId(contentId),
       interactionType: "favorite",
@@ -2299,7 +2299,7 @@ export class ContentInteractionService {
 
     if (existingFavorite) {
       // Remove favorite
-      await MediaInteraction.findByIdAndUpdate(
+      await Interaction.findByIdAndUpdate(
         existingFavorite._id,
         { isRemoved: true },
         { session }
@@ -2313,7 +2313,7 @@ export class ContentInteractionService {
       return false;
     } else {
       // Check if there's a soft-deleted favorite to restore
-      const softDeletedFavorite = await MediaInteraction.findOne({
+      const softDeletedFavorite = await Interaction.findOne({
         user: new Types.ObjectId(userId),
         media: new Types.ObjectId(contentId),
         interactionType: "favorite",
@@ -2322,7 +2322,7 @@ export class ContentInteractionService {
 
       if (softDeletedFavorite) {
         // Restore soft-deleted favorite
-        await MediaInteraction.findByIdAndUpdate(
+        await Interaction.findByIdAndUpdate(
           softDeletedFavorite._id,
           {
             isRemoved: false,
@@ -2332,7 +2332,7 @@ export class ContentInteractionService {
         );
       } else {
         // Create new favorite
-        await MediaInteraction.create(
+        await Interaction.create(
           [
             {
               user: new Types.ObjectId(userId),

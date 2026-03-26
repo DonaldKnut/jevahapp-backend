@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
 import { Media } from "../models/media.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction, IInteraction } from "../models/interaction.model";
 import { MediaUserAction } from "../models/mediaUserAction.model";
 import logger from "../utils/logger";
 import { NotificationService } from "./notification.service";
@@ -531,7 +531,7 @@ class SocketService {
       }
 
       // Create comment interaction
-      const comment = await MediaInteraction.create({
+      const comment = await Interaction.create({
         user: user.userId,
         media: mediaId,
         interactionType: "comment",
@@ -579,7 +579,7 @@ class SocketService {
       const { commentId, reaction } = data;
 
       // Update comment reaction
-      const comment = await MediaInteraction.findByIdAndUpdate(
+      const comment = await Interaction.findByIdAndUpdate(
         commentId,
         { $inc: { [`reactions.${reaction}`]: 1 } },
         { new: true }

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Forum } from "../models/forum.model";
 import { ForumPost } from "../models/forumPost.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { User } from "../models/user.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
@@ -65,10 +65,10 @@ export const createForum = async (req: Request, res: Response): Promise<void> =>
         } : null,
         userId: req.userId,
       });
-      
-      res.status(400).json({ 
-        success: false, 
-        error: "Validation error: category not found or invalid. Category must have isCategory: true and categoryId: null" 
+
+      res.status(400).json({
+        success: false,
+        error: "Validation error: category not found or invalid. Category must have isCategory: true and categoryId: null"
       });
       return;
     }
@@ -145,14 +145,14 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
       }
       query.isCategory = false;
       query.categoryId = new Types.ObjectId(categoryFilter);
-      
+
       // Verify category exists before querying
       const categoryExists = await Forum.findOne({
         _id: new Types.ObjectId(categoryFilter),
         isCategory: true,
         isActive: true
       });
-      
+
       if (!categoryExists) {
         logger.warn("Category not found for discussions query", {
           categoryId: categoryFilter,
@@ -211,14 +211,14 @@ export const listForums = async (req: Request, res: Response): Promise<void> => 
           isActive: f.isActive,
         })),
       });
-      
+
       // Also log ALL forums in database for this category (for debugging)
       if (categoryFilter && typeof categoryFilter === "string") {
         const allForumsForCategory = await Forum.find({
           isActive: true,
           categoryId: new Types.ObjectId(categoryFilter)
         }).select("_id title isCategory categoryId isActive");
-        
+
         logger.info("All forums in database for category (debug)", {
           categoryId: categoryFilter,
           count: allForumsForCategory.length,
@@ -415,12 +415,12 @@ export const createForumPost = async (req: Request, res: Response): Promise<void
     // Prepare embeddedLinks for saving
     const processedEmbeddedLinks = Array.isArray(embeddedLinks)
       ? embeddedLinks.map((link: any) => ({
-          url: link.url.trim(),
-          title: link.title?.trim() || undefined,
-          description: link.description?.trim() || undefined,
-          thumbnail: link.thumbnail?.trim() || undefined,
-          type: link.type,
-        }))
+        url: link.url.trim(),
+        title: link.title?.trim() || undefined,
+        description: link.description?.trim() || undefined,
+        thumbnail: link.thumbnail?.trim() || undefined,
+        type: link.type,
+      }))
       : undefined;
 
     // Prepare tags for saving
@@ -822,13 +822,13 @@ function serializeForum(doc: any) {
   const obj = doc.toObject ? doc.toObject() : doc;
   const category = obj.categoryId && typeof obj.categoryId === "object" && obj.categoryId._id
     ? {
-        id: String(obj.categoryId._id),
-        title: obj.categoryId.title,
-        description: obj.categoryId.description,
-      }
+      id: String(obj.categoryId._id),
+      title: obj.categoryId.title,
+      description: obj.categoryId.description,
+    }
     : obj.categoryId
-    ? { id: String(obj.categoryId) }
-    : null;
+      ? { id: String(obj.categoryId) }
+      : null;
 
   return {
     id: String(obj._id),
@@ -847,12 +847,12 @@ function serializeForum(doc: any) {
     createdByUser:
       obj.createdBy && typeof obj.createdBy === "object" && obj.createdBy._id
         ? {
-            _id: String(obj.createdBy._id),
-            username: obj.createdBy.username,
-            avatarUrl: obj.createdBy.avatar,
-            firstName: obj.createdBy.firstName,
-            lastName: obj.createdBy.lastName,
-          }
+          _id: String(obj.createdBy._id),
+          username: obj.createdBy.username,
+          avatarUrl: obj.createdBy.avatar,
+          firstName: obj.createdBy.firstName,
+          lastName: obj.createdBy.lastName,
+        }
         : null,
   };
 }
@@ -866,7 +866,7 @@ async function serializeForumPost(doc: any, userId?: string) {
   // Check if user liked this post
   let userLiked = false;
   if (userId && Types.ObjectId.isValid(userId)) {
-    const like = await MediaInteraction.findOne({
+    const like = await Interaction.findOne({
       user: userId,
       media: obj._id,
       interactionType: "like",
@@ -877,12 +877,12 @@ async function serializeForumPost(doc: any, userId?: string) {
   // Format author
   const author = obj.userId && typeof obj.userId === "object" && obj.userId._id
     ? {
-        _id: String(obj.userId._id),
-        username: obj.userId.username,
-        firstName: obj.userId.firstName,
-        lastName: obj.userId.lastName,
-        avatarUrl: obj.userId.avatar,
-      }
+      _id: String(obj.userId._id),
+      username: obj.userId.username,
+      firstName: obj.userId.firstName,
+      lastName: obj.userId.lastName,
+      avatarUrl: obj.userId.avatar,
+    }
     : obj.userId
       ? { _id: String(obj.userId) }
       : null;
@@ -890,10 +890,10 @@ async function serializeForumPost(doc: any, userId?: string) {
   // Format forum
   const forum = obj.forumId && typeof obj.forumId === "object" && obj.forumId._id
     ? {
-        _id: String(obj.forumId._id),
-        title: obj.forumId.title,
-        description: obj.forumId.description,
-      }
+      _id: String(obj.forumId._id),
+      title: obj.forumId.title,
+      description: obj.forumId.description,
+    }
     : null;
 
   return {

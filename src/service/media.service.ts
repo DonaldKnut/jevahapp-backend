@@ -1,9 +1,10 @@
 import { Media, IMedia } from "../models/media.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction, IInteraction } from "../models/interaction.model";
 import { Bookmark } from "../models/bookmark.model";
 import { User } from "../models/user.model";
 import { UserViewedMedia } from "../models/userViewedMedia.model";
 import { MediaUserAction } from "../models/mediaUserAction.model";
+import { Like } from "../models/like.model";
 import { Types, ClientSession } from "mongoose";
 import fileUploadService from "./fileUpload.service";
 import { EmailService } from "../config/email.config";
@@ -1089,14 +1090,14 @@ export class MediaService {
 
         if (isUserAuth) {
           const userIdObj = new Types.ObjectId(data.userIdentifier);
-          const existingInteraction = await MediaInteraction.findOne({
+          const existingInteraction = await Interaction.findOne({
             user: userIdObj,
             media: new Types.ObjectId(data.mediaIdentifier),
             interactionType: data.interactionType,
           }).session(session);
 
           if (!existingInteraction) {
-            const created = await MediaInteraction.create(
+            const created = await Interaction.create(
               [
                 {
                   user: userIdObj,
@@ -1120,7 +1121,7 @@ export class MediaService {
             interactionResult = created[0];
           } else {
             // Update existing interaction but don't error - allow count increment
-            await MediaInteraction.updateOne(
+            await Interaction.updateOne(
               { _id: existingInteraction._id },
               {
                 $inc: { count: 1 },
@@ -1169,7 +1170,7 @@ export class MediaService {
     }
 
     const media = await Media.findById(mediaIdentifier).select(
-      "contentType viewCount listenCount readCount downloadCount favoriteCount shareCount"
+      "contentType viewCount listenCount readCount downloadCount favoriteCount shareCount likeCount"
     );
     if (!media) {
       throw new Error("Media not found");
@@ -1182,6 +1183,7 @@ export class MediaService {
       downloadCount?: number;
       favoriteCount?: number;
       shareCount?: number;
+      likeCount?: number;
     } = {};
 
     if (media.contentType === "videos") result.viewCount = media.viewCount;
@@ -1191,6 +1193,7 @@ export class MediaService {
       result.downloadCount = media.downloadCount;
     }
     result.favoriteCount = media.favoriteCount;
+    result.likeCount = media.likeCount || 0;
     result.shareCount = media.shareCount;
 
     return result;
@@ -1309,12 +1312,23 @@ export class MediaService {
       throw new Error("Invalid user or media identifier");
     }
 
-    const actions = await MediaUserAction.find({
-      user: new Types.ObjectId(userIdentifier),
-      media: new Types.ObjectId(mediaIdentifier),
-    }).select("actionType");
+    const [actions, like] = await Promise.all([
+      MediaUserAction.find({
+        user: new Types.ObjectId(userIdentifier),
+        media: new Types.ObjectId(mediaIdentifier),
+      }).select("actionType"),
+      Like.findOne({
+        userId: new Types.ObjectId(userIdentifier),
+        contentId: new Types.ObjectId(mediaIdentifier),
+      }).select("_id").lean()
+    ]);
 
-    const status = { isFavorited: false, isShared: false };
+    const status = {
+      isFavorited: false,
+      isShared: false,
+      isLiked: !!like
+    };
+
     actions.forEach(action => {
       if (action.actionType === "favorite") status.isFavorited = true;
       if (action.actionType === "share") status.isShared = true;
@@ -1422,6 +1436,7 @@ export class MediaService {
           totalReads: { $sum: "$readCount" },
           totalDownloads: { $sum: "$downloadCount" },
           totalFavorites: { $sum: "$favoriteCount" },
+          totalLikes: { $sum: "$likeCount" },
           totalShares: { $sum: "$shareCount" },
         },
       },
@@ -1433,6 +1448,7 @@ export class MediaService {
       totalReads: result[0]?.totalReads || 0,
       totalDownloads: result[0]?.totalDownloads || 0,
       totalFavorites: result[0]?.totalFavorites || 0,
+      totalLikes: result[0]?.totalLikes || 0,
       totalShares: result[0]?.totalShares || 0,
     };
   }
@@ -1453,7 +1469,7 @@ export class MediaService {
   }
 
   async getInteractionCountSinceDate(since: Date) {
-    return await MediaInteraction.countDocuments({
+    return await Interaction.countDocuments({
       createdAt: { $gte: since },
     });
   }
@@ -1493,10 +1509,13 @@ export class MediaService {
       throw new Error("Invalid user identifier");
     }
 
-    const result = await MediaInteraction.aggregate([
-      { $match: { user: new Types.ObjectId(userIdentifier) } },
-      { $group: { _id: "$interactionType", count: { $sum: "$count" } } },
-      { $project: { interactionType: "$_id", count: 1, _id: 0 } },
+    const [interactionResults, likeCount] = await Promise.all([
+      Interaction.aggregate([
+        { $match: { user: new Types.ObjectId(userIdentifier) } },
+        { $group: { _id: "$interactionType", count: { $sum: "$count" } } },
+        { $project: { interactionType: "$_id", count: 1, _id: 0 } },
+      ]),
+      Like.countDocuments({ userId: new Types.ObjectId(userIdentifier) })
     ]);
 
     const counts: {
@@ -1504,14 +1523,16 @@ export class MediaService {
       totalListens: number;
       totalReads: number;
       totalDownloads: number;
+      totalLikes: number;
     } = {
       totalViews: 0,
       totalListens: 0,
       totalReads: 0,
       totalDownloads: 0,
+      totalLikes: likeCount,
     };
 
-    result.forEach(item => {
+    interactionResults.forEach(item => {
       if (item.interactionType === "view") counts.totalViews = item.count;
       if (item.interactionType === "listen") counts.totalListens = item.count;
       if (item.interactionType === "read") counts.totalReads = item.count;
@@ -1563,7 +1584,7 @@ export class MediaService {
       throw new Error("Invalid user identifier");
     }
 
-    return await MediaInteraction.countDocuments({
+    return await Interaction.countDocuments({
       user: new Types.ObjectId(userIdentifier),
       createdAt: { $gte: since },
     });
@@ -1605,7 +1626,7 @@ export class MediaService {
             { session }
           );
 
-          await MediaInteraction.findOneAndUpdate(
+          await Interaction.findOneAndUpdate(
             {
               user: new Types.ObjectId(userIdentifier),
               media: new Types.ObjectId(mediaIdentifier),

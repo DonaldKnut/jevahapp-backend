@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { ForumPost } from "../models/forumPost.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 import { redisRateLimit } from "../lib/redisRateLimit";
@@ -17,7 +17,7 @@ async function getCommentDepth(commentId: string): Promise<number> {
   let iterations = 0;
 
   while (currentId && iterations < maxIterations) {
-    const comment: any = await MediaInteraction.findById(currentId).lean();
+    const comment: any = await Interaction.findById(currentId).lean();
     if (!comment || !comment.parentCommentId) {
       break;
     }
@@ -64,7 +64,7 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
     }
 
     // Check if user already liked this post
-    const existingLike = await MediaInteraction.findOne({
+    const existingLike = await Interaction.findOne({
       user: userId,
       media: new Types.ObjectId(postId),
       interactionType: "like",
@@ -75,15 +75,15 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
 
     if (existingLike) {
       // Unlike - remove the interaction
-      await MediaInteraction.findByIdAndDelete(existingLike._id);
+      await Interaction.findByIdAndDelete(existingLike._id);
       liked = false;
       post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
       await post.save();
       likeCount = post.likesCount || 0;
-      incrPostCounter({ postId, field: "likes", delta: -1 }).catch(() => {});
+      incrPostCounter({ postId, field: "likes", delta: -1 }).catch(() => { });
     } else {
       // Like - create new interaction
-      await MediaInteraction.create({
+      await Interaction.create({
         user: userId,
         media: new Types.ObjectId(postId),
         interactionType: "like",
@@ -94,7 +94,7 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
       post.likesCount = (post.likesCount || 0) + 1;
       await post.save();
       likeCount = post.likesCount || 0;
-      incrPostCounter({ postId, field: "likes", delta: 1 }).catch(() => {});
+      incrPostCounter({ postId, field: "likes", delta: 1 }).catch(() => { });
     }
 
     logger.info("Forum post like toggled", { postId, userId, liked, likeCount });
@@ -136,7 +136,7 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
 
     // Get top-level comments (no parentCommentId)
     // Sort by createdAt ascending (oldest first) as per spec
-    const comments = await MediaInteraction.find({
+    const comments = await Interaction.find({
       media: new Types.ObjectId(postId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -151,7 +151,7 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
       .limit(limit)
       .lean();
 
-    const total = await MediaInteraction.countDocuments({
+    const total = await Interaction.countDocuments({
       media: new Types.ObjectId(postId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -165,7 +165,7 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
     let replies: any[] = [];
     if (includeReplies) {
       const commentIds = comments.map((c: any) => c._id);
-      replies = await MediaInteraction.find({
+      replies = await Interaction.find({
         parentCommentId: { $in: commentIds },
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -190,18 +190,18 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
     const formattedComments = await Promise.all(
       comments.map(async (comment: any) => {
         // Get likes count for this comment
-        const likesCount = await MediaInteraction.countDocuments({
+        const likesCount = await Interaction.countDocuments({
           media: comment._id,
           interactionType: "like",
         });
 
         // Check if current user liked this comment
         const userLiked = userId && Types.ObjectId.isValid(userId)
-          ? !!(await MediaInteraction.findOne({
-              user: userId,
-              media: comment._id,
-              interactionType: "like",
-            }))
+          ? !!(await Interaction.findOne({
+            user: userId,
+            media: comment._id,
+            interactionType: "like",
+          }))
           : false;
 
         const commentData: any = {
@@ -217,12 +217,12 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
           userLiked,
           author: comment.user
             ? {
-                _id: String(comment.user._id),
-                username: comment.user.username,
-                firstName: comment.user.firstName || "", // ✅ Include firstName
-                lastName: comment.user.lastName || "", // ✅ Include lastName
-                avatarUrl: comment.user.avatar,
-              }
+              _id: String(comment.user._id),
+              username: comment.user.username,
+              firstName: comment.user.firstName || "", // ✅ Include firstName
+              lastName: comment.user.lastName || "", // ✅ Include lastName
+              avatarUrl: comment.user.avatar,
+            }
             : null,
         };
 
@@ -232,18 +232,18 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
           commentData.replies = await Promise.all(
             replyList.map(async (reply: any) => {
               // Get likes count for reply
-              const replyLikesCount = await MediaInteraction.countDocuments({
+              const replyLikesCount = await Interaction.countDocuments({
                 media: reply._id,
                 interactionType: "like",
               });
 
               // Check if current user liked this reply
               const replyUserLiked = userId && Types.ObjectId.isValid(userId)
-                ? !!(await MediaInteraction.findOne({
-                    user: userId,
-                    media: reply._id,
-                    interactionType: "like",
-                  }))
+                ? !!(await Interaction.findOne({
+                  user: userId,
+                  media: reply._id,
+                  interactionType: "like",
+                }))
                 : false;
 
               return {
@@ -259,12 +259,12 @@ export const getForumPostComments = async (req: Request, res: Response): Promise
                 userLiked: replyUserLiked, // ✅ Calculate actual userLiked
                 author: reply.user
                   ? {
-                      _id: String(reply.user._id),
-                      username: reply.user.username,
-                      firstName: reply.user.firstName || "", // ✅ Include firstName
-                      lastName: reply.user.lastName || "", // ✅ Include lastName
-                      avatarUrl: reply.user.avatar,
-                    }
+                    _id: String(reply.user._id),
+                    username: reply.user.username,
+                    firstName: reply.user.firstName || "", // ✅ Include firstName
+                    lastName: reply.user.lastName || "", // ✅ Include lastName
+                    avatarUrl: reply.user.avatar,
+                  }
                   : null,
                 replies: [], // ✅ Replies don't have nested replies (as per spec)
               };
@@ -348,7 +348,7 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
         res.status(400).json({ success: false, error: "Invalid parent comment ID" });
         return;
       }
-      const parentComment = await MediaInteraction.findOne({
+      const parentComment = await Interaction.findOne({
         _id: parentCommentId,
         media: new Types.ObjectId(postId),
         interactionType: "comment",
@@ -371,7 +371,7 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
     }
 
     // Create comment
-    const comment = await MediaInteraction.create({
+    const comment = await Interaction.create({
       user: userId,
       media: new Types.ObjectId(postId),
       interactionType: "comment",
@@ -385,7 +385,7 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
     // Update post commentsCount
     post.commentsCount = (post.commentsCount || 0) + 1;
     await post.save();
-    incrPostCounter({ postId, field: "comments", delta: 1 }).catch(() => {});
+    incrPostCounter({ postId, field: "comments", delta: 1 }).catch(() => { });
 
     // Populate user info
     await comment.populate("user", "firstName lastName username avatar");
@@ -406,12 +406,12 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
       userLiked: false,
       author: comment.user && typeof comment.user === "object" && comment.user._id
         ? {
-            _id: String(comment.user._id),
-            username: comment.user.username,
-            firstName: comment.user.firstName || "", // ✅ Include firstName
-            lastName: comment.user.lastName || "", // ✅ Include lastName
-            avatarUrl: comment.user.avatar,
-          }
+          _id: String(comment.user._id),
+          username: comment.user.username,
+          firstName: comment.user.firstName || "", // ✅ Include firstName
+          lastName: comment.user.lastName || "", // ✅ Include lastName
+          avatarUrl: comment.user.avatar,
+        }
         : null,
       replies: [], // ✅ Empty replies array as per spec
     };
@@ -440,7 +440,7 @@ export const deleteForumComment = async (req: Request, res: Response): Promise<v
     }
 
     // Find the comment
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       _id: new Types.ObjectId(commentId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -497,7 +497,7 @@ export const likeForumComment = async (req: Request, res: Response): Promise<voi
     }
 
     // Check if comment exists
-    const comment = await MediaInteraction.findOne({
+    const comment = await Interaction.findOne({
       _id: commentId,
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -509,7 +509,7 @@ export const likeForumComment = async (req: Request, res: Response): Promise<voi
     }
 
     // Check if user already liked this comment
-    const existingLike = await MediaInteraction.findOne({
+    const existingLike = await Interaction.findOne({
       user: userId,
       media: new Types.ObjectId(commentId),
       interactionType: "like",
@@ -520,11 +520,11 @@ export const likeForumComment = async (req: Request, res: Response): Promise<voi
 
     if (existingLike) {
       // Unlike - remove the interaction
-      await MediaInteraction.findByIdAndDelete(existingLike._id);
+      await Interaction.findByIdAndDelete(existingLike._id);
       liked = false;
     } else {
       // Like - create new interaction
-      await MediaInteraction.create({
+      await Interaction.create({
         user: userId,
         media: new Types.ObjectId(commentId),
         interactionType: "like",
@@ -535,7 +535,7 @@ export const likeForumComment = async (req: Request, res: Response): Promise<voi
     }
 
     // Get current likes count
-    likesCount = await MediaInteraction.countDocuments({
+    likesCount = await Interaction.countDocuments({
       media: new Types.ObjectId(commentId),
       interactionType: "like",
     });

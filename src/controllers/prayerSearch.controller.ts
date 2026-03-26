@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { PrayerPost } from "../models/prayerPost.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 
@@ -97,7 +97,7 @@ export const searchPrayers = async (req: Request, res: Response): Promise<void> 
         // Check if user liked this prayer
         let userLiked = false;
         if (userId && Types.ObjectId.isValid(userId)) {
-          const like = await MediaInteraction.findOne({
+          const like = await Interaction.findOne({
             user: userId,
             media: prayer._id,
             interactionType: "like",
@@ -118,12 +118,12 @@ export const searchPrayers = async (req: Request, res: Response): Promise<void> 
           userLiked,
           author: prayer.authorId && typeof prayer.authorId === "object" && prayer.authorId._id
             ? {
-                _id: String(prayer.authorId._id),
-                username: prayer.authorId.username,
-                firstName: prayer.authorId.firstName,
-                lastName: prayer.authorId.lastName,
-                avatarUrl: prayer.authorId.avatar,
-              }
+              _id: String(prayer.authorId._id),
+              username: prayer.authorId.username,
+              firstName: prayer.authorId.firstName,
+              lastName: prayer.authorId.lastName,
+              avatarUrl: prayer.authorId.avatar,
+            }
             : null,
           relevanceScore: Math.round(prayer.relevanceScore * 100) / 100, // Round to 2 decimals
         };

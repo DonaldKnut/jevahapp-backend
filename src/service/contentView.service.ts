@@ -1,7 +1,7 @@
 import { ClientSession, Types } from "mongoose";
 import { Media } from "../models/media.model";
 import { Devotional } from "../models/devotional.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import logger from "../utils/logger";
 import { ViewEvent } from "../models/viewEvent.model";
 

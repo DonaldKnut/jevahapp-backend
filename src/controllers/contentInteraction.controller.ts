@@ -3,7 +3,7 @@ import { Types } from "mongoose";
 import contentInteractionService from "../service/contentInteraction.service";
 import logger from "../utils/logger";
 import { Bookmark } from "../models/bookmark.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { enqueueAnalyticsEvent } from "../queues/enqueue";
 import { User } from "../models/user.model";
 import resendEmailService from "../service/resendEmail.service";

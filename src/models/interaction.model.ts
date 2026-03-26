@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export interface IMediaInteraction extends Document {
+export interface IInteraction extends Document {
   user: mongoose.Types.ObjectId;
   media: mongoose.Types.ObjectId;
   interactionType:
@@ -8,9 +8,9 @@ export interface IMediaInteraction extends Document {
     | "listen"
     | "read"
     | "download"
-    | "like"
     | "comment"
-    | "share";
+    | "share"
+    | "favorite";
   lastInteraction: Date;
   count: number;
   content?: string; // For comments
@@ -36,7 +36,7 @@ export interface IMediaInteraction extends Document {
   updatedAt: Date;
 }
 
-const mediaInteractionSchema = new Schema<IMediaInteraction>(
+const interactionSchema = new Schema<IInteraction>(
   {
     user: {
       type: Schema.Types.ObjectId,
@@ -50,7 +50,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
     },
     interactionType: {
       type: String,
-      enum: ["view", "listen", "read", "download", "like", "comment", "share"],
+      enum: ["view", "listen", "read", "download", "comment", "share", "favorite"],
       required: true,
     },
     lastInteraction: {
@@ -70,7 +70,7 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
     },
     parentCommentId: {
       type: Schema.Types.ObjectId,
-      ref: "MediaInteraction",
+      ref: "Interaction",
       required: function () {
         return this.interactionType === "comment" && this.parentCommentId;
       },
@@ -101,35 +101,69 @@ const mediaInteractionSchema = new Schema<IMediaInteraction>(
       default: 0,
       min: 0,
     },
-    reportedBy: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    reportedBy: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     isRemoved: {
       type: Boolean,
       default: false,
     },
     interactions: [
       {
-        timestamp: { type: Date, default: Date.now },
-        duration: { type: Number },
-        isComplete: { type: Boolean },
-        progressPct: { type: Number, min: 0, max: 100 },
-        fileSize: { type: Number },
+        timestamp: {
+          type: Date,
+          required: true,
+        },
+        duration: {
+          type: Number,
+        },
+        isComplete: {
+          type: Boolean,
+          default: false,
+        },
+        progressPct: {
+          type: Number,
+          min: 0,
+          max: 100,
+        },
+        fileSize: {
+          type: Number,
+        },
       },
     ],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Indexes for better performance
-// NOTE: This index is NOT unique - allows multiple comments per user per media
-// For views, application-level deduplication ensures one view per user per content
-mediaInteractionSchema.index({ user: 1, media: 1, interactionType: 1 });
-mediaInteractionSchema.index({ media: 1, interactionType: 1 });
-mediaInteractionSchema.index({ parentCommentId: 1 });
-mediaInteractionSchema.index({ createdAt: -1 });
-mediaInteractionSchema.index({ media: 1, parentCommentId: 1, createdAt: -1 });
-// Index for comment queries with isRemoved filter
-mediaInteractionSchema.index({ media: 1, interactionType: 1, isRemoved: 1, parentCommentId: 1, createdAt: -1 });
+// Keep one row per user/media/type for non-comment interactions, but allow
+// multiple comments/replies per user on the same media.
+interactionSchema.index(
+  { user: 1, media: 1, interactionType: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      interactionType: { $ne: "comment" },
+    },
+  }
+);
 
-export const MediaInteraction =
-  mongoose.models.MediaInteraction ||
-  mongoose.model<IMediaInteraction>("MediaInteraction", mediaInteractionSchema);
+// Index for interaction type queries
+interactionSchema.index({ interactionType: 1, isRemoved: 1 });
+
+// Index for parent comments
+interactionSchema.index({ parentCommentId: 1 });
+
+// Index for media-based queries
+interactionSchema.index({ media: 1 });
+
+// Index for user-based queries
+interactionSchema.index({ user: 1 });
+
+export const Interaction =
+  mongoose.models.Interaction ||
+  mongoose.model<IInteraction>("Interaction", interactionSchema);

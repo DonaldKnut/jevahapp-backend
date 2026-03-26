@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { PrayerPost } from "../models/prayerPost.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { User } from "../models/user.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
@@ -42,7 +42,7 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Check if user already liked this prayer
-    const existingLike = await MediaInteraction.findOne({
+    const existingLike = await Interaction.findOne({
       user: userId,
       media: new Types.ObjectId(prayerId),
       interactionType: "like",
@@ -53,17 +53,17 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
 
     if (existingLike) {
       // Unlike - remove the interaction
-      await MediaInteraction.findByIdAndDelete(existingLike._id);
+      await Interaction.findByIdAndDelete(existingLike._id);
       liked = false;
       // Update prayer likesCount
       prayer.likesCount = Math.max(0, (prayer.likesCount || 0) - 1);
       await prayer.save();
       likeCount = prayer.likesCount || 0;
       // Fast counter (best-effort, doesn't affect correctness)
-      incrPostCounter({ postId: prayerId, field: "likes", delta: -1 }).catch(() => {});
+      incrPostCounter({ postId: prayerId, field: "likes", delta: -1 }).catch(() => { });
     } else {
       // Like - create new interaction
-      await MediaInteraction.create({
+      await Interaction.create({
         user: userId,
         media: new Types.ObjectId(prayerId),
         interactionType: "like",
@@ -75,7 +75,7 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
       prayer.likesCount = (prayer.likesCount || 0) + 1;
       await prayer.save();
       likeCount = prayer.likesCount || 0;
-      incrPostCounter({ postId: prayerId, field: "likes", delta: 1 }).catch(() => {});
+      incrPostCounter({ postId: prayerId, field: "likes", delta: 1 }).catch(() => { });
     }
 
     logger.info("Prayer like toggled", { prayerId, userId, liked, likeCount });
@@ -115,7 +115,7 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
     }
 
     // Get top-level comments (no parentCommentId)
-    const comments = await MediaInteraction.find({
+    const comments = await Interaction.find({
       media: new Types.ObjectId(prayerId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -131,7 +131,7 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
       .lean();
 
     // Get total count
-    const total = await MediaInteraction.countDocuments({
+    const total = await Interaction.countDocuments({
       media: new Types.ObjectId(prayerId),
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -143,7 +143,7 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
 
     // Get replies for each comment
     const commentIds = comments.map((c: any) => c._id);
-    const replies = await MediaInteraction.find({
+    const replies = await Interaction.find({
       parentCommentId: { $in: commentIds },
       interactionType: "comment",
       isRemoved: { $ne: true },
@@ -167,18 +167,18 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
     const formattedComments = await Promise.all(
       comments.map(async (comment: any) => {
         // Get likes count for this comment
-        const likesCount = await MediaInteraction.countDocuments({
+        const likesCount = await Interaction.countDocuments({
           media: comment._id,
           interactionType: "like",
         });
 
         // Check if current user liked this comment
         const userLiked = userId
-          ? !!(await MediaInteraction.findOne({
-              user: userId,
-              media: comment._id,
-              interactionType: "like",
-            }))
+          ? !!(await Interaction.findOne({
+            user: userId,
+            media: comment._id,
+            interactionType: "like",
+          }))
           : false;
 
         return {
@@ -190,12 +190,12 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
           userLiked,
           author: comment.user
             ? {
-                _id: comment.user._id,
-                username: comment.user.username,
-                firstName: comment.user.firstName,
-                lastName: comment.user.lastName,
-                avatarUrl: comment.user.avatar,
-              }
+              _id: comment.user._id,
+              username: comment.user.username,
+              firstName: comment.user.firstName,
+              lastName: comment.user.lastName,
+              avatarUrl: comment.user.avatar,
+            }
             : null,
           replies: (repliesMap.get(String(comment._id)) || []).map((reply: any) => ({
             _id: reply._id,
@@ -207,10 +207,10 @@ export const getPrayerComments = async (req: Request, res: Response): Promise<vo
             userLiked: false,
             author: reply.user
               ? {
-                  _id: reply.user._id,
-                  username: reply.user.username,
-                  avatarUrl: reply.user.avatar,
-                }
+                _id: reply.user._id,
+                username: reply.user.username,
+                avatarUrl: reply.user.avatar,
+              }
               : null,
           })),
         };
@@ -287,7 +287,7 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
         res.status(400).json({ success: false, error: "Invalid parent comment ID" });
         return;
       }
-      const parentComment = await MediaInteraction.findOne({
+      const parentComment = await Interaction.findOne({
         _id: parentCommentId,
         media: new Types.ObjectId(prayerId),
         interactionType: "comment",
@@ -300,7 +300,7 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
     }
 
     // Create comment
-    const comment = await MediaInteraction.create({
+    const comment = await Interaction.create({
       user: userId,
       media: new Types.ObjectId(prayerId),
       interactionType: "comment",
@@ -314,7 +314,7 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
     // Update prayer commentsCount
     prayer.commentsCount = (prayer.commentsCount || 0) + 1;
     await prayer.save();
-    incrPostCounter({ postId: prayerId, field: "comments", delta: 1 }).catch(() => {});
+    incrPostCounter({ postId: prayerId, field: "comments", delta: 1 }).catch(() => { });
 
     // Populate user info
     await comment.populate("user", "firstName lastName username avatar");
@@ -332,12 +332,12 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
         userLiked: false,
         author: comment.user
           ? {
-              _id: comment.user._id,
-              username: comment.user.username,
-              firstName: comment.user.firstName,
-              lastName: comment.user.lastName,
-              avatarUrl: comment.user.avatar,
-            }
+            _id: comment.user._id,
+            username: comment.user.username,
+            firstName: comment.user.firstName,
+            lastName: comment.user.lastName,
+            avatarUrl: comment.user.avatar,
+          }
           : null,
         replies: [],
       },

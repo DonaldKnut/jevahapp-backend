@@ -1,7 +1,7 @@
 import { Types } from "mongoose";
 import { Media, IMedia } from "../models/media.model";
 import { CopyrightFreeSong, ICopyrightFreeSong } from "../models/copyrightFreeSong.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction, IInteraction } from "../models/interaction.model";
 import { CopyrightFreeSongInteractionService } from "./copyrightFreeSongInteraction.service";
 import { UnifiedBookmarkService } from "./unifiedBookmark.service";
 import logger from "../utils/logger";
@@ -343,9 +343,9 @@ export class UnifiedSearchService {
             // Check like status for copyright-free songs
             isLiked = await this.interactionService.isLiked(userId, item.id);
           } else {
-            // For media, check if liked using MediaInteraction
+            // For media, check if liked using Interaction
             if (Types.ObjectId.isValid(item.id) && Types.ObjectId.isValid(userId)) {
-              const mediaLike = await MediaInteraction.findOne({
+              const mediaLike = await Interaction.findOne({
                 user: new Types.ObjectId(userId),
                 media: new Types.ObjectId(item.id),
                 interactionType: "like",

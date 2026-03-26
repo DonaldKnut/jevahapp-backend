@@ -35,7 +35,7 @@ export class ContentModerationService {
       // Use gemini-1.5-pro for better multimodal analysis and accuracy
       // Pro model has better detection rates for inappropriate content
       const useProModel = process.env.USE_GEMINI_PRO_MODEL === "true" || process.env.NODE_ENV === "production";
-      this.model = this.genAI.getGenerativeModel({ 
+      this.model = this.genAI.getGenerativeModel({
         model: useProModel ? "gemini-1.5-pro" : "gemini-1.5-flash", // Use Pro for production for better accuracy
       });
     }
@@ -111,7 +111,7 @@ export class ContentModerationService {
     const transcriptText = hasTranscript && input.transcript
       ? `- Transcript: "${input.transcript.substring(0, 1000)}${input.transcript.length > 1000 ? "..." : ""}"`
       : "";
-    
+
     const hasThumbnail = !!input.thumbnail;
     const framesText = hasFrames && input.videoFrames
       ? `- Video Frames: ${input.videoFrames.length} frames extracted from the uploaded video (beginning, middle, end) for visual analysis`
@@ -142,6 +142,7 @@ Analyze this content and determine if it is:
    - Gospel songs without preaching are still valid gospel content
    - Worship songs, praise songs, and hymns in any language are acceptable
    - Contemporary gospel, traditional gospel, and gospel in local languages are all acceptable
+   - **MARITAL & RELATIONSHIP TEACHINGS**: Biblical teachings on marriage, sex within marriage, and godly relationships are VALID gospel content. Pastor-led discussions or sermons on these topics should be APPROVED if they are presented from a biblical perspective and are not explicit or inappropriate in a secular sense.
    - **SERMONS**: A sermon may scarcely or never mention "Jesus" by name but can still be clearly Christian. Look for:
      * Scriptural and theological language: salvation, redemption, repentance, grace, covenant, righteousness, resurrection, Holy Spirit, kingdom of God, Word of God, cross, crucified, risen
      * Biblical concepts and terms: testimony, preaching, pastor, congregation, altar, born again, sanctification, disciple, apostle, parable
@@ -149,12 +150,13 @@ Analyze this content and determine if it is:
      * Phrases like "the Lord", "Scripture says", "the Bible", "God's word", "eternal life", "kingdom of heaven"
      If the content is clearly teaching or preaching from a Christian/biblical perspective, APPROVE it even without the word "Jesus"
 2. **Inappropriate content** - Content that contains:
-   - Explicit sexual content, nudity, or sexual themes
+   - Explicit sexual content, nudity, or *unbiblical/pornographic* sexual themes
    - Violence, hate speech, or harmful content
    - Profanity or offensive language
    - Anti-Christian or blasphemous content
    - Illegal activities
    - Non-gospel content (secular music, non-Christian teachings, etc.)
+   - **Note**: Do NOT reject biblical teachings on marriage or sexuality that are presented respectfully and for spiritual growth.
 
 **CRITICAL - Thumbnail Moderation:**
 - The thumbnail image is the FIRST thing users see - it MUST be appropriate
@@ -232,7 +234,7 @@ Now analyze the content and provide your response in the exact JSON format above
 
       // Fallback: try to infer from text response
       const lowerResponse = aiResponse.toLowerCase();
-      const isApproved = 
+      const isApproved =
         lowerResponse.includes("approved") ||
         lowerResponse.includes("gospel") ||
         lowerResponse.includes("christian") ||

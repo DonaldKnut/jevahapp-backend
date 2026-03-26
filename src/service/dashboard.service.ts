@@ -8,9 +8,9 @@ import {
 } from "../models/user.model";
 import { Media, IMedia } from "../models/media.model";
 import {
-  MediaInteraction,
-  IMediaInteraction,
-} from "../models/mediaInteraction.model";
+  Interaction,
+  IInteraction,
+} from "../models/interaction.model";
 import {
   GameSession,
   GameAchievement,
@@ -115,10 +115,10 @@ export class DashboardService {
         isActive: user.subscriptionStatus === "active",
         daysRemaining: user.subscriptionEndDate
           ? Math.ceil(
-              (new Date(user.subscriptionEndDate).getTime() -
-                currentDateTime.getTime()) /
-                (1000 * 60 * 60 * 24)
-            )
+            (new Date(user.subscriptionEndDate).getTime() -
+              currentDateTime.getTime()) /
+            (1000 * 60 * 60 * 24)
+          )
           : null,
       },
       verification: {
@@ -152,7 +152,7 @@ export class DashboardService {
 
     const [uploadedMedia, interactions, user] = await Promise.all([
       Media.find({ uploadedBy: new Types.ObjectId(userId) }),
-      MediaInteraction.find({ user: new Types.ObjectId(userId) }),
+      Interaction.find({ user: new Types.ObjectId(userId) }),
       User.findById(userId).select(
         "library offlineDownloads"
       ) as Promise<IUserDocument | null>,
@@ -199,24 +199,24 @@ export class DashboardService {
         total: interactions.length,
         byInteractionType: {
           views: interactions.filter(
-            (interaction: IMediaInteraction) =>
+            (interaction: IInteraction) =>
               interaction.interactionType === "view"
           ).length,
           listens: interactions.filter(
-            (interaction: IMediaInteraction) =>
+            (interaction: IInteraction) =>
               interaction.interactionType === "listen"
           ).length,
           reads: interactions.filter(
-            (interaction: IMediaInteraction) =>
+            (interaction: IInteraction) =>
               interaction.interactionType === "read"
           ).length,
           downloads: interactions.filter(
-            (interaction: IMediaInteraction) =>
+            (interaction: IInteraction) =>
               interaction.interactionType === "download"
           ).length,
         },
         recent: interactions.filter(
-          (interaction: IMediaInteraction) =>
+          (interaction: IInteraction) =>
             new Date(interaction.lastInteraction) >= thirtyDaysAgo
         ).length,
       },
@@ -305,11 +305,11 @@ export class DashboardService {
         ).length,
         averagePerContent: uploadedMedia.length
           ? Math.round(
-              uploadedMedia.reduce(
-                (sum: number, media: IMedia) => sum + (media.viewCount || 0),
-                0
-              ) / uploadedMedia.length
-            )
+            uploadedMedia.reduce(
+              (sum: number, media: IMedia) => sum + (media.viewCount || 0),
+              0
+            ) / uploadedMedia.length
+          )
           : 0,
       },
       likes: {
@@ -322,12 +322,12 @@ export class DashboardService {
         ).length,
         averagePerContent: uploadedMedia.length
           ? Math.round(
-              uploadedMedia.reduce(
-                (sum: number, media: IMedia) =>
-                  sum + (media.favoriteCount || 0),
-                0
-              ) / uploadedMedia.length
-            )
+            uploadedMedia.reduce(
+              (sum: number, media: IMedia) =>
+                sum + (media.favoriteCount || 0),
+              0
+            ) / uploadedMedia.length
+          )
           : 0,
       },
       shares: {
@@ -340,11 +340,11 @@ export class DashboardService {
         ).length,
         averagePerContent: uploadedMedia.length
           ? Math.round(
-              uploadedMedia.reduce(
-                (sum: number, media: IMedia) => sum + (media.shareCount || 0),
-                0
-              ) / uploadedMedia.length
-            )
+            uploadedMedia.reduce(
+              (sum: number, media: IMedia) => sum + (media.shareCount || 0),
+              0
+            ) / uploadedMedia.length
+          )
           : 0,
       },
       followers: {
@@ -387,17 +387,17 @@ export class DashboardService {
         ),
         averageScore: gameSessions.length
           ? Math.round(
-              gameSessions.reduce(
-                (sum: number, session: IGameSession) =>
-                  sum + (session.score || 0),
-                0
-              ) / gameSessions.length
-            )
+            gameSessions.reduce(
+              (sum: number, session: IGameSession) =>
+                sum + (session.score || 0),
+              0
+            ) / gameSessions.length
+          )
           : 0,
         bestScore: gameSessions.length
           ? Math.max(
-              ...gameSessions.map((session: IGameSession) => session.score || 0)
-            )
+            ...gameSessions.map((session: IGameSession) => session.score || 0)
+          )
           : 0,
       },
       achievements: {
@@ -730,8 +730,8 @@ export class DashboardService {
         previous: previousActivities.length,
         change: previousActivities.length
           ? ((recentActivities.length - previousActivities.length) /
-              previousActivities.length) *
-            100
+            previousActivities.length) *
+          100
           : 0,
       },
       contentCreation: {
@@ -745,15 +745,15 @@ export class DashboardService {
           (activity: IUserActivity) => activity.action === "media_upload"
         ).length
           ? ((recentActivities.filter(
+            (activity: IUserActivity) => activity.action === "media_upload"
+          ).length -
+            previousActivities.filter(
               (activity: IUserActivity) => activity.action === "media_upload"
-            ).length -
-              previousActivities.filter(
-                (activity: IUserActivity) => activity.action === "media_upload"
-              ).length) /
-              previousActivities.filter(
-                (activity: IUserActivity) => activity.action === "media_upload"
-              ).length) *
-            100
+            ).length) /
+            previousActivities.filter(
+              (activity: IUserActivity) => activity.action === "media_upload"
+            ).length) *
+          100
           : 0,
       },
       socialInteraction: {
@@ -773,21 +773,21 @@ export class DashboardService {
           )
         ).length
           ? ((recentActivities.filter((activity: IUserActivity) =>
+            ["media_like", "media_share", "artist_follow"].includes(
+              activity.action
+            )
+          ).length -
+            previousActivities.filter((activity: IUserActivity) =>
               ["media_like", "media_share", "artist_follow"].includes(
                 activity.action
               )
-            ).length -
-              previousActivities.filter((activity: IUserActivity) =>
-                ["media_like", "media_share", "artist_follow"].includes(
-                  activity.action
-                )
-              ).length) /
-              previousActivities.filter((activity: IUserActivity) =>
-                ["media_like", "media_share", "artist_follow"].includes(
-                  activity.action
-                )
-              ).length) *
-            100
+            ).length) /
+            previousActivities.filter((activity: IUserActivity) =>
+              ["media_like", "media_share", "artist_follow"].includes(
+                activity.action
+              )
+            ).length) *
+          100
           : 0,
       },
     };

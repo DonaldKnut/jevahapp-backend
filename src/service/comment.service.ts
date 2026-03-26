@@ -1,5 +1,5 @@
 import { Types, ClientSession } from "mongoose";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { Media } from "../models/media.model";
 import { Devotional } from "../models/devotional.model";
 import logger from "../utils/logger";
@@ -40,9 +40,9 @@ export class CommentService {
       }
 
       // Normalize: ebook and podcast are just Media collection items, use "media"
-      const normalizedContentType: "media" | "devotional" = 
+      const normalizedContentType: "media" | "devotional" =
         (contentType === "ebook" || contentType === "podcast") ? "media" : contentType as "media" | "devotional";
-      
+
       if (!normalizedContentType || !["media", "devotional"].includes(normalizedContentType)) {
         throw new Error("Invalid content type. Supported: media, devotional, ebook, podcast");
       }
@@ -62,7 +62,7 @@ export class CommentService {
         if (!Types.ObjectId.isValid(parentCommentId)) {
           throw new Error("Invalid parent comment ID");
         }
-        const parent = await MediaInteraction.findOne({
+        const parent = await Interaction.findOne({
           _id: new Types.ObjectId(parentCommentId),
           interactionType: "comment",
           isRemoved: { $ne: true },
@@ -91,7 +91,7 @@ export class CommentService {
           }
 
           // Create comment (allow multiple comments per user)
-          const newComment = await MediaInteraction.create([commentData], {
+          const newComment = await Interaction.create([commentData], {
             session,
           });
 
@@ -113,7 +113,7 @@ export class CommentService {
 
           // If this is a reply, increment parent's replyCount
           if (commentData.parentCommentId) {
-            await MediaInteraction.findByIdAndUpdate(
+            await Interaction.findByIdAndUpdate(
               commentData.parentCommentId,
               { $inc: { replyCount: 1 } },
               { session }
@@ -124,7 +124,7 @@ export class CommentService {
         });
 
         // Populate user info
-        const populatedComment = await MediaInteraction.findById(comment._id)
+        const populatedComment = await Interaction.findById(comment._id)
           .populate("user", "firstName lastName avatar username")
           .populate("parentCommentId", "content user")
           .lean();
@@ -138,29 +138,29 @@ export class CommentService {
         });
 
         const formattedComment = this.formatComment(populatedComment, userId, normalizedContentType);
-        
+
         // Emit real-time new comment event via Socket.io
         try {
           const { getIO } = require("../socket/socketManager");
           const io = getIO();
           if (io) {
             const roomKey = `content:${normalizedContentType}:${contentId}`;
-            
+
             // Get updated comment count (including replies)
-            const topLevelCount = await MediaInteraction.countDocuments({
+            const topLevelCount = await Interaction.countDocuments({
               media: new Types.ObjectId(contentId),
               interactionType: "comment",
               isRemoved: { $ne: true },
               parentCommentId: { $exists: false },
             });
-            const replyCount = await MediaInteraction.countDocuments({
+            const replyCount = await Interaction.countDocuments({
               media: new Types.ObjectId(contentId),
               interactionType: "comment",
               isRemoved: { $ne: true },
               parentCommentId: { $exists: true },
             });
             const commentCount = topLevelCount + replyCount;
-            
+
             const payload = {
               contentId,
               contentType: normalizedContentType, // Use normalized contentType
@@ -172,7 +172,7 @@ export class CommentService {
             io.to(roomKey).emit("content:comment", payload);
             // Also emit the full comment for immediate UI updates
             io.to(roomKey).emit("new-comment", formattedComment);
-            
+
             logger.debug("Emitted Socket.io comment event", {
               roomKey,
               commentId: formattedComment.id,
@@ -218,7 +218,7 @@ export class CommentService {
         throw new Error("Comment must be less than 1000 characters");
       }
 
-      const comment = await MediaInteraction.findOne({
+      const comment = await Interaction.findOne({
         _id: new Types.ObjectId(commentId),
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -239,7 +239,7 @@ export class CommentService {
       await comment.save();
 
       // Populate user info
-      const updatedComment = await MediaInteraction.findById(comment._id)
+      const updatedComment = await Interaction.findById(comment._id)
         .populate("user", "firstName lastName avatar username")
         .populate("parentCommentId", "content user")
         .lean();
@@ -267,7 +267,7 @@ export class CommentService {
         throw new Error("Invalid comment or user ID");
       }
 
-      const comment = await MediaInteraction.findOne({
+      const comment = await Interaction.findOne({
         _id: new Types.ObjectId(commentId),
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -286,7 +286,7 @@ export class CommentService {
       try {
         await session.withTransaction(async () => {
           // Soft delete the comment
-          await MediaInteraction.findByIdAndUpdate(
+          await Interaction.findByIdAndUpdate(
             commentId,
             {
               isRemoved: true,
@@ -313,7 +313,7 @@ export class CommentService {
 
           // If this is a reply, decrement parent's replyCount
           if (comment.parentCommentId) {
-            await MediaInteraction.findByIdAndUpdate(
+            await Interaction.findByIdAndUpdate(
               comment.parentCommentId,
               { $inc: { replyCount: -1 } },
               { session }
@@ -337,22 +337,22 @@ export class CommentService {
           const io = getIO();
           if (io) {
             const roomKey = `content:${contentType}:${comment.media.toString()}`;
-            
+
             // Get updated comment count (including replies)
-            const topLevelCount = await MediaInteraction.countDocuments({
+            const topLevelCount = await Interaction.countDocuments({
               media: comment.media,
               interactionType: "comment",
               isRemoved: { $ne: true },
               parentCommentId: { $exists: false },
             });
-            const replyCount = await MediaInteraction.countDocuments({
+            const replyCount = await Interaction.countDocuments({
               media: comment.media,
               interactionType: "comment",
               isRemoved: { $ne: true },
               parentCommentId: { $exists: true },
             });
             const commentCount = topLevelCount + replyCount;
-            
+
             const payload = {
               contentId: comment.media.toString(),
               contentType,
@@ -362,7 +362,7 @@ export class CommentService {
             };
             // Emit to the specific content room
             io.to(roomKey).emit("content:comment", payload);
-            
+
             logger.debug("Emitted Socket.io comment delete event", {
               roomKey,
               commentId,
@@ -395,7 +395,7 @@ export class CommentService {
         throw new Error("Invalid comment or user ID");
       }
 
-      const comment = await MediaInteraction.findOne({
+      const comment = await Interaction.findOne({
         _id: new Types.ObjectId(commentId),
         interactionType: "comment",
         isRemoved: { $ne: true },
@@ -407,7 +407,7 @@ export class CommentService {
 
       // Handle reactions - Mongoose Maps can be Map or plain object when loaded
       let reactions: any = comment.reactions;
-      
+
       // Convert to Map if it's a plain object
       if (!(reactions instanceof Map)) {
         reactions = new Map(Object.entries(reactions || {}));
@@ -463,7 +463,7 @@ export class CommentService {
           const io = getIO();
           if (io) {
             const roomKey = `content:${contentType}:${comment.media.toString()}`;
-            
+
             const payload = {
               contentId: comment.media.toString(),
               contentType,
@@ -473,7 +473,7 @@ export class CommentService {
             };
             // Emit to the specific content room
             io.to(roomKey).emit("content:comment", payload);
-            
+
             logger.debug("Emitted Socket.io comment like event", {
               roomKey,
               commentId,
@@ -504,7 +504,7 @@ export class CommentService {
 
     // Calculate reactions count
     const likeReactions = comment.reactions?.["like"] || [];
-    
+
     // Check if current user liked this comment
     let isLiked = false;
     if (currentUserId && likeReactions.length > 0) {
@@ -518,11 +518,11 @@ export class CommentService {
     // Format user info according to spec
     const user = comment.user
       ? {
-          id: comment.user._id?.toString() || comment.user.toString(),
-          firstName: comment.user.firstName || "",
-          lastName: comment.user.lastName || "",
-          avatar: comment.user.avatar || null,
-        }
+        id: comment.user._id?.toString() || comment.user.toString(),
+        firstName: comment.user.firstName || "",
+        lastName: comment.user.lastName || "",
+        avatar: comment.user.avatar || null,
+      }
       : null;
 
     // Format username (firstName + lastName or username)
@@ -533,13 +533,13 @@ export class CommentService {
     // Format user object to match frontend expectations
     const userObj = user
       ? {
-          _id: user.id,
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          avatar: user.avatar,
-          username: comment.user?.username || `${user.firstName} ${user.lastName}`.trim().toLowerCase().replace(/\s+/g, "_"),
-        }
+        _id: user.id,
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatar: user.avatar,
+        username: comment.user?.username || `${user.firstName} ${user.lastName}`.trim().toLowerCase().replace(/\s+/g, "_"),
+      }
       : null;
 
     return {
@@ -562,8 +562,8 @@ export class CommentService {
       replyCount: comment.replyCount || 0,
       parentCommentId: comment.parentCommentId
         ? (typeof comment.parentCommentId === "string"
-            ? comment.parentCommentId
-            : comment.parentCommentId._id?.toString() || comment.parentCommentId.toString())
+          ? comment.parentCommentId
+          : comment.parentCommentId._id?.toString() || comment.parentCommentId.toString())
         : null,
       isRemoved: comment.isRemoved || false,
     };
@@ -578,10 +578,10 @@ export class CommentService {
     if (media) {
       return "media"; // All Media collection items use "media" endpoint
     }
-    
+
     const devotional = await Devotional.findById(mediaId);
     if (devotional) return "devotional";
-    
+
     return null;
   }
 }

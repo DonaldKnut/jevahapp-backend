@@ -1,7 +1,7 @@
 import mongoose, { Types } from "mongoose";
 import { Media } from "../models/media.model";
 import { User } from "../models/user.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { Bookmark } from "../models/bookmark.model";
 // import { Comment } from "../models/comment.model";
 import { GameSession } from "../models/game.model";
@@ -144,7 +144,7 @@ export class AnalyticsService {
     const range = timeRange || defaultTimeRange;
 
     // Get user interactions
-    const interactions = await MediaInteraction.find({
+    const interactions = await Interaction.find({
       user: new Types.ObjectId(userId),
       createdAt: { $gte: range.startDate, $lte: range.endDate },
     });
@@ -525,7 +525,7 @@ export class AnalyticsService {
       { $match: query },
       {
         $lookup: {
-          from: "mediainteractions",
+          from: "interactions",
           localField: "_id",
           foreignField: "media",
           as: "interactions",
@@ -608,7 +608,7 @@ export class AnalyticsService {
     const uploadTrends = await Media.aggregate(pipeline);
 
     // Get interaction trends
-    const interactionTrends = await MediaInteraction.aggregate([
+    const interactionTrends = await Interaction.aggregate([
       {
         $match: {
           createdAt: { $gte: range.startDate, $lte: range.endDate },
@@ -739,7 +739,7 @@ export class AnalyticsService {
       User.countDocuments({ lastLoginAt: { $gte: oneHourAgo } }),
       User.countDocuments({ lastLoginAt: { $gte: oneHourAgo } }), // Simplified
       Media.countDocuments({ createdAt: { $gte: oneHourAgo } }),
-      MediaInteraction.countDocuments({ createdAt: { $gte: oneHourAgo } }),
+      Interaction.countDocuments({ createdAt: { $gte: oneHourAgo } }),
     ]);
 
     return {

@@ -4,7 +4,7 @@ import { ForumThread } from "../models/forumThread.model";
 import { Poll } from "../models/poll.model";
 import { Group } from "../models/group.model";
 import { User } from "../models/user.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { Types } from "mongoose";
 import { validatePrayerData, validatePrayerUpdateData } from "../validators/prayer.validator";
 import logger from "../utils/logger";
@@ -79,12 +79,12 @@ export const createPrayerPost = async (req: Request, res: Response): Promise<voi
 
 export const listPrayerPosts = async (req: Request, res: Response): Promise<void> => {
   try {
-  const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
-  const sortParam = String(req.query.sort || "recent");
-  const sort: any = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
-    
-  const [items, total] = await Promise.all([
+    const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
+    const sortParam = String(req.query.sort || "recent");
+    const sort: any = sortParam === "recent" ? { createdAt: -1 } : { createdAt: -1 };
+
+    const [items, total] = await Promise.all([
       PrayerPost.find()
         .select("content anonymous media authorId createdAt updatedAt")
         .populate("authorId", "firstName lastName avatar")
@@ -92,20 +92,20 @@ export const listPrayerPosts = async (req: Request, res: Response): Promise<void
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
-    PrayerPost.countDocuments(),
-  ]);
-    
-    res.status(200).json({ 
-      success: true, 
-      items: items.map(serialize), 
-      page, 
-      pageSize: items.length, 
-      total 
+      PrayerPost.countDocuments(),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      items: items.map(serialize),
+      page,
+      pageSize: items.length,
+      total
     });
   } catch (error: any) {
     logger.error("List prayer posts error:", error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: "Failed to fetch prayer posts",
       error: process.env.NODE_ENV === "development" ? error.message : undefined
     });
@@ -131,7 +131,7 @@ export const getPrayerPost = async (req: Request, res: Response): Promise<void> 
 
     // Find prayer and populate author
     const prayer = await PrayerPost.findById(prayerIdParam).populate("authorId", "firstName lastName avatar email");
-    
+
     if (!prayer) {
       res.status(404).json({
         success: false,
@@ -144,7 +144,7 @@ export const getPrayerPost = async (req: Request, res: Response): Promise<void> 
     // Check if user liked (if authenticated)
     let userLiked = false;
     if (userId && Types.ObjectId.isValid(userId)) {
-      const like = await MediaInteraction.findOne({
+      const like = await Interaction.findOne({
         user: new Types.ObjectId(userId),
         media: new Types.ObjectId(prayerIdParam),
         interactionType: "like",
@@ -273,7 +273,7 @@ export const updatePrayerPost = async (req: Request, res: Response): Promise<voi
     // Check if user liked
     let userLiked = false;
     if (userId && Types.ObjectId.isValid(userId)) {
-      const like = await MediaInteraction.findOne({
+      const like = await Interaction.findOne({
         user: new Types.ObjectId(userId),
         media: new Types.ObjectId(prayerIdParam),
         interactionType: "like",
@@ -419,10 +419,10 @@ export const createPoll = async (req: Request, res: Response): Promise<void> => 
     authorId: req.userId,
     votes: [],
   });
-  
+
   // Invalidate poll list caches
   await cacheService.delPattern("polls:list:*");
-  
+
   logger.info("Poll created", { pollId: doc._id, authorId: req.userId });
   res.status(201).json({ success: true, poll: serializePoll(doc, req.userId) });
 };
@@ -431,21 +431,21 @@ export const listPolls = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
   const status = String(req.query.status || "all");
-  
+
   const cacheKey = `polls:list:${status}:${page}:${limit}`;
-  
+
   // Cache for 5 minutes (300 seconds)
   const result = await cacheService.getOrSet(
     cacheKey,
     async () => {
-  const now = new Date();
-  const query: any = {};
-  if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
-  if (status === "closed") query.closesAt = { $lte: now };
-  const [items, total] = await Promise.all([
+      const now = new Date();
+      const query: any = {};
+      if (status === "open") query.$or = [{ closesAt: { $gt: now } }, { closesAt: { $exists: false } }];
+      if (status === "closed") query.closesAt = { $lte: now };
+      const [items, total] = await Promise.all([
         Poll.find(query).populate("authorId", "firstName lastName avatar").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-    Poll.countDocuments(query),
-  ]);
+        Poll.countDocuments(query),
+      ]);
       return {
         success: true,
         items: items.map(poll => serializePoll(poll)),
@@ -456,14 +456,14 @@ export const listPolls = async (req: Request, res: Response): Promise<void> => {
     },
     300 // 5 minutes cache
   );
-  
+
   res.status(200).json(result);
 };
 
 export const getPoll = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   const cacheKey = `poll:${id}:${req.userId || "anonymous"}`;
-  
+
   // Cache for 2 minutes (120 seconds) - shorter because votes change frequently
   const result = await cacheService.getOrSet(
     cacheKey,
@@ -479,19 +479,19 @@ export const getPoll = async (req: Request, res: Response): Promise<void> => {
     },
     120 // 2 minutes cache (shorter for polls with votes)
   );
-  
+
   if (!result.success) {
     res.status(404).json(result);
     return;
   }
-  
+
   res.status(200).json(result);
 };
 
 export const getMyPolls = async (req: Request, res: Response): Promise<void> => {
   const page = Math.max(parseInt(String(req.query.page || 1), 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(String(req.query.limit || 20), 10) || 20, 1), 100);
-  
+
   if (!req.userId) {
     res.status(401).json({ success: false, message: "Unauthorized: User not authenticated" });
     return;
@@ -505,12 +505,12 @@ export const getMyPolls = async (req: Request, res: Response): Promise<void> => 
       .limit(limit),
     Poll.countDocuments({ authorId: req.userId }),
   ]);
-  
-  res.status(200).json({ 
-    success: true, 
-    items: items.map(poll => serializePoll(poll, req.userId)), 
-    page, 
-    pageSize: items.length, 
+
+  res.status(200).json({
+    success: true,
+    items: items.map(poll => serializePoll(poll, req.userId)),
+    page,
+    pageSize: items.length,
     total,
     pagination: {
       page,
@@ -541,11 +541,11 @@ export const voteOnPoll = async (req: Request, res: Response): Promise<void> => 
   poll.votes = poll.votes.filter((v: any) => String(v.userId) !== String(req.userId));
   poll.votes.push({ userId: req.userId as any, optionIndexes, votedAt: new Date() });
   await poll.save();
-  
+
   // Invalidate cache for this poll and poll lists
   await cacheService.delPattern(`poll:${req.params.id}:*`);
   await cacheService.delPattern("polls:list:*");
-  
+
   logger.info("Poll voted", { pollId: poll._id, userId: req.userId });
   res.status(200).json({ success: true, poll: serializePoll(poll, req.userId) });
 };
@@ -690,15 +690,15 @@ export default {
  */
 function serializePoll(doc: any, userId?: string) {
   const obj = doc.toObject ? doc.toObject() : doc;
-  
+
   // Calculate votes per option
   const totalVotes = obj.votes.length;
   const optionsWithStats = obj.options.map((text: string, index: number) => {
-    const votesCount = obj.votes.filter((v: any) => 
+    const votesCount = obj.votes.filter((v: any) =>
       v.optionIndexes && v.optionIndexes.includes(index)
     ).length;
-    const percentage = totalVotes > 0 
-      ? Math.round((votesCount / totalVotes) * 100) 
+    const percentage = totalVotes > 0
+      ? Math.round((votesCount / totalVotes) * 100)
       : 0;
 
     return {
@@ -762,10 +762,10 @@ function serializePrayer(doc: any, userLiked: boolean = false) {
   if (obj.authorId && typeof obj.authorId === "object" && obj.authorId._id) {
     // Generate username from email or firstName/lastName
     const email = obj.authorId.email || "";
-    const username = email.split("@")[0] || 
-                     [obj.authorId.firstName, obj.authorId.lastName].filter(Boolean).join("_").toLowerCase() ||
-                     "user";
-    
+    const username = email.split("@")[0] ||
+      [obj.authorId.firstName, obj.authorId.lastName].filter(Boolean).join("_").toLowerCase() ||
+      "user";
+
     author = {
       _id: String(obj.authorId._id),
       username: username,

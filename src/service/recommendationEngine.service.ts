@@ -1,5 +1,5 @@
 import { Media } from "../models/media.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction, IInteraction } from "../models/interaction.model";
 import { MediaUserAction } from "../models/mediaUserAction.model";
 import { UserViewedMedia } from "../models/userViewedMedia.model";
 import { Bookmark } from "../models/bookmark.model";
@@ -144,7 +144,7 @@ class RecommendationEngineService {
           const media = item.media as any;
           if (media) {
             // Calculate completion rate from interactions
-            const interaction = await MediaInteraction.findOne({
+            const interaction = await Interaction.findOne({
               user: new Types.ObjectId(userId),
               media: media._id,
               interactionType: "view",
@@ -366,7 +366,7 @@ class RecommendationEngineService {
 
     try {
       // Find users who interacted with this media
-      const interactions = await MediaInteraction.find({
+      const interactions = await Interaction.find({
         media: new Types.ObjectId(mediaId),
         interactionType: { $in: ["view", "listen", "read"] },
       })

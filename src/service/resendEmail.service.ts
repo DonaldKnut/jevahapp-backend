@@ -20,7 +20,8 @@ export interface EmailData {
 }
 
 class ResendEmailService {
-  private readonly fromEmail = "support@jevahapp.com";
+  private readonly fromEmail =
+    process.env.RESEND_FROM_EMAIL || "support@jevahapp.com";
   private readonly fromName = "Jevah Support";
 
   /**
@@ -65,6 +66,13 @@ class ResendEmailService {
         subject,
         html,
       });
+
+      // Resend may return { error } without throwing.
+      if (response.error) {
+        throw new Error(
+          `Resend rejected email: ${response.error.message || "Unknown error"}`
+        );
+      }
 
       console.log("✅ Email sent successfully via Resend:", {
         id: response.data?.id,

@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import { Media } from "../models/media.model";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { User } from "../models/user.model";
 import logger from "../utils/logger";
 
@@ -14,7 +14,7 @@ export interface PerMediaAnalytics {
   title: string;
   contentType: string;
   thumbnailUrl?: string;
-  
+
   // Engagement metrics
   views: number;
   uniqueViews: number;
@@ -23,12 +23,12 @@ export interface PerMediaAnalytics {
   comments: number;
   downloads: number;
   bookmarks: number;
-  
+
   // Calculated metrics
   engagementRate: number; // (likes + shares + comments) / views * 100
   averageWatchTime?: number; // Average duration viewed/listened
   completionRate?: number; // Percentage of users who watched/listened to completion
-  
+
   // Time-based metrics
   viewsLast24h: number;
   viewsLast7d: number;
@@ -36,12 +36,12 @@ export interface PerMediaAnalytics {
   likesLast24h: number;
   likesLast7d: number;
   likesLast30d: number;
-  
+
   // Trends
   viewsTrend: number; // Percentage change from previous period
   likesTrend: number;
   sharesTrend: number;
-  
+
   // Timestamps
   createdAt: Date;
   publishedAt: Date;
@@ -55,7 +55,7 @@ export interface CreatorMediaAnalytics {
   totalComments: number;
   totalDownloads: number;
   averageEngagementRate: number;
-  
+
   // Time-based totals
   viewsLast24h: number;
   viewsLast7d: number;
@@ -63,10 +63,10 @@ export interface CreatorMediaAnalytics {
   likesLast24h: number;
   likesLast7d: number;
   likesLast30d: number;
-  
+
   // Top performing content
   topPerformingMedia: PerMediaAnalytics[];
-  
+
   // Content type breakdown
   byContentType: {
     [contentType: string]: {
@@ -76,7 +76,7 @@ export interface CreatorMediaAnalytics {
       averageEngagementRate: number;
     };
   };
-  
+
   // Engagement over time (daily for last 30 days)
   engagementOverTime: {
     date: string;
@@ -116,11 +116,11 @@ export class MediaAnalyticsService {
 
     // Get all interactions for this media
     const [allInteractions, interactionsInRange] = await Promise.all([
-      MediaInteraction.find({
+      Interaction.find({
         media: new Types.ObjectId(mediaId),
         isRemoved: { $ne: true },
       }),
-      MediaInteraction.find({
+      Interaction.find({
         media: new Types.ObjectId(mediaId),
         createdAt: { $gte: range.startDate, $lte: range.endDate },
         isRemoved: { $ne: true },
@@ -149,8 +149,8 @@ export class MediaAnalyticsService {
     });
 
     // Calculate engagement rate
-    const engagementRate = views > 0 
-      ? ((likes + shares + comments) / views) * 100 
+    const engagementRate = views > 0
+      ? ((likes + shares + comments) / views) * 100
       : 0;
 
     // Calculate time-based metrics
@@ -189,12 +189,12 @@ export class MediaAnalyticsService {
     );
 
     const [previousPeriodInteractions, currentPeriodInteractions] = await Promise.all([
-      MediaInteraction.find({
+      Interaction.find({
         media: new Types.ObjectId(mediaId),
         createdAt: { $gte: previousRangeStart, $lt: range.startDate },
         isRemoved: { $ne: true },
       }),
-      MediaInteraction.find({
+      Interaction.find({
         media: new Types.ObjectId(mediaId),
         createdAt: { $gte: range.startDate, $lte: range.endDate },
         isRemoved: { $ne: true },
@@ -207,8 +207,8 @@ export class MediaAnalyticsService {
     const currentViews = currentPeriodInteractions.filter(
       i => i.interactionType === "view"
     ).length;
-    const viewsTrend = previousViews > 0 
-      ? ((currentViews - previousViews) / previousViews) * 100 
+    const viewsTrend = previousViews > 0
+      ? ((currentViews - previousViews) / previousViews) * 100
       : currentViews > 0 ? 100 : 0;
 
     const previousLikes = previousPeriodInteractions.filter(
@@ -217,8 +217,8 @@ export class MediaAnalyticsService {
     const currentLikes = currentPeriodInteractions.filter(
       i => i.interactionType === "like"
     ).length;
-    const likesTrend = previousLikes > 0 
-      ? ((currentLikes - previousLikes) / previousLikes) * 100 
+    const likesTrend = previousLikes > 0
+      ? ((currentLikes - previousLikes) / previousLikes) * 100
       : currentLikes > 0 ? 100 : 0;
 
     const previousShares = previousPeriodInteractions.filter(
@@ -227,15 +227,15 @@ export class MediaAnalyticsService {
     const currentShares = currentPeriodInteractions.filter(
       i => i.interactionType === "share"
     ).length;
-    const sharesTrend = previousShares > 0 
-      ? ((currentShares - previousShares) / previousShares) * 100 
+    const sharesTrend = previousShares > 0
+      ? ((currentShares - previousShares) / previousShares) * 100
       : currentShares > 0 ? 100 : 0;
 
     // Calculate average watch time from interaction data
     const viewInteractions = allInteractions.filter(
       (i: any) => i.interactionType === "view" && i.interactions && i.interactions.length > 0
     );
-    
+
     let averageWatchTime: number | undefined;
     if (viewInteractions.length > 0) {
       const totalWatchTime = viewInteractions.reduce((sum: number, interaction: any) => {
@@ -244,20 +244,20 @@ export class MediaAnalyticsService {
           .map((i: any) => i.duration!);
         return sum + durations.reduce((a: number, b: number) => a + b, 0);
       }, 0);
-      
+
       const totalDurations = viewInteractions.reduce((sum: number, interaction: any) => {
         return sum + interaction.interactions.filter((i: any) => i.duration).length;
       }, 0);
-      
+
       averageWatchTime = totalDurations > 0 ? totalWatchTime / totalDurations : undefined;
     }
 
     // Calculate completion rate
-    const completedViews = viewInteractions.filter((interaction: any) => 
+    const completedViews = viewInteractions.filter((interaction: any) =>
       interaction.interactions.some((i: any) => i.isComplete === true)
     ).length;
-    const completionRate = viewInteractions.length > 0 
-      ? (completedViews / viewInteractions.length) * 100 
+    const completionRate = viewInteractions.length > 0
+      ? (completedViews / viewInteractions.length) * 100
       : undefined;
 
     return {
@@ -311,13 +311,13 @@ export class MediaAnalyticsService {
 
     // Get all interactions for this creator's media
     const mediaIds = allMedia.map(m => m._id);
-    
+
     const [allInteractions, interactionsInRange] = await Promise.all([
-      MediaInteraction.find({
+      Interaction.find({
         media: { $in: mediaIds },
         isRemoved: { $ne: true },
       }),
-      MediaInteraction.find({
+      Interaction.find({
         media: { $in: mediaIds },
         createdAt: { $gte: range.startDate, $lte: range.endDate },
         isRemoved: { $ne: true },
@@ -340,8 +340,8 @@ export class MediaAnalyticsService {
       const rate = views > 0 ? ((likes + shares + comments) / views) * 100 : 0;
       return sum + rate;
     }, 0);
-    const averageEngagementRate = allMedia.length > 0 
-      ? totalEngagement / allMedia.length 
+    const averageEngagementRate = allMedia.length > 0
+      ? totalEngagement / allMedia.length
       : 0;
 
     // Calculate time-based metrics
@@ -408,7 +408,7 @@ export class MediaAnalyticsService {
         const c = m.commentCount || 0;
         return sum + (v > 0 ? ((l + s + c) / v) * 100 : 0);
       }, 0);
-      
+
       byContentType[contentType] = {
         count: mediaOfType.length,
         totalViews: views,
@@ -422,7 +422,7 @@ export class MediaAnalyticsService {
     for (let i = 29; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-      
+
       const dayInteractions = interactionsInRange.filter(
         i => i.createdAt >= date && i.createdAt < nextDate
       );

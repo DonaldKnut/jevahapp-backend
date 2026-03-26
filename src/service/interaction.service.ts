@@ -1,5 +1,5 @@
 import mongoose, { Types, ClientSession } from "mongoose";
-import { MediaInteraction } from "../models/mediaInteraction.model";
+import { Interaction } from "../models/interaction.model";
 import { Media } from "../models/media.model";
 import { User } from "../models/user.model";
 import { Message } from "../models/message.model";
@@ -36,7 +36,7 @@ export class InteractionService {
       throw new Error("Invalid user or comment ID");
     }
 
-    const comment = await MediaInteraction.findById(data.commentId);
+    const comment = await Interaction.findById(data.commentId);
     if (!comment || comment.interactionType !== "comment") {
       throw new Error("Comment not found");
     }
@@ -55,7 +55,7 @@ export class InteractionService {
           ? existing.filter((id: any) => !id.equals(userId))
           : [...existing, userId];
 
-        await MediaInteraction.findByIdAndUpdate(
+        await Interaction.findByIdAndUpdate(
           data.commentId,
           { [`reactions.${data.reactionType}`]: updatedArray },
           { new: false, session }
