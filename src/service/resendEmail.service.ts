@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import path from "path";
 import fs from "fs/promises";
 
@@ -23,6 +24,18 @@ class ResendEmailService {
   private readonly fromEmail =
     process.env.RESEND_FROM_EMAIL || "support@jevahapp.com";
   private readonly fromName = "Jevah Support";
+  private readonly smtpTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.zoho.com",
+    port: parseInt(process.env.SMTP_PORT || "587", 10),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: {
+      user: process.env.SMTP_USER || "support@jevahapp.com",
+      pass: process.env.SMTP_PASS || "",
+    },
+  });
+  private readonly smtpFromName = process.env.SMTP_FROM_NAME || "Jevah Support";
+  private readonly smtpFromEmail =
+    process.env.SMTP_USER || "support@jevahapp.com";
 
   /**
    * Test Resend connection
@@ -83,7 +96,36 @@ class ResendEmailService {
       return response;
     } catch (error) {
       console.error("❌ Resend email send failed:", error);
-      throw new Error(`Failed to send email via Resend: ${error}`);
+      try {
+        console.warn("⚠️ Retrying email via SMTP fallback...", {
+          to,
+          subject,
+        });
+        const smtpInfo = await this.smtpTransporter.sendMail({
+          from:
+            from || `"${this.smtpFromName}" <${this.smtpFromEmail}>`,
+          to,
+          subject,
+          html,
+        });
+
+        console.log("✅ Email sent successfully via SMTP fallback:", {
+          id: smtpInfo.messageId,
+          to,
+          subject,
+        });
+
+        // Keep the same response-like shape expected by existing callers.
+        return {
+          data: { id: smtpInfo.messageId },
+          error: null,
+        };
+      } catch (smtpError) {
+        console.error("❌ SMTP fallback email send failed:", smtpError);
+        throw new Error(
+          `Failed to send email via Resend and SMTP fallback: ${smtpError}`
+        );
+      }
     }
   }
 
