@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { matchModerationBlocklist } from "../config/moderationBlocklist";
 import logger from "../utils/logger";
 
 export interface ModerationResult {
@@ -18,9 +19,38 @@ export interface ModerationInput {
   contentType: string;
 }
 
+const MODERATION_TRANSCRIPT_PROMPT_MAX = 12000;
+
+/** Frames sent to the vision model (extracted frames are spread across the video; we subsample evenly). */
+const MODERATION_MAX_VIDEO_FRAMES = Math.min(
+  16,
+  Math.max(4, parseInt(process.env.MODERATION_MAX_VIDEO_FRAMES || "10", 10) || 10)
+);
+
 export class ContentModerationService {
   private genAI: GoogleGenerativeAI | null;
   private model: any;
+
+  /** All user-provided text for policy checks (full transcript — not truncated). */
+  private policyText(input: ModerationInput): string {
+    return `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`;
+  }
+
+  /** Evenly sample frames so the model sees the beginning, middle, and end of the video (not only the first 3 timestamps). */
+  private sampleVideoFramesForModeration(frames: string[], max: number): string[] {
+    if (frames.length <= max) {
+      return frames;
+    }
+    const picked: string[] = [];
+    for (let i = 0; i < max; i++) {
+      const idx = Math.min(
+        frames.length - 1,
+        Math.round((i / Math.max(1, max - 1)) * (frames.length - 1))
+      );
+      picked.push(frames[idx]);
+    }
+    return [...new Set(picked)];
+  }
 
   constructor() {
     const apiKey = process.env.GOOGLE_AI_API_KEY;
@@ -48,6 +78,22 @@ export class ContentModerationService {
     input: ModerationInput
   ): Promise<ModerationResult> {
     try {
+      const block = matchModerationBlocklist(this.policyText(input));
+      if (block) {
+        return {
+          isApproved: false,
+          confidence: 0.95,
+          reason: `Content blocked by platform policy (inappropriate term or phrase in title, description, or transcript).`,
+          flags: [
+            "policy_blocklist",
+            "inappropriate_content",
+            ...(block.phrase ? [`blocked:${block.phrase}`] : []),
+            ...(block.pattern ? [`blocked_pattern`] : []),
+          ],
+          requiresReview: false,
+        };
+      }
+
       // If no AI model available, use basic keyword checks
       if (!this.model) {
         return this.basicModeration(input);
@@ -72,9 +118,13 @@ export class ContentModerationService {
         });
       }
 
-      // Video frames extracted from uploaded video (beginning, middle, end) for visual moderation
+      // Video frames: evenly sampled across the full timeline (pipeline may extract many frames)
       if (input.videoFrames && input.videoFrames.length > 0) {
-        input.videoFrames.slice(0, 3).forEach((frame) => {
+        const framesForModel = this.sampleVideoFramesForModeration(
+          input.videoFrames,
+          MODERATION_MAX_VIDEO_FRAMES
+        );
+        framesForModel.forEach((frame) => {
           parts.push({
             inlineData: {
               mimeType: "image/jpeg",
@@ -92,12 +142,18 @@ export class ContentModerationService {
       const response = await result.response;
       const aiResponse = response.text();
 
-      // Parse the AI response
       return this.parseModerationResponse(aiResponse, input);
     } catch (error: any) {
       logger.error("Error in content moderation:", error);
-      // On error, use basic moderation as fallback
-      return this.basicModeration(input);
+      // Do not auto-approve when the model fails — block upload and force manual review path
+      return {
+        isApproved: false,
+        confidence: 0,
+        reason:
+          "Automated moderation could not complete. Upload is held until the content can be reviewed.",
+        flags: ["moderation_service_error"],
+        requiresReview: true,
+      };
     }
   }
 
@@ -107,14 +163,20 @@ export class ContentModerationService {
   private buildModerationPrompt(input: ModerationInput): string {
     const hasTranscript = !!input.transcript;
     const hasFrames = input.videoFrames && input.videoFrames.length > 0;
+    const framesForPrompt = hasFrames && input.videoFrames
+      ? this.sampleVideoFramesForModeration(
+          input.videoFrames,
+          MODERATION_MAX_VIDEO_FRAMES
+        )
+      : [];
 
     const transcriptText = hasTranscript && input.transcript
-      ? `- Transcript: "${input.transcript.substring(0, 1000)}${input.transcript.length > 1000 ? "..." : ""}"`
+      ? `- Transcript: "${input.transcript.substring(0, MODERATION_TRANSCRIPT_PROMPT_MAX)}${input.transcript.length > MODERATION_TRANSCRIPT_PROMPT_MAX ? "..." : ""}"`
       : "";
 
     const hasThumbnail = !!input.thumbnail;
     const framesText = hasFrames && input.videoFrames
-      ? `- Video Frames: ${input.videoFrames.length} frames extracted from the uploaded video (beginning, middle, end) for visual analysis`
+      ? `- Video Frames: ${input.videoFrames.length} frame(s) extracted from the video at different times; ${framesForPrompt.length} representative frame(s) are attached below (spread across early, middle, and late parts of the video) for visual analysis`
       : "";
     const thumbnailText = hasThumbnail
       ? `- Thumbnail Image: Provided below for visual analysis (CRITICAL - this is what users see first; check for inappropriate content)`
@@ -158,6 +220,21 @@ Analyze this content and determine if it is:
    - Non-gospel content (secular music, non-Christian teachings, etc.)
    - **Note**: Do NOT reject biblical teachings on marriage or sexuality that are presented respectfully and for spiritual growth.
 
+**CRITICAL - Nigeria / Pidgin / local languages (Latin script):**
+- Users may speak **Nigerian Pidgin**, **Yoruba**, **Hausa**, **Igbo**, or **code-mixed English**. You must judge **meaning and intent**, not individual slang words in isolation.
+- **SERMONS / TEACHING**: A pastor may quote or mention crude cultural slang (e.g. **yansh**, **bumbum**, **nyash**) to **rebuke worldliness**, teach **modesty/purity**, or illustrate a biblical point. **APPROVE** when the transcript shows **preaching, scripture, correction, or godly exhortation**, even if those words appear.
+- **REJECT** when such slang is used to **celebrate** sexual immorality, objectify people, or as part of **secular club/party content** with no Christian message.
+- **REJECT** if spoken content or on-screen text **promotes** sexual objectification, lewd dancing as the main subject, or **street/club secular music** with no worship, Bible, or Christian message.
+- **Transactional / street sex slang** (**ashawo**, **olosho**, **runs** in a sexual bragging sense) in a **non-sermon**, **celebratory** music context is usually non-gospel — **REJECT** unless clearly framed as **repentance/testimony or biblical warning** in the transcript.
+- **Do NOT** treat Pidgin gospel worship or biblical teaching as "low quality" — approve when the **substance** is praise, scripture, sermon, or Christian testimony, even if informal language is used.
+- If the **primary purpose** is entertainment, flexing, or sexual themes rather than **Jesus, the Word of God, worship, or biblical teaching**, REJECT or set requiresReview = true.
+
+**CRITICAL - Video frames (must use together with transcript):**
+- The attached images include **video stills** sampled across the timeline (not only the opening).
+- Use **visual context**: **APPROVE** when frames suggest **church, pulpit, open Bible, cross, choir robes, congregation, prayer/worship posture**, or other clear **Christian gathering** signals — especially if the transcript sounds like preaching or teaching.
+- **REJECT** when frames suggest **nightclub, strip club, sexualized performance**, nudity, or **primary focus on lewd dancing** with no gospel context — even if the audio language is hard to judge.
+- If **audio says something coarse** but **visuals + transcript** indicate a **sermon or teaching**, prefer **APPROVE** (or requiresReview = true only if genuinely ambiguous).
+
 **CRITICAL - Thumbnail Moderation:**
 - The thumbnail image is the FIRST thing users see - it MUST be appropriate
 - If the thumbnail contains ANY inappropriate content (nudity, explicit content, violence), REJECT immediately
@@ -199,6 +276,7 @@ Respond in this exact JSON format:
 - Reject content that promotes values contrary to Christianity, regardless of language
 - When in doubt, set requiresReview = true
 - Remember: A gospel song in Yoruba, Hausa, or Igbo is just as valid as one in English
+- **Positive requirement**: Content should be **meaningfully gospel-centered** — worship, Bible, Jesus Christ, Christian teaching, testimony, or choir/gospel music that clearly serves faith. Purely secular topics without a Christian frame should be rejected.
 
 Now analyze the content and provide your response in the exact JSON format above.`;
   }
@@ -232,21 +310,9 @@ Now analyze the content and provide your response in the exact JSON format above
         };
       }
 
-      // Fallback: try to infer from text response
-      const lowerResponse = aiResponse.toLowerCase();
-      const isApproved =
-        lowerResponse.includes("approved") ||
-        lowerResponse.includes("gospel") ||
-        lowerResponse.includes("christian") ||
-        lowerResponse.includes("appropriate");
-
-      return {
-        isApproved,
-        confidence: 0.6,
-        reason: "Parsed from text response",
-        flags: [],
-        requiresReview: !isApproved,
-      };
+      // Non-JSON response: do not guess approval — fall back to keyword/blocklist checks
+      logger.warn("Moderation response was not valid JSON; using conservative fallback");
+      return this.basicModeration(input);
     } catch (error) {
       logger.error("Error parsing moderation response:", error);
       return this.basicModeration(input);
@@ -257,20 +323,30 @@ Now analyze the content and provide your response in the exact JSON format above
    * Basic moderation using keyword checks (fallback)
    */
   private basicModeration(input: ModerationInput): ModerationResult {
-    const inappropriateKeywords = [
+    const block = matchModerationBlocklist(this.policyText(input));
+    if (block) {
+      return {
+        isApproved: false,
+        confidence: 0.9,
+        reason: "Policy blocklist (offline moderation)",
+        flags: ["policy_blocklist", "inappropriate_content"],
+        requiresReview: false,
+      };
+    }
+
+    // Substring checks: unambiguous coarse themes (not "sex" — false positives on "sexual immorality" sermons).
+    const inappropriateSubstrings = [
       "explicit",
       "nude",
-      "sex",
       "porn",
       "violence",
-      "kill",
-      "hate",
-      "fuck",
-      "shit",
-      "damn",
       "blasphemy",
       "blaspheme",
     ];
+
+    // Strong profanity only (word boundaries; avoids "skill"/"Essex"-style substring noise).
+    const strongProfanityPattern =
+      /\b(?:fuck|fucking|fucker|motherfucker|shit|bullshit|bitch|bitches|nigga|niggas|pussy|cunt|slut|whore)\b/i;
 
     const gospelKeywords = [
       // Core names and worship
@@ -418,10 +494,9 @@ Now analyze the content and provide your response in the exact JSON format above
 
     const textToCheck = `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`.toLowerCase();
 
-    // Check for inappropriate content
-    const hasInappropriate = inappropriateKeywords.some(keyword =>
-      textToCheck.includes(keyword)
-    );
+    const hasInappropriate =
+      inappropriateSubstrings.some((keyword) => textToCheck.includes(keyword)) ||
+      strongProfanityPattern.test(textToCheck);
 
     // Check for gospel content
     const hasGospel = gospelKeywords.some(keyword =>

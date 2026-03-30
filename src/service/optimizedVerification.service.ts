@@ -1,4 +1,5 @@
 import logger from "../utils/logger";
+import { computeDistributedAudioSampleOffsets } from "../utils/verificationAudio.util";
 import { mediaProcessingService } from "./mediaProcessing.service";
 import { transcriptionService } from "./transcription.service";
 import { contentModerationService } from "./contentModeration.service";
@@ -9,6 +10,12 @@ import * as path from "path";
 import * as os from "os";
 
 const execAsync = promisify(exec);
+
+/** More segments for long media = better chance speech is transcribed for moderation (more FFmpeg + API work). */
+const VERIFICATION_MAX_AUDIO_SEGMENTS = Math.min(
+  12,
+  Math.max(3, parseInt(process.env.VERIFICATION_MAX_AUDIO_SEGMENTS || "7", 10) || 7)
+);
 
 export interface VerificationProgress {
   uploadId: string;
@@ -412,33 +419,25 @@ export class OptimizedVerificationService {
   }
 
   /**
-   * Extract multiple audio samples from different segments
-   * For safety: checks beginning, middle, and end to catch inappropriate content anywhere
+   * Extract multiple audio samples from different segments (spread across the timeline).
    */
   private async extractMultipleAudioSamples(
     mediaBuffer: Buffer,
     mimeType: string,
     totalDuration: number
   ): Promise<Array<{ audioBuffer: Buffer; duration?: number }>> {
-    const samples: Array<{ audioBuffer: Buffer; duration?: number }> = [];
-    const sampleDuration = 60; // 60 seconds per sample
+    const sampleDuration = 60;
+    const offsets = computeDistributedAudioSampleOffsets(
+      totalDuration,
+      sampleDuration,
+      VERIFICATION_MAX_AUDIO_SEGMENTS
+    );
 
-    // Sample 1: Beginning (first 60 seconds) - catches immediate inappropriate content
-    samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, 0));
-
-    // Sample 2: Middle (around midpoint) - catches mid-video issues
-    if (totalDuration > 180) {
-      const middleStart = Math.max(0, (totalDuration / 2) - 30);
-      samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, middleStart));
-    }
-
-    // Sample 3: End (last 60 seconds) - catches inappropriate endings
-    if (totalDuration > 120) {
-      const endStart = Math.max(0, totalDuration - sampleDuration);
-      samples.push(await this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, endStart));
-    }
-
-    return samples;
+    return Promise.all(
+      offsets.map((start) =>
+        this.extractAudioSample(mediaBuffer, mimeType, sampleDuration, start)
+      )
+    );
   }
 
   /**

@@ -98,6 +98,7 @@
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.2",
     "@types/express-session": "^1.18.2",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.17.1",
