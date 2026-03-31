@@ -520,11 +520,14 @@ export class MediaService {
         },
       };
     } catch (error: any) {
+      // Log the actual MongoDB error so it's visible in server logs
+      // without leaking details to the API response.
       logger.error("Error fetching all content", {
         error: error?.message,
+        stack: error?.stack,
         options,
       });
-      throw new Error("Failed to retrieve all content");
+      throw new Error(`Failed to retrieve all content: ${error?.message}`);
     }
   }
 
@@ -558,7 +561,9 @@ export class MediaService {
           as: "author",
         },
       },
-      { $unwind: "$author" },
+      // preserveNullAndEmptyArrays: true ensures media whose uploader was deleted
+      // still appears in the feed (with empty authorInfo) instead of being silently dropped.
+      { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
       {
         $addFields: {
           // Use pre-calculated fields directly (already stored in Media document)
@@ -567,23 +572,42 @@ export class MediaService {
           totalShares: { $ifNull: ["$shareCount", 0] },
           totalViews: { $ifNull: ["$viewCount", 0] },
           authorInfo: {
-            _id: "$author._id",
-            firstName: "$author.firstName",
-            lastName: "$author.lastName",
-            fullName: {
-              $concat: [
-                { $ifNull: ["$author.firstName", ""] },
-                " ",
-                { $ifNull: ["$author.lastName", ""] },
-              ],
+            $cond: {
+              if: { $ifNull: ["$author._id", false] },
+              then: {
+                _id: "$author._id",
+                firstName: { $ifNull: ["$author.firstName", ""] },
+                lastName: { $ifNull: ["$author.lastName", ""] },
+                fullName: {
+                  $trim: {
+                    input: {
+                      $concat: [
+                        { $ifNull: ["$author.firstName", ""] },
+                        " ",
+                        { $ifNull: ["$author.lastName", ""] },
+                      ],
+                    },
+                  },
+                },
+                avatar: { $ifNull: ["$author.avatar", null] },
+                section: { $ifNull: ["$author.section", null] },
+              },
+              else: {
+                _id: null,
+                firstName: "",
+                lastName: "",
+                fullName: "Unknown",
+                avatar: null,
+                section: null,
+              },
             },
-            avatar: "$author.avatar",
-            section: "$author.section",
           },
           formattedCreatedAt: {
             $dateToString: {
               format: "%Y-%m-%dT%H:%M:%S.%LZ",
-              date: "$createdAt",
+              // $ifNull guards against documents missing the createdAt field,
+              // which would otherwise crash the entire aggregation pipeline.
+              date: { $ifNull: ["$createdAt", "$$NOW"] },
             },
           },
           thumbnail: "$thumbnailUrl",
