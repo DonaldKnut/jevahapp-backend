@@ -1,12 +1,10 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import audioService from "../service/audio.service";
-import { ContentInteractionService } from "../service/contentInteraction.service";
+import likeService from "../modules/engagement/like/like.service";
 import { UnifiedBookmarkService } from "../service/unifiedBookmark.service";
 import logger from "../utils/logger";
 import { MediaService } from "../service/media.service";
-
-const contentInteractionService = new ContentInteractionService();
 
 /**
  * Get all copyright-free songs (Public)
@@ -501,12 +499,7 @@ export const likeCopyrightFreeSong = async (
       return;
     }
 
-    // Toggle like (ContentInteractionService handles real-time Socket.IO events)
-    const result = await contentInteractionService.toggleLike(
-      userId,
-      songId,
-      "media"
-    );
+    const result = await likeService.toggleLike(userId, songId, "copyright_free_song");
 
     // Get updated song with all counts
     const { Media } = await import("../models/media.model");

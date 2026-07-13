@@ -5,6 +5,7 @@ import { User } from "../models/user.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 import { redisRateLimit } from "../lib/redisRateLimit";
+import likeService from "../modules/engagement/like/like.service";
 import { incrPostCounter } from "../lib/redisCounters";
 
 /**
@@ -41,54 +42,27 @@ export const likePrayer = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Check if user already liked this prayer
-    const existingLike = await Interaction.findOne({
-      user: userId,
-      media: new Types.ObjectId(prayerId),
-      interactionType: "like",
+    // Unified like service (Like collection — not legacy Interaction)
+    const result = await likeService.toggleLikeFast(userId!, prayerId, "prayer");
+    likeService.toggleLike(userId!, prayerId, "prayer").catch(err => {
+      logger.error("Background prayer like sync failed", { error: err.message, prayerId, userId });
     });
 
-    let liked: boolean;
-    let likeCount: number;
-
-    if (existingLike) {
-      // Unlike - remove the interaction
-      await Interaction.findByIdAndDelete(existingLike._id);
-      liked = false;
-      // Update prayer likesCount
-      prayer.likesCount = Math.max(0, (prayer.likesCount || 0) - 1);
-      await prayer.save();
-      likeCount = prayer.likesCount || 0;
-      // Fast counter (best-effort, doesn't affect correctness)
-      incrPostCounter({ postId: prayerId, field: "likes", delta: -1 }).catch(() => { });
-    } else {
-      // Like - create new interaction
-      await Interaction.create({
-        user: userId,
-        media: new Types.ObjectId(prayerId),
-        interactionType: "like",
-        lastInteraction: new Date(),
-        count: 1,
-      });
-      liked = true;
-      // Update prayer likesCount
-      prayer.likesCount = (prayer.likesCount || 0) + 1;
-      await prayer.save();
-      likeCount = prayer.likesCount || 0;
-      incrPostCounter({ postId: prayerId, field: "likes", delta: 1 }).catch(() => { });
-    }
-
-    logger.info("Prayer like toggled", { prayerId, userId, liked, likeCount });
+    logger.info("Prayer like toggled", { prayerId, userId, liked: result.liked, likeCount: result.likeCount });
 
     res.status(200).json({
       success: true,
       data: {
-        liked,
-        likesCount: likeCount,
+        liked: result.liked,
+        likesCount: result.likeCount,
       },
     });
   } catch (error: any) {
     logger.error("Error toggling prayer like", { error: error.message, prayerId: req.params.id });
+    if (error.message?.includes("Too many")) {
+      res.status(429).json({ success: false, error: error.message });
+      return;
+    }
     res.status(500).json({ success: false, error: "Failed to toggle like" });
   }
 };

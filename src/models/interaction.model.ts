@@ -10,7 +10,8 @@ export interface IInteraction extends Document {
     | "download"
     | "comment"
     | "share"
-    | "favorite";
+    | "favorite"
+    | "like";
   lastInteraction: Date;
   count: number;
   content?: string; // For comments
@@ -50,7 +51,16 @@ const interactionSchema = new Schema<IInteraction>(
     },
     interactionType: {
       type: String,
-      enum: ["view", "listen", "read", "download", "comment", "share", "favorite"],
+      enum: [
+        "view",
+        "listen",
+        "read",
+        "download",
+        "comment",
+        "share",
+        "favorite",
+        "like",
+      ],
       required: true,
     },
     lastInteraction: {

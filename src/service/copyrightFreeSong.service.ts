@@ -155,6 +155,28 @@ export class CopyrightFreeSongService {
     }
   }
 
+  async incrementSaveCount(songId: string): Promise<void> {
+    try {
+      await CopyrightFreeSong.findByIdAndUpdate(songId, {
+        $inc: { saveCount: 1 },
+      });
+    } catch (error: any) {
+      logger.error("Error incrementing save count:", error);
+      throw error;
+    }
+  }
+
+  async decrementSaveCount(songId: string): Promise<void> {
+    try {
+      await CopyrightFreeSong.findByIdAndUpdate(songId, {
+        $inc: { saveCount: -1 },
+      });
+    } catch (error: any) {
+      logger.error("Error decrementing save count:", error);
+      throw error;
+    }
+  }
+
   async incrementViewCount(songId: string): Promise<void> {
     try {
       await CopyrightFreeSong.findByIdAndUpdate(songId, {
@@ -196,53 +218,6 @@ export class CopyrightFreeSongService {
     const v = song.viewCount ?? 0;
     const l = song.likeCount ?? 0;
     return Math.max(v, l);
-  }
-
-  /**
-   * Track playback and increment view count if threshold is met (30 seconds)
-   * This is called when playback ends
-   */
-  async trackPlayback(
-    songId: string,
-    playbackDuration: number,
-    thresholdSeconds: number = 30
-  ): Promise<{ viewCountIncremented: boolean; newViewCount: number }> {
-    try {
-      const song = await CopyrightFreeSong.findById(songId);
-      if (!song) {
-        throw new Error("Song not found");
-      }
-
-      let viewCountIncremented = false;
-
-      // Only increment view count if user listened for at least threshold seconds
-      if (playbackDuration >= thresholdSeconds) {
-        await CopyrightFreeSong.findByIdAndUpdate(songId, {
-          $inc: { viewCount: 1 },
-        });
-        viewCountIncremented = true;
-      }
-
-      // Get updated view count
-      const updatedSong = await CopyrightFreeSong.findById(songId).select("viewCount").lean() as { viewCount?: number } | null;
-      const newViewCount = updatedSong?.viewCount ?? song.viewCount;
-
-      logger.info("Playback tracked for copyright-free song", {
-        songId,
-        playbackDuration,
-        thresholdSeconds,
-        viewCountIncremented,
-        newViewCount,
-      });
-
-      return {
-        viewCountIncremented,
-        newViewCount,
-      };
-    } catch (error: any) {
-      logger.error("Error tracking playback:", error);
-      throw error;
-    }
   }
 
   /**

@@ -9,6 +9,9 @@
     "start": "node dist/index.js",
     "seed-cities": "ts-node src/scripts/seedStateCities.ts",
     "test": "jest",
+    "test:engagement": "jest --testPathPattern=engagement",
+    "migrate:likes": "node scripts/migrate-interaction-likes-to-like.js",
+    "migrate:likes:dry": "node scripts/migrate-interaction-likes-to-like.js --dry-run",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
@@ -31,7 +34,9 @@
     "worker:dev": "ts-node src/workers/index.ts",
     "worker:start": "node dist/workers/index.js",
     "loadtest": "artillery run artillery.yml",
-    "test:redis": "node scripts/test-redis-connection.js"
+    "test:redis": "node scripts/test-redis-connection.js",
+    "smoke:engagement": "node scripts/smoke-engagement.js",
+    "fix:like-counts": "node scripts/fix-negative-like-counts.js"
   },
   "keywords": [
     "gospel",
@@ -75,6 +80,7 @@
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0",
+    "kafkajs": "^2.2.4",
     "microsoft-cognitiveservices-speech-sdk": "^1.47.0",
     "mongoose": "^8.15.0",
     "multer": "^2.0.1",

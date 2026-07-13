@@ -4,6 +4,7 @@ import { Interaction } from "../models/interaction.model";
 import mongoose, { Types } from "mongoose";
 import logger from "../utils/logger";
 import { redisRateLimit } from "../lib/redisRateLimit";
+import likeService from "../modules/engagement/like/like.service";
 import { incrPostCounter } from "../lib/redisCounters";
 
 /**
@@ -63,51 +64,26 @@ export const likeForumPost = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Check if user already liked this post
-    const existingLike = await Interaction.findOne({
-      user: userId,
-      media: new Types.ObjectId(postId),
-      interactionType: "like",
+    const result = await likeService.toggleLikeFast(userId!, postId, "forum_post");
+    likeService.toggleLike(userId!, postId, "forum_post").catch(err => {
+      logger.error("Background forum like sync failed", { error: err.message, postId, userId });
     });
 
-    let liked: boolean;
-    let likeCount: number;
-
-    if (existingLike) {
-      // Unlike - remove the interaction
-      await Interaction.findByIdAndDelete(existingLike._id);
-      liked = false;
-      post.likesCount = Math.max(0, (post.likesCount || 0) - 1);
-      await post.save();
-      likeCount = post.likesCount || 0;
-      incrPostCounter({ postId, field: "likes", delta: -1 }).catch(() => { });
-    } else {
-      // Like - create new interaction
-      await Interaction.create({
-        user: userId,
-        media: new Types.ObjectId(postId),
-        interactionType: "like",
-        lastInteraction: new Date(),
-        count: 1,
-      });
-      liked = true;
-      post.likesCount = (post.likesCount || 0) + 1;
-      await post.save();
-      likeCount = post.likesCount || 0;
-      incrPostCounter({ postId, field: "likes", delta: 1 }).catch(() => { });
-    }
-
-    logger.info("Forum post like toggled", { postId, userId, liked, likeCount });
+    logger.info("Forum post like toggled", { postId, userId, liked: result.liked, likeCount: result.likeCount });
 
     res.status(200).json({
       success: true,
       data: {
-        liked,
-        likesCount: likeCount,
+        liked: result.liked,
+        likesCount: result.likeCount,
       },
     });
   } catch (error: any) {
     logger.error("Error toggling forum post like", { error: error.message, postId: req.params.postId });
+    if (error.message?.includes("Too many")) {
+      res.status(429).json({ success: false, error: error.message });
+      return;
+    }
     res.status(500).json({ success: false, error: "Failed to toggle like" });
   }
 };
@@ -508,49 +484,28 @@ export const likeForumComment = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Check if user already liked this comment
-    const existingLike = await Interaction.findOne({
-      user: userId,
-      media: new Types.ObjectId(commentId),
-      interactionType: "like",
+    const result = await likeService.toggleLikeFast(userId!, commentId, "forum_comment");
+    likeService.toggleLike(userId!, commentId, "forum_comment").catch((err: Error) => {
+      logger.error("Background forum comment like sync failed", { error: err.message, commentId, userId });
     });
 
-    let liked: boolean;
-    let likesCount: number;
+    const likesCount = await likeService.getLikeCountFromDB(commentId, "forum_comment");
 
-    if (existingLike) {
-      // Unlike - remove the interaction
-      await Interaction.findByIdAndDelete(existingLike._id);
-      liked = false;
-    } else {
-      // Like - create new interaction
-      await Interaction.create({
-        user: userId,
-        media: new Types.ObjectId(commentId),
-        interactionType: "like",
-        lastInteraction: new Date(),
-        count: 1,
-      });
-      liked = true;
-    }
-
-    // Get current likes count
-    likesCount = await Interaction.countDocuments({
-      media: new Types.ObjectId(commentId),
-      interactionType: "like",
-    });
-
-    logger.info("Forum comment like toggled", { commentId, userId, liked, likesCount });
+    logger.info("Forum comment like toggled", { commentId, userId, liked: result.liked, likesCount });
 
     res.status(200).json({
       success: true,
       data: {
-        liked,
-        likesCount: likesCount,
+        liked: result.liked,
+        likesCount,
       },
     });
   } catch (error: any) {
     logger.error("Error toggling forum comment like", { error: error.message, commentId: req.params.commentId });
+    if (error.message?.includes("Too many")) {
+      res.status(429).json({ success: false, error: error.message });
+      return;
+    }
     res.status(500).json({ success: false, error: "Failed to toggle like" });
   }
 };

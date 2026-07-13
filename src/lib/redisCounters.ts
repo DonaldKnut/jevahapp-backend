@@ -22,15 +22,26 @@ export async function incrPostCounter(params: {
   return await redisSafe<number | null>(
     "counterIncr",
     async (r) => {
-      const next = await r.incrby(key, delta);
-      // Set TTL on first increment (24 hours)
+      const raw = await r.incrby(key, delta);
+      let next = typeof raw === "number" ? raw : Number(raw);
+      // Never allow negative counters (unlike when Redis/DB state was out of sync)
+      if (next < 0) {
+        await r.set(key, 0);
+        next = 0;
+      }
       if (delta > 0) {
         await r.expire(key, 86400).catch(() => { });
       }
-      return typeof next === "number" ? next : Number(next);
+      return next;
     },
     null
   );
+}
+
+/** Clamp engagement counts for API responses and analytics payloads */
+export function clampCount(value: number | null | undefined): number {
+  if (value == null || Number.isNaN(value)) return 0;
+  return Math.max(0, Math.floor(value));
 }
 
 export async function getPostCounter(params: {

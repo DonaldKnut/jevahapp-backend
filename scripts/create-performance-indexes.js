@@ -95,10 +95,69 @@ async function createPerformanceIndexes() {
       console.log(`   ⚠️  Library index error: ${error.message}`);
     }
 
+    // Engagement collection indexes
+    console.log("❤️  Creating engagement indexes...");
+    try {
+      await db.collection("likes").createIndexes([
+        { key: { contentId: 1, userId: 1 }, unique: true, name: "content_user_unique" },
+        { key: { contentType: 1, contentId: 1 }, name: "type_content" },
+        { key: { userId: 1, createdAt: -1 }, name: "user_recent" },
+      ]);
+      await db.collection("viewevents").createIndexes([
+        { key: { contentType: 1, contentId: 1, viewedAt: -1 }, name: "content_viewed" },
+        {
+          key: { userId: 1, contentType: 1, contentId: 1, windowKey: 1 },
+          unique: true,
+          partialFilterExpression: { userId: { $type: "objectId" } },
+          name: "user_view_dedupe",
+        },
+      ]);
+      await db.collection("shareevents").createIndexes([
+        { key: { userId: 1, contentId: 1 }, name: "user_content" },
+        { key: { contentId: 1, contentType: 1 }, name: "content_type" },
+      ]);
+      await db.collection("copyrightfreesonginteractions").createIndexes([
+        { key: { userId: 1, songId: 1 }, unique: true, name: "user_song_unique" },
+        { key: { songId: 1 }, name: "song_index" },
+      ]);
+      await db.collection("bookmarks").createIndexes([
+        { key: { user: 1, media: 1 }, unique: true, name: "user_media_unique" },
+        { key: { user: 1, createdAt: -1 }, name: "user_recent" },
+      ]);
+      console.log("   ✅ Engagement indexes created");
+    } catch (error) {
+      console.log(`   ⚠️  Engagement index error: ${error.message}`);
+    }
+
+    // Clamp negative like counts (repair stale analytics / Redis drift)
+    console.log("🔧 Repairing negative like counts...");
+    try {
+      const media = db.collection("media");
+      const cf = db.collection("copyrightfreesongs");
+      const r1 = await media.updateMany({ totalLikes: { $lt: 0 } }, [{ $set: { totalLikes: 0 } }]);
+      const r2 = await media.updateMany({ likeCount: { $lt: 0 } }, [{ $set: { likeCount: 0 } }]);
+      const r3 = await cf.updateMany({ likeCount: { $lt: 0 } }, [{ $set: { likeCount: 0 } }]);
+      const fixed = (r1.modifiedCount || 0) + (r2.modifiedCount || 0) + (r3.modifiedCount || 0);
+      console.log(`   ✅ Repaired ${fixed} document(s) with negative like counts`);
+    } catch (error) {
+      console.log(`   ⚠️  Repair error: ${error.message}`);
+    }
+
     console.log("\n✅ All performance indexes created successfully!");
     console.log("\n📊 Index Summary:");
     
-    const collections = ["media", "users", "polls", "forums", "libraries"];
+    const collections = [
+      "media",
+      "users",
+      "polls",
+      "forums",
+      "libraries",
+      "likes",
+      "viewevents",
+      "shareevents",
+      "copyrightfreesonginteractions",
+      "bookmarks",
+    ];
     for (const collectionName of collections) {
       try {
         const indexes = await db.collection(collectionName).indexes();

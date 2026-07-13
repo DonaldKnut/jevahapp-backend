@@ -5,6 +5,7 @@ export interface ICopyrightFreeSongInteraction extends Document {
   songId: mongoose.Types.ObjectId;
   hasLiked: boolean;
   hasShared: boolean;
+  hasSaved: boolean;
   hasViewed: boolean;
   // View engagement metrics (for analytics)
   durationMs?: number; // Total listening duration in milliseconds
@@ -35,6 +36,10 @@ const interactionSchema = new Schema<ICopyrightFreeSongInteraction>(
       default: false,
     },
     hasShared: {
+      type: Boolean,
+      default: false,
+    },
+    hasSaved: {
       type: Boolean,
       default: false,
     },

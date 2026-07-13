@@ -227,6 +227,11 @@ export class JevahClient {
     mediaId: string,
     interaction: InteractionRequest
   ): Promise<ApiResponse> {
+    if (interaction.interactionType === "like") {
+      return this.request<ApiResponse>(`/api/content/media/${mediaId}/like`, {
+        method: "POST",
+      });
+    }
     return this.request<ApiResponse>(`/api/media/${mediaId}/interact`, {
       method: "POST",
       body: JSON.stringify(interaction),
@@ -237,9 +242,52 @@ export class JevahClient {
     mediaId: string,
     viewData: TrackViewRequest
   ): Promise<ApiResponse> {
-    return this.request<ApiResponse>(`/api/media/${mediaId}/track-view`, {
+    return this.request<ApiResponse>(`/api/content/media/${mediaId}/view`, {
       method: "POST",
       body: JSON.stringify(viewData),
+    });
+  }
+
+  async toggleContentLike(
+    contentType: string,
+    contentId: string
+  ): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/content/${contentType}/${contentId}/like`, {
+      method: "POST",
+    });
+  }
+
+  async recordContentView(
+    contentType: string,
+    contentId: string,
+    viewData: TrackViewRequest
+  ): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/content/${contentType}/${contentId}/view`, {
+      method: "POST",
+      body: JSON.stringify(viewData),
+    });
+  }
+
+  async getContentMetadata(
+    contentType: string,
+    contentId: string
+  ): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/content/${contentType}/${contentId}/metadata`);
+  }
+
+  async getBatchContentMetadata(
+    contentIds: string[],
+    contentType = "media"
+  ): Promise<ApiResponse> {
+    return this.request<ApiResponse>("/api/content/batch-metadata", {
+      method: "POST",
+      body: JSON.stringify({ contentIds, contentType }),
+    });
+  }
+
+  async toggleBookmark(contentId: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/bookmark/${contentId}/toggle`, {
+      method: "POST",
     });
   }
 

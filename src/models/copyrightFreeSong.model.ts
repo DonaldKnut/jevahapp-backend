@@ -9,6 +9,7 @@ export interface ICopyrightFreeSong extends Document {
   category?: string; // Optional category for filtering (e.g., "Gospel Music", "Worship", "Praise")
   likeCount: number;
   shareCount: number;
+  saveCount: number;
   viewCount: number;
   duration?: number; // Optional duration in seconds
   createdAt: Date;
@@ -50,6 +51,10 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
       default: 0,
     },
     shareCount: {
+      type: Number,
+      default: 0,
+    },
+    saveCount: {
       type: Number,
       default: 0,
     },

@@ -12,7 +12,8 @@ import {
   type MediaProcessingJob,
 } from "../queues/queues";
 import { connectWorkerMongo } from "./bootstrap";
-import { AnalyticsEvent } from "../models/analyticsEvent.model";
+import { processEngagementEvent } from "../lib/processEngagementEvent";
+import { startEngagementKafkaConsumer } from "../lib/kafkaConsumer";
 import { Media } from "../models/media.model";
 
 /**
@@ -150,38 +151,7 @@ async function markMediaProcessing(
       });
 
       if (job.data.type === "event") {
-        // Persist event (TTL prevents unbounded growth)
-        await AnalyticsEvent.create({
-          name: job.data.name,
-          payload: job.data.payload,
-          requestId: (job.data.payload as any)?.requestId,
-          createdAt: new Date(),
-        });
-
-        // Lightweight aggregation updates to keep "total*" fields in sync for trending pipelines
-        const p: any = job.data.payload || {};
-
-        if (job.data.name === "media_interaction" && p.mediaId) {
-          if (p.interactionType === "view") {
-            await Media.findByIdAndUpdate(p.mediaId, { $inc: { totalViews: 1 } });
-          }
-          if (p.interactionType === "download") {
-            await Media.findByIdAndUpdate(p.mediaId, { $inc: { totalDownloads: 1 } });
-          }
-        }
-
-        if (job.data.name === "content_like_toggled" && p.contentType === "media" && p.contentId) {
-          // Store canonical likeCount
-          if (typeof p.likeCount === "number") {
-            await Media.findByIdAndUpdate(p.contentId, { $set: { totalLikes: p.likeCount } });
-          }
-        }
-
-        if (job.data.name === "content_shared" && p.contentType === "media" && p.contentId) {
-          if (typeof p.shareCount === "number") {
-            await Media.findByIdAndUpdate(p.contentId, { $set: { totalShares: p.shareCount } });
-          }
-        }
+        await processEngagementEvent(job.data.name, job.data.payload || {});
       }
 
       logger.info("analytics job completed", {
@@ -211,6 +181,8 @@ async function markMediaProcessing(
     queues: [QUEUE_NAMES.MEDIA_PROCESSING, QUEUE_NAMES.ANALYTICS],
     ffprobeAvailable,
   });
+
+  await startEngagementKafkaConsumer();
 })().catch((err: any) => {
   logger.error("Worker bootstrap failed", { error: err?.message, stack: err?.stack });
   process.exit(1);
