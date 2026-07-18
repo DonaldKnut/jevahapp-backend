@@ -3,13 +3,17 @@
 Canonical engagement for **feed media** uses `/api/content/*`.  
 **Copyright-free music** uses `/api/audio/copyright-free/*` (separate stack).
 
+**Frontend integration (UI patterns, optimistic updates, player wiring):** [FRONTEND_ENGAGEMENT.md](./FRONTEND_ENGAGEMENT.md)
+
 ---
 
 ## Feed media (video, audio, ebooks in main feed)
 
 ### Content types
 
-`media`, `artist`, `merch`, `ebook`, `podcast`, `devotional` (devotional likes use `/api/devotionals/:id/like`)
+Canonical like types: `media`, `artist`, `merch`, `ebook`, `podcast`, `devotional`.
+
+Feed path aliases normalize to `media` for likes/metadata: `video`, `videos`, `audio`, `music`, `live`, `sermon`, `sermons`, `teachings` (plus transitional `ebook`/`podcast` → Media collection). Exact `devotional` stays on the Devotional collection (also available at `/api/devotionals/:id/like`).
 
 ### Endpoints
 
@@ -57,35 +61,84 @@ Canonical engagement for **feed media** uses `/api/content/*`.
 
 ### Like response
 
+Media likes are **durable-before-200**: the handler awaits the Mongo Like row + `Media.likeCount` commit, then refreshes Redis and emits sockets. Redis is a post-commit cache, not the write authority.
+
 ```json
 {
   "success": true,
+  "message": "Content liked",
   "data": {
+    "contentId": "69abf4886aef561f683a1a32",
+    "contentType": "media",
     "liked": true,
     "likeCount": 10,
-    "contentId": "..."
+    "updatedAt": "2026-07-18T06:40:00.000Z"
   }
 }
 ```
 
-### Metadata response
+- `liked` = post-mutation state for the JWT user (never inferred from `likeCount`)
+- `likeCount` = global active likes (may stay `> 0` when `liked: false`)
+- Missing Media → `404` `CONTENT_NOT_FOUND` (no mutation)
+- Invalid type/id → `400` with `INVALID_CONTENT_TYPE` / `INVALID_CONTENT_ID`
+- Optional header `Idempotency-Key` (**UUID required** when present): retries replay the stored response (no double-toggle). Malformed key → `400 INVALID_IDEMPOTENCY_KEY`. Same key + different request → `409 IDEMPOTENCY_CONFLICT`. Redis down with key present → `503 IDEMPOTENCY_UNAVAILABLE` (not fail-open). Replays do not consume the rate-limit window.
+- Distributed rate limit (Contabo Redis): ~4 toggles / 10s / content / user, 60 / min / user → `429 LIKE_RATE_LIMITED` + `Retry-After` (no mutation)
+- Authoritative Redis for counters / idempotency / rate limits: `REDIS_URL` (ioredis). See [REDIS_OPS.md](./REDIS_OPS.md)
+
+**Deferred:** desired-state `PUT`/`DELETE` like API, full artist/merch rewrite.
+
+### Save (bookmark) response
 
 ```json
 {
   "success": true,
   "data": {
-    "stats": { "likes": 10, "saves": 2, "shares": 1, "views": 42, "comments": 5 },
-    "userInteraction": {
-      "liked": true,
-      "saved": false,
-      "shared": false,
-      "viewed": true
-    }
+    "contentId": "…",
+    "bookmarked": true,
+    "isBookmarked": true,
+    "bookmarkCount": 4,
+    "saves": 4
   }
 }
 ```
 
-### Batch metadata body
+`bookmarked` / `isBookmarked` and `bookmarkCount` / `saves` are aliases (post-toggle state + count).
+
+Body (optional): `{ "contentType": "media" }` — aliases like `videos`, `video`, `sermon`, `audio` map to Media. Copyright-free must use `/api/audio/copyright-free/:songId/save`.
+
+Legacy fallback (same handler): `POST /api/media/interactions/:id/save`.
+
+**Library list:** `GET /api/bookmark/user` → `data.bookmarks`.
+
+---
+
+### Feed list user flags
+
+Authenticated `GET /api/media/all-content` overlays per-user:
+
+```json
+{
+  "hasLiked": true,
+  "hasBookmarked": false,
+  "userInteractions": { "liked": true, "saved": false }
+}
+```
+
+Flags are computed **after** Redis feed cache read so they stay correct per JWT.
+
+---
+
+### Bookmark vs like — important
+
+Media likes and bookmarks both verify Media existence before mutating. If one returns `404` and the other does not, re-fetch the feed — the ID may be stale in a cached list, not a different collection.
+
+---
+
+### For You feed (`GET /api/feed/for-you`)
+
+Not shipped yet. Client-side ranking (`rankFeedForYou`) remains source of truth until watch_time ingestion + server ranking land.
+
+---
 
 ```json
 {

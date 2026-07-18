@@ -102,10 +102,8 @@ export async function handleMediaReaction(
     const { mediaId, actionType } = data;
 
     if (actionType === "like") {
-      const result = await likeService.toggleLikeFast(user.userId, mediaId, "media");
-      likeService.toggleLike(user.userId, mediaId, "media").catch(err => {
-        logger.error("Socket background like sync failed", { error: err.message, mediaId });
-      });
+      // Durable toggle — same authority as HTTP (no Redis-first optimistic mutation)
+      const result = await likeService.toggleLike(user.userId, mediaId, "media");
 
       ctx.io.to(`media:${mediaId}`).emit("media-reaction", {
         mediaId,
@@ -152,18 +150,7 @@ export async function handleContentReaction(
     const { contentId, contentType, actionType } = data;
 
     if (actionType === "like") {
-      const result = await likeService.toggleLikeFast(
-        user.userId,
-        contentId,
-        contentType
-      );
-      likeService.toggleLike(user.userId, contentId, contentType).catch(err => {
-        logger.error("Socket background like sync failed", {
-          error: err.message,
-          contentId,
-          contentType,
-        });
-      });
+      const result = await likeService.toggleLike(user.userId, contentId, contentType);
 
       const content = await getContentById(contentId, contentType);
 

@@ -61,6 +61,7 @@ export const verifyToken = async (
         
         // Attach user info
         req.userId = refreshResult.user.id.toString();
+        req.userRole = user.role;
         req.user = {
           role: user.role,
           isVerifiedCreator: user.isVerifiedCreator,
@@ -181,6 +182,7 @@ export const verifyToken = async (
     }
 
     // Attach the user object for role checks
+    req.userRole = user.role;
     req.user = {
       role: user.role,
       isVerifiedCreator: user.isVerifiedCreator,

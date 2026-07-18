@@ -19,8 +19,11 @@ NODE_ENV=production
 PORT=4000
 FRONTEND_URL=https://your-frontend.com
 
-# Redis (required for production engagement performance)
-REDIS_URL=redis://...
+# Redis (authoritative for likes / rate limits / idempotency — Contabo ioredis)
+REDIS_URL=redis://127.0.0.1:6379
+
+# PM2 cluster / multi-instance only:
+# SOCKET_REDIS_ADAPTER=true
 
 # Optional: Kafka event bus (BullMQ still runs without it)
 KAFKA_BROKERS=localhost:9092
@@ -39,9 +42,15 @@ npm run build
 npm run indexes:create
 npm run migrate:likes:dry    # review first
 npm run migrate:likes        # if legacy Interaction likes exist
+npm run migrate:like-indexes:dry   # Atlas Like unique index migration
+npm run migrate:like-indexes
+npm run cleanup:notification-dedupe:dry
+npm run cleanup:notification-dedupe
 npm run start                # API
 npm run worker:start         # separate process
 ```
+
+See [REDIS_OPS.md](./REDIS_OPS.md) for Contabo Redis binding, Socket.IO adapter, engagement metrics, and integration-test commands.
 
 ## Docker (Kafka optional)
 
@@ -75,13 +84,14 @@ npm run seed:forums
 ## Horizontal scaling notes
 
 - Run **one worker fleet** (or scale workers with same `KAFKA_CONSUMER_GROUP`)
-- Use **Redis-backed rate limiting** before scaling API to multiple pods (in-memory limits are per-instance)
+- Like route uses **Redis-backed per-user rate limiting** + `Idempotency-Key` (works across PM2 workers)
 - Raise `MONGODB_POOL_SIZE` when running multiple API instances
-- Socket.IO: use Redis adapter for multi-node (not configured by default)
+- Socket.IO: set `SOCKET_REDIS_ADAPTER=true` for PM2 cluster / multi-node
 
 ## Monitoring
 
 - BullMQ queue depth (analytics jobs)
 - Kafka consumer lag (if enabled)
 - MongoDB connection pool utilization
-- Redis connectivity (fail-open without Redis, but likes slow down)
+- Redis connectivity (fail-open without Redis; Mongo remains source of truth)
+- Engagement counters on `GET /api/metrics` (`idempotencyHits`, `rateLimitRejections`, …)

@@ -281,7 +281,9 @@ export class JevahClient {
   ): Promise<ApiResponse> {
     return this.request<ApiResponse>("/api/content/batch-metadata", {
       method: "POST",
-      body: JSON.stringify({ contentIds, contentType }),
+      body: JSON.stringify({
+        items: contentIds.map(contentId => ({ contentType, contentId })),
+      }),
     });
   }
 
@@ -289,6 +291,37 @@ export class JevahClient {
     return this.request<ApiResponse>(`/api/bookmark/${contentId}/toggle`, {
       method: "POST",
     });
+  }
+
+  // ===== COPYRIGHT-FREE MUSIC =====
+
+  async toggleCopyrightFreeLike(songId: string): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/audio/copyright-free/${songId}/like`, {
+      method: "POST",
+    });
+  }
+
+  async shareCopyrightFreeSong(
+    songId: string,
+    shareData: { platform?: string } = {}
+  ): Promise<ApiResponse> {
+    return this.request<ApiResponse>(`/api/audio/copyright-free/${songId}/share`, {
+      method: "POST",
+      body: JSON.stringify(shareData),
+    });
+  }
+
+  async recordCopyrightFreeView(
+    songId: string,
+    viewData: RecordViewRequest = {}
+  ): Promise<ApiResponse<RecordViewResponse>> {
+    return this.request<ApiResponse<RecordViewResponse>>(
+      `/api/audio/copyright-free/${songId}/view`,
+      {
+        method: "POST",
+        body: JSON.stringify(viewData),
+      }
+    );
   }
 
   async getActionStatus(mediaId: string): Promise<ApiResponse> {

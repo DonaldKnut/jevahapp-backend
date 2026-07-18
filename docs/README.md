@@ -6,9 +6,13 @@ Last updated: July 2026 (post-modularization refactor)
 
 1. **[API.md](./API.md)** — All REST endpoints by domain
 2. **[ENGAGEMENT.md](./ENGAGEMENT.md)** — Feed media vs copyright-free; request/response contracts
-3. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
-4. **[WEBSOCKETS.md](./WEBSOCKETS.md)** — Real-time events
-5. **[DEPRECATED.md](./DEPRECATED.md)** — Routes to stop using
+3. **[FRONTEND_ENGAGEMENT.md](./FRONTEND_ENGAGEMENT.md)** — How to consume engagement in the UI (likes, views, shares, comments)
+4. **[ADMIN.md](./ADMIN.md)** — Admin dashboard API (reports, moderation, verification, bans)
+5. **[FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md)** — Admin UI screen recipes and action maps
+6. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
+7. **[REDIS_OPS.md](./REDIS_OPS.md)** — Contabo Redis binding, like hot path, Socket.IO adapter, metrics
+8. **[WEBSOCKETS.md](./WEBSOCKETS.md)** — Real-time events
+9. **[DEPRECATED.md](./DEPRECATED.md)** — Routes to stop using
 
 ## Authentication
 

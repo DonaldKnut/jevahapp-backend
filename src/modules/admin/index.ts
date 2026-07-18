@@ -1,8 +1,7 @@
 /**
- * Admin module: admin actions, dashboard, logs
+ * Admin module: dashboard, reports, verification, logs
  */
 import { Router } from "express";
-import adminRoutes from "../../routes/admin.routes";
 import adminDashboardRoutes from "../../routes/adminDashboard.routes";
 import logsRoutes from "../../routes/logs.routes";
 
@@ -12,7 +11,6 @@ export interface Mount {
 }
 
 export const mounts: Mount[] = [
-  { path: "/api/admin", router: adminRoutes },
   { path: "/api/admin", router: adminDashboardRoutes },
   { path: "/api/logs", router: logsRoutes },
 ];

@@ -37,6 +37,7 @@ router.post(
 router.get(
   "/:id/reports",
   verifyToken,
+  requireAdmin,
   apiRateLimiter,
   getMediaReports
 );
@@ -51,6 +52,7 @@ router.get(
 router.get(
   "/reports/pending",
   verifyToken,
+  requireAdmin,
   apiRateLimiter,
   getAllPendingReports
 );
@@ -66,6 +68,7 @@ router.get(
 router.post(
   "/reports/:reportId/review",
   verifyToken,
+  requireAdmin,
   apiRateLimiter,
   reviewReport
 );

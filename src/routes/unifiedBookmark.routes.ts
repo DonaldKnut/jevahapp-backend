@@ -19,49 +19,9 @@ const router = Router();
  *     tags: [Bookmark]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: mediaId
- *         required: true
- *         schema:
- *           type: string
- *         description: Media ID to toggle bookmark
- *     responses:
- *       200:
- *         description: Bookmark status toggled successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     bookmarked:
- *                       type: boolean
- *                     bookmarkCount:
- *                       type: number
- *       400:
- *         description: Invalid media ID
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: Media not found
- *       500:
- *         description: Internal server error
  */
-// Support both :mediaId and :contentId for frontend compatibility
+// Controller accepts :mediaId or :contentId param names
 router.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
-// Alias route for frontend spec compatibility (contentId = mediaId)
-router.post("/:contentId/toggle", verifyToken, apiRateLimiter, async (req, res) => {
-  req.params.mediaId = req.params.contentId;
-  delete req.params.contentId;
-  await toggleBookmark(req, res);
-});
 
 /**
  * @swagger
@@ -71,45 +31,8 @@ router.post("/:contentId/toggle", verifyToken, apiRateLimiter, async (req, res) 
  *     tags: [Bookmark]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: mediaId
- *         required: true
- *         schema:
- *           type: string
- *         description: Media ID to check
- *     responses:
- *       200:
- *         description: Bookmark status retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     isBookmarked:
- *                       type: boolean
- *                     bookmarkCount:
- *                       type: number
- *       400:
- *         description: Invalid media ID
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Internal server error
  */
 router.get("/:mediaId/status", verifyToken, apiRateLimiter, getBookmarkStatus);
-// Alias route for frontend spec compatibility (contentId = mediaId)
-router.get("/:contentId/status", verifyToken, apiRateLimiter, async (req, res) => {
-  req.params.mediaId = req.params.contentId;
-  delete req.params.contentId;
-  await getBookmarkStatus(req, res);
-});
-
 /**
  * @swagger
  * /api/bookmark/user:

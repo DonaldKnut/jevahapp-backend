@@ -28,7 +28,8 @@ router.get(
   listDevotionals
 );
 
-// Like or unlike a devotional
+// Like or unlike a devotional (canonical + legacy path)
+router.post("/:id/like", verifyToken, interactionRateLimiter, likeDevotional);
 router.post(
   "/devotionals/:id/like",
   verifyToken,

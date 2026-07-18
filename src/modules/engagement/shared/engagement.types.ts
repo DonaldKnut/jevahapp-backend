@@ -63,8 +63,12 @@ export type ShareContentType = (typeof SHARE_CONTENT_TYPES)[number];
 
 export interface LikeToggleResult {
   contentId: string;
+  contentType?: string;
   liked: boolean;
   likeCount: number;
+  updatedAt?: string;
+  /** Active Like document id when liked — used for notification dedupe */
+  likeId?: string;
 }
 
 export interface ShareResult {

@@ -207,6 +207,8 @@ const viewService = {
       const io = require("../../../socket/socketManager").getIO();
       if (io) {
         const payload = { contentId, contentType, viewCount, timestamp: new Date().toISOString() };
+        const room = `content:${contentType}:${contentId}`;
+        io.to(room).emit("view-updated", payload);
         io.to(`content:${contentId}`).emit("view-updated", payload);
         io.emit("content:viewCountUpdated", payload);
       }

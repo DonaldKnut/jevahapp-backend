@@ -8,6 +8,7 @@ import {
   emailRateLimiter,
 } from "../middleware/rateLimiter";
 import { asyncHandler } from "../utils/asyncHandler";
+import { requireAdmin } from "../middleware/role.middleware";
 
 // Initialize Express router for authentication-related endpoints
 const router = Router();
@@ -220,6 +221,7 @@ router.post(
 router.post(
   "/artist/:userId/verify",
   verifyToken,
+  requireAdmin,
   asyncHandler(authController.verifyArtist)
 );
 

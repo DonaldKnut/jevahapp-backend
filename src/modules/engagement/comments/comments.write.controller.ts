@@ -5,6 +5,7 @@ import logger from "../../../utils/logger";
 import { publishEngagementEvent } from "../../../lib/engagementEvents";
 import { ReportReason } from "../../../models/mediaReport.model";
 import { notifyAdminsOfCommentReport } from "./comment.reportNotify";
+import { resolveCommentContentType } from "../shared/contentType.resolver";
 
 const COMMENT_CONTENT_TYPES = ["media", "devotional", "ebook", "podcast"] as const;
 
@@ -40,7 +41,7 @@ export const addContentComment = async (req: Request, res: Response): Promise<vo
     const comment = await commentService.addComment(
       userId,
       contentId,
-      contentType,
+      resolveCommentContentType(contentType),
       content,
       parentCommentId
     );

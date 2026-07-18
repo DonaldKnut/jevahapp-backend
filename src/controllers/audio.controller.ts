@@ -501,14 +501,15 @@ export const likeCopyrightFreeSong = async (
 
     const result = await likeService.toggleLike(userId, songId, "copyright_free_song");
 
-    // Get updated song with all counts
-    const { Media } = await import("../models/media.model");
-    const song: any = await Media.findById(songId)
-      .select("likeCount viewCount listenCount")
+    const { CopyrightFreeSong } = await import("../models/copyrightFreeSong.model");
+    const { CopyrightFreeSongService } = await import("../service/copyrightFreeSong.service");
+    const song: any = await CopyrightFreeSong.findById(songId)
+      .select("likeCount viewCount")
       .lean();
 
-    const viewCount = song?.viewCount || 0;
-    const listenCount = song?.listenCount || 0;
+    const likeCount = song?.likeCount ?? result.likeCount;
+    const viewCount = CopyrightFreeSongService.normalizedViewCount(song ?? { likeCount });
+    const listenCount = 0;
 
     // Emit additional real-time event specifically for audio/copyright-free songs
     try {
@@ -518,7 +519,7 @@ export const likeCopyrightFreeSong = async (
         io.to(`content:media:${songId}`).emit("audio-like-updated", {
           songId,
           liked: result.liked,
-          likeCount: result.likeCount,
+          likeCount,
           viewCount,
           listenCount,
           userId,
@@ -529,7 +530,7 @@ export const likeCopyrightFreeSong = async (
         io.to(`audio:copyright-free:${songId}`).emit("like-updated", {
           songId,
           liked: result.liked,
-          likeCount: result.likeCount,
+          likeCount,
           viewCount,
           listenCount,
           userId,
@@ -548,7 +549,7 @@ export const likeCopyrightFreeSong = async (
       message: result.liked ? "Song liked successfully" : "Song unliked",
       data: {
         liked: result.liked,
-        likeCount: result.likeCount,
+        likeCount,
         viewCount,
         listenCount,
       },

@@ -236,15 +236,6 @@ export const getMediaReports = async (
 ): Promise<void> => {
   try {
     const { id } = request.params;
-    const userRole = request.userRole;
-
-    if (userRole !== "admin") {
-      response.status(403).json({
-        success: false,
-        message: "Forbidden: Admin access required",
-      });
-      return;
-    }
 
     if (!Types.ObjectId.isValid(id)) {
       response.status(400).json({
@@ -283,16 +274,6 @@ export const getAllPendingReports = async (
   response: Response
 ): Promise<void> => {
   try {
-    const userRole = request.userRole;
-
-    if (userRole !== "admin") {
-      response.status(403).json({
-        success: false,
-        message: "Forbidden: Admin access required",
-      });
-      return;
-    }
-
     const page = parseInt(request.query.page as string) || 1;
     const limit = parseInt(request.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -336,15 +317,6 @@ export const reviewReport = async (
     const { reportId } = request.params;
     const { status, adminNotes } = request.body;
     const userId = request.userId;
-    const userRole = request.userRole;
-
-    if (userRole !== "admin") {
-      response.status(403).json({
-        success: false,
-        message: "Forbidden: Admin access required",
-      });
-      return;
-    }
 
     if (!Types.ObjectId.isValid(reportId)) {
       response.status(400).json({
@@ -380,12 +352,36 @@ export const reviewReport = async (
     }
     await report.save();
 
-    // If resolved, update media moderation status
+    // If resolved, update media moderation status and notify uploader
     if (status === "resolved") {
-      await Media.findByIdAndUpdate(report.mediaId, {
-        moderationStatus: "rejected",
-        isHidden: true,
-      });
+      const media = await Media.findByIdAndUpdate(
+        report.mediaId,
+        {
+          moderationStatus: "rejected",
+          isHidden: true,
+        },
+        { new: true }
+      );
+
+      if (media?.uploadedBy) {
+        try {
+          await NotificationService.createNotification({
+            userId: media.uploadedBy.toString(),
+            type: "content_moderation",
+            title: "Content Removed",
+            message: `Your content "${media.title}" was removed after policy review.`,
+            metadata: {
+              mediaId: media._id.toString(),
+              contentType: media.contentType,
+              reason: adminNotes || "Report resolved",
+            },
+            priority: "high",
+            relatedId: media._id.toString(),
+          });
+        } catch (notifError) {
+          logger.error("Failed to notify uploader after report resolve:", notifError);
+        }
+      }
     }
 
     response.status(200).json({
@@ -413,15 +409,6 @@ export const deleteReportedMedia = async (
   try {
     const { id } = request.params;
     const userId = request.userId;
-    const userRole = request.userRole;
-
-    if (userRole !== "admin") {
-      response.status(403).json({
-        success: false,
-        message: "Forbidden: Admin access required",
-      });
-      return;
-    }
 
     if (!userId) {
       response.status(401).json({

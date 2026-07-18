@@ -10,6 +10,7 @@ import {
   getUserActionStatus,
   getMediaWithEngagement,
 } from "../../controllers/media.controller";
+import { toggleBookmark } from "../../controllers/unifiedBookmark.controller";
 import { verifyToken } from "../../middleware/auth.middleware";
 import {
   apiRateLimiter,
@@ -29,6 +30,23 @@ router.get(
   "/:mediaId/engagement",
   cacheMiddleware(60),
   getMediaWithEngagement
+);
+
+/**
+ * @deprecated Prefer POST /api/bookmark/:contentId/toggle
+ * Frontend fallback: POST /api/media/interactions/:id/save
+ */
+router.post(
+  "/interactions/:id/save",
+  verifyToken,
+  mediaInteractionRateLimiter,
+  deprecatedEndpoint("POST /api/bookmark/:contentId/toggle"),
+  async (req, res) => {
+    req.params.mediaId = req.params.id;
+    if (!req.body) (req as any).body = {};
+    if (!req.body.contentType) req.body.contentType = "media";
+    await toggleBookmark(req, res);
+  }
 );
 
 /**

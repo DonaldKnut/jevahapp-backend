@@ -1,30 +1,25 @@
-import { redisSafe } from "./redis";
+import { engagementRateLimitIncr } from "./engagementRedis";
 
 /**
- * Simple Redis-backed rate limiter (per key, fixed window).
- * Uses atomic INCR and sets EXPIRE on first hit.
- *
- * Redis is optional: if Redis is down, returns allowed=true (do not break UX).
+ * Redis-backed fixed-window rate limiter (engagement Redis / ioredis).
+ * Atomic INCR + PEXPIRE via Lua. Fail-open when Redis is down.
  */
 export async function redisRateLimit(params: {
   key: string;
   limit: number;
   windowSeconds: number;
-}): Promise<{ allowed: boolean; remaining: number }> {
+}): Promise<{
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+}> {
   const { key, limit, windowSeconds } = params;
+  const result = await engagementRateLimitIncr({ key, limit, windowSeconds });
 
-  return await redisSafe(
-    "rateLimit",
-    async (r) => {
-      const current = await r.incr(key);
-      if (current === 1) {
-        // First hit in this window → set TTL
-        await r.expire(key, windowSeconds);
-      }
-      const remaining = Math.max(0, limit - current);
-      return { allowed: current <= limit, remaining };
-    },
-    { allowed: true, remaining: limit }
-  );
+  if (!result) {
+    // Redis unavailable — do not break UX
+    return { allowed: true, remaining: limit, retryAfterSeconds: 0 };
+  }
+
+  return result;
 }
-

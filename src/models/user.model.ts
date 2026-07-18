@@ -188,6 +188,7 @@ export interface IUser {
 
   // Security and audit fields
   lastLoginAt?: Date;
+  lastSeenAt?: Date;
   lastLoginIp?: string;
   failedLoginAttempts?: number;
   accountLockedUntil?: Date;
@@ -426,6 +427,7 @@ const userSchema = new Schema<IUserDocument>(
 
     // Security and audit fields
     lastLoginAt: { type: Date },
+    lastSeenAt: { type: Date },
     lastLoginIp: { type: String },
     failedLoginAttempts: { type: Number, default: 0 },
     accountLockedUntil: { type: Date },

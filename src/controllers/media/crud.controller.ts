@@ -5,6 +5,7 @@ import cacheService from "../../service/cache.service";
 import { redisSafe } from "../../lib/redis";
 import logger from "../../utils/logger";
 import { SearchQueryParameters } from "./shared";
+import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlags";
 
 export const getAllMedia = async (
   request: Request,
@@ -135,27 +136,17 @@ export const getAllContentForAllTab = async (
     );
 
     if (cachedFeed && cachedFeed.media && Array.isArray(cachedFeed.media) && cachedFeed.media.length > 0) {
-      // Cache HIT: Return immediately without DB access
-      const duration = Date.now() - startTime;
-
-      // Optional: Fetch recommendations (non-blocking, can fail silently)
-      let recommendations: any = undefined;
-      if (userIdentifier) {
-        mediaService.getRecommendationsForAllContent(
-          userIdentifier,
-          {
-            limitPerSection: 12,
-            mood: (request.query?.mood as string) || undefined,
-          }
-        ).then(recs => {
-          // Recommendations are optional, don't block response
-        }).catch(() => { });
-      }
+      // Cache HIT: Return immediately without DB access for the list itself.
+      // Overlay per-user like/save flags (not cached — always fresh for this JWT).
+      const mediaWithFlags = await attachFeedUserInteractionFlags(
+        cachedFeed.media,
+        userIdentifier
+      );
 
       response.status(200).json({
         success: true,
         data: {
-          media: cachedFeed.media,
+          media: mediaWithFlags,
           pagination: cachedFeed.pagination,
         },
         ...(cachedFeed.recommendations && { recommendations: cachedFeed.recommendations }),
@@ -187,11 +178,16 @@ export const getAllContentForAllTab = async (
       }
     }
 
-    // Cache full feed response in Redis (async, non-blocking)
+    // Cache full feed response in Redis (async, non-blocking) — WITHOUT per-user flags
+    const mediaWithFlags = await attachFeedUserInteractionFlags(
+      result.media,
+      userIdentifier
+    );
+
     const responseData = {
       success: true,
       data: {
-        media: result.media,
+        media: mediaWithFlags,
         pagination: result.pagination,
       },
       ...(recommendations && { recommendations }),
@@ -202,7 +198,7 @@ export const getAllContentForAllTab = async (
       "feedSet",
       async (r) => {
         await r.set(feedKey, JSON.stringify({
-          media: result.media,
+          media: result.media, // store without user flags so one cache serves everyone
           pagination: result.pagination,
           recommendations,
         }), { ex: 600 }); // 10 minutes TTL

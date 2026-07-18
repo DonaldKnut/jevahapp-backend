@@ -2,6 +2,8 @@ import express from "express";
 import { verifyToken } from "../../middleware/auth.middleware";
 import { rateLimiter, apiRateLimiter } from "../../middleware/rateLimiter";
 import { verifyTokenOptional } from "../../middleware/optionalAuth.middleware";
+import { likeRateLimiter } from "../../middleware/likeRateLimiter.middleware";
+import { idempotencyMiddleware } from "../../middleware/idempotency.middleware";
 import {
   toggleContentLike,
   shareContent,
@@ -48,7 +50,9 @@ const contentRouter = express.Router();
 contentRouter.post(
   "/:contentType/:contentId/like",
   verifyToken,
-  interactionRateLimiter,
+  // Idempotency first: replays never consume rate-limit window
+  idempotencyMiddleware(),
+  likeRateLimiter,
   toggleContentLike
 );
 contentRouter.post(
@@ -91,10 +95,9 @@ contentRouter.post("/comments/:commentId/hide", verifyToken, hideContentComment)
 
 // ─── Save / Bookmark ─────────────────────────────────────────────────────────
 const saveRouter = express.Router();
+// Single pattern — controller reads mediaId OR contentId from params
 saveRouter.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
-saveRouter.post("/:contentId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
 saveRouter.get("/:mediaId/status", verifyToken, getBookmarkStatus);
-saveRouter.get("/:contentId/status", verifyToken, getBookmarkStatus);
 saveRouter.get("/user", verifyToken, getUserBookmarks);
 saveRouter.get("/:mediaId/stats", getBookmarkStats);
 saveRouter.post("/bulk", verifyToken, apiRateLimiter, bulkBookmark);

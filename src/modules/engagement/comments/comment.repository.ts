@@ -152,6 +152,59 @@ export const commentRepository = {
     ).select("_id");
   },
 
+  unhide(id: string) {
+    return Interaction.findByIdAndUpdate(
+      id,
+      {
+        $set: { isHidden: false },
+        $unset: { hiddenBy: 1, hiddenReason: 1 },
+      },
+      { new: true }
+    ).select("_id isHidden");
+  },
+
+  dismissReports(id: string) {
+    return Interaction.findByIdAndUpdate(
+      id,
+      {
+        $set: { reportCount: 0, reportedBy: [] },
+      },
+      { new: true }
+    ).select("_id reportCount");
+  },
+
+  async listReported(options: {
+    skip: number;
+    limit: number;
+    hidden?: boolean;
+    minReports?: number;
+  }) {
+    const filter: Record<string, unknown> = {
+      interactionType: "comment",
+      isRemoved: { $ne: true },
+      reportCount: { $gte: options.minReports ?? 1 },
+    };
+    if (options.hidden === true) {
+      filter.isHidden = true;
+    } else if (options.hidden === false) {
+      filter.isHidden = { $ne: true };
+    }
+
+    const [comments, total] = await Promise.all([
+      Interaction.find(filter)
+        .populate("user", "firstName lastName username email avatar")
+        .populate("media", "title contentType thumbnailUrl uploadedBy")
+        .populate("hiddenBy", "firstName lastName username")
+        .sort({ reportCount: -1, updatedAt: -1 })
+        .skip(options.skip)
+        .limit(options.limit)
+        .lean(),
+      Interaction.countDocuments(filter),
+    ]);
+
+    return { comments, total };
+  },
+
   incrementReplyCount(parentId: Types.ObjectId, session: ClientSession) {
     return Interaction.findByIdAndUpdate(
       parentId,

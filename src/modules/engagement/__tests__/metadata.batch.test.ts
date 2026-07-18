@@ -29,7 +29,6 @@ jest.mock("../../../models/like.model", () => ({ Like: { find: jest.fn().mockRes
 jest.mock("../../../models/bookmark.model", () => ({ Bookmark: { find: jest.fn().mockResolvedValue([]) } }));
 jest.mock("../../../models/shareEvent.model", () => ({ ShareEvent: { find: jest.fn().mockResolvedValue([]) } }));
 jest.mock("../../../models/viewEvent.model", () => ({ ViewEvent: { find: jest.fn().mockResolvedValue([]) } }));
-jest.mock("../../../lib/redisCounters", () => ({ getUserLikeState: jest.fn() }));
 jest.mock("../../../utils/logger", () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },

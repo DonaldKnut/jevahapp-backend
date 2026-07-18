@@ -1,5 +1,7 @@
 import { Server as SocketIOServer } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { Server as HTTPServer } from "http";
+import Redis from "ioredis";
 import logger from "../utils/logger";
 import { NotificationService } from "./notification.service";
 import { AuthenticatedUser, SocketContext } from "../socket/types";
@@ -12,6 +14,8 @@ class SocketService {
   private io: SocketIOServer;
   private connectedUsers: Map<string, AuthenticatedUser> = new Map();
   private streamViewers: Map<string, Set<string>> = new Map();
+  private pubClient: Redis | null = null;
+  private subClient: Redis | null = null;
 
   constructor(server: HTTPServer) {
     this.io = new SocketIOServer(server, {
@@ -30,6 +34,8 @@ class SocketService {
       allowEIO3: true,
     });
 
+    this.attachRedisAdapterIfEnabled();
+
     this.io.use(createSocketAuthMiddleware(this.connectedUsers));
     this.setupEventHandlers();
 
@@ -37,6 +43,41 @@ class SocketService {
       (NotificationService as any).setSocketService?.(this);
     } catch {}
     logger.info("Socket.IO service initialized");
+  }
+
+  /**
+   * Multi-worker / PM2 cluster: set SOCKET_REDIS_ADAPTER=true (default when
+   * instances > 1 via SOCKET_REDIS_ADAPTER). Uses REDIS_URL pub/sub.
+   */
+  private attachRedisAdapterIfEnabled(): void {
+    const enabled =
+      process.env.SOCKET_REDIS_ADAPTER === "true" ||
+      process.env.SOCKET_REDIS_ADAPTER === "1";
+
+    if (!enabled) {
+      logger.info("Socket.IO Redis adapter disabled (single-process mode)", {
+        hint: "Set SOCKET_REDIS_ADAPTER=true for PM2 cluster / multi-instance",
+      });
+      return;
+    }
+
+    try {
+      const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+      this.pubClient = new Redis(redisUrl, {
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
+      });
+      this.subClient = this.pubClient.duplicate();
+      this.io.adapter(createAdapter(this.pubClient, this.subClient));
+      logger.info("Socket.IO Redis adapter attached", {
+        redisUrl: redisUrl.replace(/:[^:@]+@/, ":****@"),
+      });
+    } catch (error: any) {
+      logger.warn("Socket.IO Redis adapter failed — continuing without it", {
+        error: error?.message,
+      });
+    }
   }
 
   private ctx(): SocketContext {
@@ -130,6 +171,26 @@ class SocketService {
 
   public getConnectedUsersCount(): number {
     return this.connectedUsers.size;
+  }
+
+  /** Snapshot of socket-authenticated users currently connected */
+  public getConnectedUsers(): AuthenticatedUser[] {
+    const byUserId = new Map<string, AuthenticatedUser>();
+    for (const user of this.connectedUsers.values()) {
+      byUserId.set(user.userId, user);
+    }
+    return Array.from(byUserId.values());
+  }
+
+  public getConnectedUserIds(): string[] {
+    return this.getConnectedUsers().map(u => u.userId);
+  }
+
+  public isUserConnected(userId: string): boolean {
+    for (const user of this.connectedUsers.values()) {
+      if (user.userId === userId) return true;
+    }
+    return false;
   }
 
   public getStreamViewersCount(streamId: string): number {

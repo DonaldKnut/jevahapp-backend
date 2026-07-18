@@ -54,6 +54,17 @@ services:
     networks:
       - jevah-network
 
+  # Local Redis for engagement hot path + integration tests
+  # (In production Contabo, bind Redis to 127.0.0.1 on the host — see docs/REDIS_OPS.md)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--protected-mode", "yes"]
+    restart: unless-stopped
+    networks:
+      - jevah-network
+
   mongo-express:
     image: mongo-express
     ports:

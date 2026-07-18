@@ -14,12 +14,32 @@ describe("SaveService — bookmark contract", () => {
   });
 
   it("toggle result shape matches frontend contract", () => {
-    const sample = { bookmarked: true, bookmarkCount: 3 };
+    const sample = {
+      contentId: "507f1f77bcf86cd799439011",
+      bookmarked: true,
+      isBookmarked: true,
+      bookmarkCount: 3,
+      saves: 3,
+    };
     expect(sample).toEqual(
       expect.objectContaining({
+        contentId: expect.any(String),
         bookmarked: expect.any(Boolean),
+        isBookmarked: expect.any(Boolean),
         bookmarkCount: expect.any(Number),
+        saves: expect.any(Number),
       })
+    );
+  });
+
+  it("maps feed contentType aliases to media", async () => {
+    const { mapBookmarkContentType } = await import(
+      "../../../service/bookmark/bookmark.toggle"
+    );
+    expect(mapBookmarkContentType("videos")).toBe("media");
+    expect(mapBookmarkContentType("sermon")).toBe("media");
+    expect(mapBookmarkContentType("copyright_free_song")).toBe(
+      "copyright_free_song"
     );
   });
 });

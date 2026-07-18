@@ -14,7 +14,10 @@ export type NotificationType =
   | "system" // System notifications
   | "security" // Security alerts
   | "live_stream" // Live stream notifications
-  | "merch_purchase"; // Merchandise purchase
+  | "merch_purchase" // Merchandise purchase
+  | "content_report" // Admin: content reported by a user
+  | "content_moderation" // Uploader: content removed / moderated
+  | "moderation_alert"; // Admin: AI / auto moderation alert
 
 // TypeScript interface for a Notification
 export interface INotification extends Document {
@@ -23,6 +26,8 @@ export interface INotification extends Document {
   message: string;
   isRead: boolean;
   type: NotificationType;
+  /** Deduplicate retries / concurrent like notifications */
+  dedupeKey?: string;
   metadata?: {
     actorName?: string;
     actorAvatar?: string;
@@ -79,6 +84,9 @@ const notificationSchema = new Schema<INotification>(
         "security",
         "live_stream",
         "merch_purchase",
+        "content_report",
+        "content_moderation",
+        "moderation_alert",
       ],
       required: true,
     },
@@ -94,12 +102,26 @@ const notificationSchema = new Schema<INotification>(
     relatedId: {
       type: Schema.Types.ObjectId,
     },
+    dedupeKey: {
+      type: String,
+      trim: true,
+    },
     expiresAt: {
       type: Date,
     },
   },
   {
     timestamps: true,
+  }
+);
+
+// Unique when present — prevents duplicate like/follow notifications on retry
+notificationSchema.index(
+  { dedupeKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { dedupeKey: { $type: "string" } },
+    name: "unique_notification_dedupeKey",
   }
 );
 

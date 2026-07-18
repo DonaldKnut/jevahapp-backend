@@ -1,0 +1,262 @@
+import { createHash } from "crypto";
+import { NextFunction, Request, Response } from "express";
+import {
+  bumpEngagementMetric,
+  engagementDel,
+  engagementGet,
+  engagementSetEx,
+  engagementSetNxEx,
+  logEngagementMetric,
+} from "../lib/engagementRedis";
+import logger from "../utils/logger";
+
+const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60; // 24h
+const IN_PROGRESS_TTL_SECONDS = 60;
+
+/** RFC 4122 UUID (any version) */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type StoredIdempotencyRecord = {
+  fingerprint: string;
+  statusCode: number;
+  body: unknown;
+  completedAt: string;
+};
+
+type InProgressRecord = {
+  status: "in_progress";
+  fingerprint: string;
+};
+
+export function isValidIdempotencyKey(key: string): boolean {
+  return UUID_RE.test(key.trim());
+}
+
+function fingerprintRequest(req: Request): string {
+  const path = `${req.baseUrl || ""}${req.path || ""}` || req.originalUrl || req.url;
+  const payload = JSON.stringify({
+    method: (req.method || "POST").toUpperCase(),
+    path,
+    params: req.params || {},
+    body: req.body ?? {},
+  });
+  return createHash("sha256").update(payload).digest("hex");
+}
+
+/** User-scoped key — path lives in fingerprint so cross-route reuse conflicts */
+export function idempotencyRedisKey(userId: string, key: string): string {
+  return `idem:${userId}:${key}`;
+}
+
+function shouldPersistStatus(statusCode: number): boolean {
+  // Persist business outcomes; never lock a client into a rate-limit response
+  if (statusCode === 429) return false;
+  if (statusCode === 503) return false;
+  return statusCode >= 200 && statusCode < 500;
+}
+
+/**
+ * Idempotency-Key middleware for toggle-like mutations.
+ * - Header present → must be UUID; else 400 INVALID_IDEMPOTENCY_KEY
+ * - Key: idem:{userId}:{key} (path/body in fingerprint)
+ * - Same key + fingerprint → replay stored response
+ * - Same key + different fingerprint → 409 IDEMPOTENCY_CONFLICT
+ * - Redis down with key present → 503 IDEMPOTENCY_UNAVAILABLE (not fail-open)
+ * - Missing header → no-op
+ */
+export function idempotencyMiddleware() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const rawKey = req.get("Idempotency-Key") || req.get("idempotency-key");
+    if (!rawKey || typeof rawKey !== "string" || !rawKey.trim()) {
+      next();
+      return;
+    }
+
+    const key = rawKey.trim();
+    if (!isValidIdempotencyKey(key)) {
+      res.status(400).json({
+        success: false,
+        code: "INVALID_IDEMPOTENCY_KEY",
+        message: "Idempotency-Key must be a valid UUID",
+        data: {},
+      });
+      return;
+    }
+
+    const userId = (req as any).userId as string | undefined;
+    if (!userId) {
+      next();
+      return;
+    }
+
+    const redisKey = idempotencyRedisKey(userId, key);
+    const fingerprint = fingerprintRequest(req);
+    (req as any).idempotencyRedisKey = redisKey;
+
+    try {
+      const existingRaw = await engagementGet(redisKey);
+
+      // engagementGet returns null on Redis failure too — distinguish via NX probe below
+      if (existingRaw) {
+        try {
+          const existing = JSON.parse(existingRaw) as
+            | StoredIdempotencyRecord
+            | InProgressRecord;
+
+          if ("status" in existing && existing.status === "in_progress") {
+            if (existing.fingerprint !== fingerprint) {
+              bumpEngagementMetric("idempotencyConflicts");
+              res.status(409).json({
+                success: false,
+                code: "IDEMPOTENCY_CONFLICT",
+                message: "Idempotency-Key is already in use for a different request",
+                data: {},
+              });
+              return;
+            }
+            res.setHeader("Retry-After", "1");
+            res.status(409).json({
+              success: false,
+              code: "IDEMPOTENCY_IN_PROGRESS",
+              message: "A request with this Idempotency-Key is already being processed",
+              data: { retryAfterSeconds: 1 },
+            });
+            return;
+          }
+
+          const completed = existing as StoredIdempotencyRecord;
+          if (completed.fingerprint !== fingerprint) {
+            bumpEngagementMetric("idempotencyConflicts");
+            res.status(409).json({
+              success: false,
+              code: "IDEMPOTENCY_CONFLICT",
+              message: "Idempotency-Key was reused for a different request",
+              data: {},
+            });
+            return;
+          }
+
+          bumpEngagementMetric("idempotencyHits");
+          logEngagementMetric("idempotency_replay", {
+            userId,
+            idempotencyKey: key,
+            statusCode: completed.statusCode,
+          });
+          (req as any).idempotencyReplayed = true;
+          res.status(completed.statusCode).json(completed.body);
+          return;
+        } catch {
+          // Corrupt record — overwrite
+        }
+      }
+
+      const reserved = await engagementSetNxEx(
+        redisKey,
+        JSON.stringify({ status: "in_progress", fingerprint } satisfies InProgressRecord),
+        IN_PROGRESS_TTL_SECONDS
+      );
+
+      // null = Redis unavailable — keyed requests must not fail open on toggles
+      if (reserved === null) {
+        res.status(503).json({
+          success: false,
+          code: "IDEMPOTENCY_UNAVAILABLE",
+          message:
+            "Idempotency store unavailable. Retry without Idempotency-Key or try again shortly.",
+          data: {},
+        });
+        return;
+      }
+
+      if (!reserved) {
+        const raced = await engagementGet(redisKey);
+        if (raced) {
+          try {
+            const parsed = JSON.parse(raced) as StoredIdempotencyRecord & InProgressRecord;
+            if (parsed.fingerprint && parsed.fingerprint !== fingerprint) {
+              bumpEngagementMetric("idempotencyConflicts");
+              res.status(409).json({
+                success: false,
+                code: "IDEMPOTENCY_CONFLICT",
+                message: "Idempotency-Key is already in use for a different request",
+                data: {},
+              });
+              return;
+            }
+            if (parsed.statusCode && parsed.body !== undefined) {
+              bumpEngagementMetric("idempotencyHits");
+              (req as any).idempotencyReplayed = true;
+              res.status(parsed.statusCode).json(parsed.body);
+              return;
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+        res.setHeader("Retry-After", "1");
+        res.status(409).json({
+          success: false,
+          code: "IDEMPOTENCY_IN_PROGRESS",
+          message: "A request with this Idempotency-Key is already being processed",
+          data: { retryAfterSeconds: 1 },
+        });
+        return;
+      }
+
+      // Persist completed response BEFORE sending so retries never double-toggle
+      const originalJson = res.json.bind(res);
+      res.json = ((body: unknown) => {
+        const statusCode = res.statusCode || 200;
+        if (!shouldPersistStatus(statusCode)) {
+          // Release reservation so client can retry same key (e.g. after 429)
+          void engagementDel(redisKey);
+          return originalJson(body);
+        }
+
+        const record: StoredIdempotencyRecord = {
+          fingerprint,
+          statusCode,
+          body,
+          completedAt: new Date().toISOString(),
+        };
+
+        // Chain: write then send. Express callers rarely await res.json — fire async write
+        // but block send until write settles via thenable return when possible.
+        const writeAndSend = engagementSetEx(
+          redisKey,
+          JSON.stringify(record),
+          IDEMPOTENCY_TTL_SECONDS
+        ).then(ok => {
+          if (!ok) {
+            // Persist failed — release so retry can re-run rather than stuck in-progress
+            void engagementDel(redisKey);
+            logger.warn("Idempotency persist failed; released reservation", { redisKey });
+          }
+          return originalJson(body);
+        });
+
+        // Attach for tests that await the write
+        (res as any).__idempotencyWrite = writeAndSend;
+        return writeAndSend as unknown as Response;
+      }) as Response["json"];
+
+      next();
+    } catch (error: any) {
+      logger.warn("Idempotency middleware error", { error: error?.message });
+      res.status(503).json({
+        success: false,
+        code: "IDEMPOTENCY_UNAVAILABLE",
+        message: "Idempotency store unavailable. Please retry shortly.",
+        data: {},
+      });
+    }
+  };
+}
+
+/** Clear in-progress reservation (e.g. rate limiter rejected after reserve) */
+export async function releaseIdempotencyReservation(req: Request): Promise<void> {
+  const redisKey = (req as any).idempotencyRedisKey as string | undefined;
+  if (!redisKey) return;
+  await engagementDel(redisKey);
+}

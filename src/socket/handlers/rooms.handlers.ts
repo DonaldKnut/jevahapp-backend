@@ -1,4 +1,5 @@
 import logger from "../../utils/logger";
+import { User } from "../../models/user.model";
 import { AuthenticatedUser, SocketContext, ViewerData } from "../types";
 
 export function handleDisconnect(
@@ -18,6 +19,14 @@ export function handleDisconnect(
       });
     }
   });
+
+  // Persist lastSeen when this was the user's last socket
+  const stillConnected = Array.from(ctx.connectedUsers.values()).some(
+    u => u.userId === user.userId
+  );
+  if (!stillConnected) {
+    User.findByIdAndUpdate(user.userId, { lastSeenAt: new Date() }).catch(() => {});
+  }
 
   logger.info("User disconnected", { userId: user.userId, socketId: socket.id });
 }

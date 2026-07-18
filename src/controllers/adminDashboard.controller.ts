@@ -36,6 +36,8 @@ export const getPlatformAnalytics = async (
       pendingReports,
       bannedUsers,
       activeUsers30d,
+      reportedComments,
+      unverifiedArtists,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ createdAt: { $gte: last24Hours } }),
@@ -54,6 +56,18 @@ export const getPlatformAnalytics = async (
       User.countDocuments({ isBanned: true }),
       User.countDocuments({
         lastLoginAt: { $gte: last30Days },
+      }),
+      (async () => {
+        const { Interaction } = await import("../models/interaction.model");
+        return Interaction.countDocuments({
+          interactionType: "comment",
+          isRemoved: { $ne: true },
+          reportCount: { $gte: 1 },
+        });
+      })(),
+      User.countDocuments({
+        role: "artist",
+        isVerifiedArtist: { $ne: true },
       }),
     ]);
 
@@ -132,6 +146,10 @@ export const getPlatformAnalytics = async (
         reports: {
           total: totalReports,
           pending: pendingReports,
+          comments: reportedComments,
+        },
+        verification: {
+          unverifiedArtists,
         },
       },
     });
@@ -181,14 +199,34 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
         .select("-password -verificationCode -resetPasswordToken")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       User.countDocuments(query),
     ]);
+
+    let onlineIds = new Set<string>();
+    try {
+      const { socketService } = require("../app");
+      onlineIds = new Set(socketService?.getConnectedUserIds?.() ?? []);
+    } catch {
+      /* socket not ready */
+    }
+
+    const usersWithPresence = (users as any[]).map(u => {
+      const id = u._id.toString();
+      return {
+        ...u,
+        id,
+        isOnline: onlineIds.has(id),
+        lastSeenAt: u.lastSeenAt || u.lastLoginAt || null,
+      };
+    });
 
     res.status(200).json({
       success: true,
       data: {
-        users,
+        users: usersWithPresence,
+        onlineCount: onlineIds.size,
         pagination: {
           page,
           limit,

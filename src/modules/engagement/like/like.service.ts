@@ -5,18 +5,38 @@ import { normalizeContentType } from "../shared/contentType.resolver";
 import {
   getPostCounter,
   setPostCounter,
+  clampCount,
 } from "../../../lib/redisCounters";
 import { CopyrightFreeSongInteractionService } from "../../../service/copyrightFreeSongInteraction.service";
-import { CopyrightFreeSong } from "../../../models/copyrightFreeSong.model";
 import { devotionalService } from "../../../service/devotionals.service";
 import { contentLikeService } from "./like.content";
 import { communityLikeService } from "./like.community";
 import { getLikeCountFromDB } from "./like.counts";
+import { LikeOperationError } from "./like.errors";
 
 const audioLikeService = new CopyrightFreeSongInteractionService();
 const COMMUNITY_TYPES: LikeContentType[] = ["prayer", "forum_post", "forum_comment"];
 
+function withMeta(
+  contentId: string,
+  contentType: string,
+  liked: boolean,
+  likeCount: number
+): LikeToggleResult {
+  return {
+    contentId,
+    contentType,
+    liked,
+    likeCount: clampCount(likeCount),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export class LikeService {
+  /**
+   * Legacy Redis-first path for community / transitional callers.
+   * Canonical HTTP Media likes must use {@link toggleLike}.
+   */
   async toggleLikeFast(
     userId: string,
     contentId: string,
@@ -25,47 +45,73 @@ export class LikeService {
     const normalized = normalizeContentType(contentType);
 
     if (normalized === "devotional") {
-      throw new Error("Use POST /api/devotionals/:id/like for devotional likes");
+      const result = await devotionalService.likeDevotional({
+        userId,
+        devotionalId: contentId,
+      });
+      return withMeta(contentId, "devotional", result.liked, result.likeCount);
     }
     if (contentType === "copyright_free_song") {
       const result = await audioLikeService.toggleLike(userId, contentId);
-      return { contentId, liked: result.liked, likeCount: result.likeCount };
+      return withMeta(contentId, "copyright_free_song", result.liked, result.likeCount);
     }
     if (COMMUNITY_TYPES.includes(contentType as LikeContentType)) {
       return communityLikeService.toggleFast(userId, contentId, contentType as LikeContentType);
     }
     if (!contentLikeService.isSupported(normalized)) {
-      throw new Error(`Unsupported content type: ${contentType}`);
+      throw new LikeOperationError(
+        "INVALID_CONTENT_TYPE",
+        `Unsupported content type: ${contentType}`,
+        400,
+        { contentType }
+      );
     }
     return contentLikeService.toggleFast(userId, contentId, normalized);
   }
 
+  /**
+   * Durable like toggle — awaits Mongo commit before returning.
+   * Source of truth for canonical POST /api/content/:type/:id/like.
+   */
   async toggleLike(
     userId: string,
     contentId: string,
     contentType: string
   ): Promise<LikeToggleResult> {
     if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
-      throw new Error("Invalid user or content ID");
+      throw new LikeOperationError(
+        "INVALID_CONTENT_ID",
+        "Invalid user or content ID",
+        400,
+        { contentId }
+      );
     }
 
     const normalized = normalizeContentType(contentType);
 
-    if (normalized === "devotional") {
-      const result = await devotionalService.likeDevotional({ userId, devotionalId: contentId });
-      return { contentId, liked: result.liked, likeCount: result.likeCount };
+    // Exact "devotional" uses Devotional collection; feed aliases never map here
+    if ((contentType || "").trim().toLowerCase() === "devotional") {
+      const result = await devotionalService.likeDevotional({
+        userId,
+        devotionalId: contentId,
+      });
+      return withMeta(contentId, "devotional", result.liked, result.likeCount);
     }
+
     if (contentType === "copyright_free_song") {
-      // Fast path already toggled — read current state (avoids double-toggle)
-      const liked = await audioLikeService.isLiked(userId, contentId);
-      const song = await CopyrightFreeSong.findById(contentId).select("likeCount").lean();
-      return { contentId, liked, likeCount: (song as any)?.likeCount ?? 0 };
+      const result = await audioLikeService.toggleLike(userId, contentId);
+      return withMeta(contentId, "copyright_free_song", result.liked, result.likeCount);
     }
     if (COMMUNITY_TYPES.includes(contentType as LikeContentType)) {
       return communityLikeService.toggle(userId, contentId, contentType as LikeContentType);
     }
     if (!contentLikeService.isSupported(normalized)) {
-      throw new Error(`Unsupported content type: ${contentType}`);
+      throw new LikeOperationError(
+        "INVALID_CONTENT_TYPE",
+        `Unsupported content type: ${contentType}`,
+        400,
+        { contentType }
+      );
     }
     return contentLikeService.toggleDb(userId, contentId, normalized);
   }
@@ -75,8 +121,12 @@ export class LikeService {
       return false;
     }
 
+    const raw = (contentType || "").trim().toLowerCase();
+    if (raw === "devotional") {
+      return devotionalService.hasUserLikedDevotional(userId, contentId);
+    }
+
     const normalized = normalizeContentType(contentType);
-    if (normalized === "devotional") return devotionalService.hasUserLikedDevotional(userId, contentId);
     if (contentType === "copyright_free_song") return audioLikeService.isLiked(userId, contentId);
     if (COMMUNITY_TYPES.includes(contentType as LikeContentType)) {
       return communityLikeService.hasUserLiked(userId, contentId, contentType as LikeContentType);
@@ -88,12 +138,22 @@ export class LikeService {
   }
 
   async getLikeCount(contentId: string, contentType: string): Promise<number> {
-    const redisCount = await getPostCounter({ postId: contentId, field: "likes" });
+    const normalized = normalizeContentType(contentType);
+    const redisCount = await getPostCounter({
+      postId: contentId,
+      field: "likes",
+      contentType: normalized,
+    });
     if (redisCount !== null) return redisCount;
 
     const dbCount = await getLikeCountFromDB(contentId, contentType);
     if (dbCount > 0) {
-      setPostCounter({ postId: contentId, field: "likes", count: dbCount }).catch(() => {});
+      setPostCounter({
+        postId: contentId,
+        field: "likes",
+        count: dbCount,
+        contentType: normalized,
+      }).catch(() => {});
     }
     return dbCount;
   }

@@ -10,18 +10,33 @@ import {
   updateModerationStatus,
   getAdminActivityLog,
 } from "../controllers/adminDashboard.controller";
+import {
+  listAdminReports,
+  getAdminMediaReportDetail,
+  reviewAdminMediaReport,
+  deleteAdminReportedMedia,
+  listAdminCommentReports,
+  hideAdminComment,
+  unhideAdminComment,
+  dismissAdminCommentReports,
+} from "../controllers/adminReports.controller";
+import {
+  updateUserVerification,
+  updateChurchVerification,
+  adminDeleteMedia,
+} from "../controllers/adminVerification.controller";
+import {
+  getUsersPresence,
+  sendAdminEmail,
+  getRecentUploads,
+  getDashboardFeed,
+} from "../controllers/adminOps.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
-/**
- * @route   GET /api/admin/dashboard/analytics
- * @desc    Get platform-wide analytics and statistics
- * @access  Protected (Admin only)
- * @returns { success: boolean, data: PlatformAnalytics }
- */
 router.get(
   "/dashboard/analytics",
   verifyToken,
@@ -30,28 +45,25 @@ router.get(
   getPlatformAnalytics
 );
 
-/**
- * @route   GET /api/admin/users
- * @desc    Get all users with filtering and pagination
- * @access  Protected (Admin only)
- * @query   { page?: number, limit?: number, search?: string, role?: string, isBanned?: boolean, isEmailVerified?: boolean }
- * @returns { success: boolean, data: { users: User[], pagination: Pagination } }
- */
 router.get(
-  "/users",
+  "/dashboard/feed",
   verifyToken,
   requireAdmin,
   apiRateLimiter,
-  getUsers
+  getDashboardFeed
 );
 
-/**
- * @route   GET /api/admin/users/:id
- * @desc    Get detailed user information
- * @access  Protected (Admin only)
- * @param   { id: string } - User ID
- * @returns { success: boolean, data: { user: User, stats: UserStats } }
- */
+router.get("/users", verifyToken, requireAdmin, apiRateLimiter, getUsers);
+
+/** Must be before /users/:id */
+router.get(
+  "/users/presence",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getUsersPresence
+);
+
 router.get(
   "/users/:id",
   verifyToken,
@@ -60,14 +72,6 @@ router.get(
   getUserDetails
 );
 
-/**
- * @route   POST /api/admin/users/:id/ban
- * @desc    Ban a user
- * @access  Protected (Admin only)
- * @param   { id: string } - User ID
- * @body    { reason?: string, duration?: number } - Duration in days (optional, permanent if not provided)
- * @returns { success: boolean, message: string }
- */
 router.post(
   "/users/:id/ban",
   verifyToken,
@@ -76,13 +80,6 @@ router.post(
   banUser
 );
 
-/**
- * @route   POST /api/admin/users/:id/unban
- * @desc    Unban a user
- * @access  Protected (Admin only)
- * @param   { id: string } - User ID
- * @returns { success: boolean, message: string }
- */
 router.post(
   "/users/:id/unban",
   verifyToken,
@@ -91,14 +88,6 @@ router.post(
   unbanUser
 );
 
-/**
- * @route   PATCH /api/admin/users/:id/role
- * @desc    Update user role
- * @access  Protected (Admin only)
- * @param   { id: string } - User ID
- * @body    { role: UserRole }
- * @returns { success: boolean, message: string, data: { userId: string, oldRole: string, newRole: string } }
- */
 router.patch(
   "/users/:id/role",
   verifyToken,
@@ -107,13 +96,101 @@ router.patch(
   updateUserRole
 );
 
-/**
- * @route   GET /api/admin/moderation/queue
- * @desc    Get moderation queue
- * @access  Protected (Admin only)
- * @query   { page?: number, limit?: number, status?: string }
- * @returns { success: boolean, data: { media: Media[], pagination: Pagination } }
- */
+router.patch(
+  "/users/:id/verification",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  updateUserVerification
+);
+
+router.patch(
+  "/churches/:id/verification",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  updateChurchVerification
+);
+
+router.delete(
+  "/media/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  adminDeleteMedia
+);
+
+router.get(
+  "/media/recent",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getRecentUploads
+);
+
+router.post(
+  "/email",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  sendAdminEmail
+);
+
+router.get("/reports", verifyToken, requireAdmin, apiRateLimiter, listAdminReports);
+router.get(
+  "/reports/media/:reportId",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getAdminMediaReportDetail
+);
+router.post(
+  "/reports/media/:reportId/review",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  reviewAdminMediaReport
+);
+router.delete(
+  "/reports/media/:mediaId/content",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  (req, res, next) => {
+    (req.params as any).id = req.params.mediaId;
+    next();
+  },
+  deleteAdminReportedMedia
+);
+router.get(
+  "/reports/comments",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminCommentReports
+);
+router.post(
+  "/reports/comments/:commentId/hide",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  hideAdminComment
+);
+router.post(
+  "/reports/comments/:commentId/unhide",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  unhideAdminComment
+);
+router.post(
+  "/reports/comments/:commentId/dismiss",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  dismissAdminCommentReports
+);
+
 router.get(
   "/moderation/queue",
   verifyToken,
@@ -122,14 +199,6 @@ router.get(
   getModerationQueue
 );
 
-/**
- * @route   PATCH /api/admin/moderation/:id/status
- * @desc    Update moderation status (admin override)
- * @access  Protected (Admin only)
- * @param   { id: string } - Media ID
- * @body    { status: "approved" | "rejected" | "under_review", adminNotes?: string }
- * @returns { success: boolean, message: string }
- */
 router.patch(
   "/moderation/:id/status",
   verifyToken,
@@ -138,13 +207,6 @@ router.patch(
   updateModerationStatus
 );
 
-/**
- * @route   GET /api/admin/activity
- * @desc    Get admin activity log
- * @access  Protected (Admin only)
- * @query   { page?: number, limit?: number, adminId?: string }
- * @returns { success: boolean, data: ActivityLog }
- */
 router.get(
   "/activity",
   verifyToken,
@@ -154,5 +216,3 @@ router.get(
 );
 
 export default router;
-
-

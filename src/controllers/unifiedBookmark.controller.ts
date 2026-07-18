@@ -11,13 +11,17 @@ export const toggleBookmark = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { mediaId } = req.params;
+    // FE may hit /:mediaId/toggle or /:contentId/toggle — accept either param name
+    const mediaId = (req.params.mediaId || req.params.contentId || "").toString();
     const userId = req.userId;
+    const contentTypeHint =
+      (req.body?.contentType as string | undefined) ||
+      (req.query?.contentType as string | undefined);
 
-    // Enhanced logging for debugging
     logger.info("Toggle bookmark request", {
       userId,
       mediaId,
+      contentTypeHint,
       userAgent: req.get("User-Agent"),
       ip: req.ip,
       timestamp: new Date().toISOString(),
@@ -48,7 +52,11 @@ export const toggleBookmark = async (
       return;
     }
 
-    const result = await UnifiedBookmarkService.toggleBookmark(userId, mediaId);
+    const result = await UnifiedBookmarkService.toggleBookmark(
+      userId,
+      mediaId,
+      contentTypeHint
+    );
 
     // Send real-time notification via Socket.IO
     try {
@@ -56,6 +64,7 @@ export const toggleBookmark = async (
       if (io) {
         io.emit("content-bookmark-update", {
           mediaId,
+          contentId: mediaId,
           bookmarkCount: result.bookmarkCount,
           userBookmarked: result.bookmarked,
           userId,
@@ -88,12 +97,27 @@ export const toggleBookmark = async (
       error: error.message,
       stack: error.stack,
       userId: req.userId,
-      mediaId: req.params.mediaId,
+      mediaId: req.params.mediaId || req.params.contentId,
       ip: req.ip,
       timestamp: new Date().toISOString(),
     });
 
-    // Handle specific error types with appropriate status codes
+    if (error.message?.includes("copyright-free")) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+
+    if (error.message?.includes("Unsupported content type")) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+      return;
+    }
+
     if (
       error.message.includes("not found") ||
       error.message.includes("Media not found")
@@ -113,7 +137,6 @@ export const toggleBookmark = async (
       return;
     }
 
-    // Default to 500 for unexpected errors
     res.status(500).json({
       success: false,
       message: "An unexpected error occurred while processing your request",
@@ -129,7 +152,7 @@ export const getBookmarkStatus = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { mediaId } = req.params;
+    const mediaId = (req.params.mediaId || req.params.contentId || "").toString();
     const userId = req.userId;
 
     logger.info("Get bookmark status request", {
@@ -164,15 +187,18 @@ export const getBookmarkStatus = async (
     res.status(200).json({
       success: true,
       data: {
+        contentId: mediaId,
         isBookmarked,
+        bookmarked: isBookmarked,
         bookmarkCount,
+        saves: bookmarkCount,
       },
     });
   } catch (error: any) {
     logger.error("Get bookmark status error", {
       error: error.message,
       userId: req.userId,
-      mediaId: req.params.mediaId,
+      mediaId: req.params.mediaId || req.params.contentId,
     });
 
     res.status(500).json({

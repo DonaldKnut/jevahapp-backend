@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import commentService from "./comment.service";
 import logger from "../../../utils/logger";
+import { resolveCommentContentType } from "../shared/contentType.resolver";
 
 export const getContentComments = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -26,7 +27,7 @@ export const getContentComments = async (req: Request, res: Response): Promise<v
     const sort = sortBy === "oldest" || sortBy === "top" ? sortBy : "newest";
     const result = await commentService.getContentComments(
       contentId,
-      contentType,
+      resolveCommentContentType(contentType),
       page,
       limit,
       sort,

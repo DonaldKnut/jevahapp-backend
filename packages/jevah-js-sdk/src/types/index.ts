@@ -383,11 +383,15 @@ export interface RecordViewRequest {
   durationMs?: number;
   progressPct?: number;
   isComplete?: boolean;
+  source?: string;
+  sessionId?: string;
+  deviceId?: string;
 }
 
 export interface RecordViewResponse {
   viewCount: number;
   hasViewed: boolean;
+  counted: boolean;
 }
 
 // Configuration types

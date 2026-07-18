@@ -35,9 +35,13 @@ const likeSchema = new Schema<ILike>(
   }
 );
 
-// CRITICAL: Compound unique index to prevent duplicate likes at the DB level
-likeSchema.index({ contentId: 1, userId: 1 }, { unique: true });
-likeSchema.index({ contentType: 1, contentId: 1 });
+// CRITICAL: one active like per (user, type, content) — contentId alone is not unique across collections
+likeSchema.index(
+  { userId: 1, contentType: 1, contentId: 1 },
+  { unique: true, name: "unique_user_content_like" }
+);
+likeSchema.index({ contentType: 1, contentId: 1 }, { name: "content_likes" });
+likeSchema.index({ userId: 1, createdAt: -1 }, { name: "user_likes" });
 
 export const Like =
   mongoose.models.Like || mongoose.model<ILike>("Like", likeSchema);

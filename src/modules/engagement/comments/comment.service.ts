@@ -250,6 +250,85 @@ export class CommentService {
     const updated = await commentRepository.hide(commentId, moderatorId, reason);
     if (!updated) throw new Error("Comment not found");
   }
+
+  async moderateUnhideComment(commentId: string) {
+    if (!Types.ObjectId.isValid(commentId)) {
+      throw new Error("Invalid comment ID");
+    }
+    const comment = await commentRepository.findComment(commentId);
+    if (!comment) throw new Error("Comment not found");
+    const updated = await commentRepository.unhide(commentId);
+    if (!updated) throw new Error("Comment not found");
+  }
+
+  async dismissCommentReports(commentId: string) {
+    if (!Types.ObjectId.isValid(commentId)) {
+      throw new Error("Invalid comment ID");
+    }
+    const comment = await commentRepository.findComment(commentId);
+    if (!comment) throw new Error("Comment not found");
+    const updated = await commentRepository.dismissReports(commentId);
+    if (!updated) throw new Error("Comment not found");
+    return { commentId, reportCount: 0 };
+  }
+
+  async listReportedComments(options: {
+    page?: number;
+    limit?: number;
+    hidden?: boolean;
+  }) {
+    const page = options.page ?? 1;
+    const limit = Math.min(options.limit ?? 20, 100);
+    const skip = (page - 1) * limit;
+    const { comments, total } = await commentRepository.listReported({
+      skip,
+      limit,
+      hidden: options.hidden,
+    });
+    return {
+      comments: comments.map((c: any) => ({
+        id: c._id.toString(),
+        content: c.content,
+        reportCount: c.reportCount || 0,
+        isHidden: !!c.isHidden,
+        hiddenReason: c.hiddenReason || null,
+        hiddenBy: c.hiddenBy
+          ? {
+              id: c.hiddenBy._id?.toString?.() || c.hiddenBy.toString(),
+              name:
+                `${c.hiddenBy.firstName || ""} ${c.hiddenBy.lastName || ""}`.trim() ||
+                c.hiddenBy.username,
+            }
+          : null,
+        author: c.user
+          ? {
+              id: c.user._id?.toString?.() || c.user.toString(),
+              firstName: c.user.firstName,
+              lastName: c.user.lastName,
+              username: c.user.username,
+              email: c.user.email,
+              avatar: c.user.avatar,
+            }
+          : null,
+        media: c.media
+          ? {
+              id: c.media._id?.toString?.() || c.media.toString(),
+              title: c.media.title,
+              contentType: c.media.contentType,
+              thumbnailUrl: c.media.thumbnailUrl,
+            }
+          : null,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
 }
 
 export default new CommentService();

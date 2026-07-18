@@ -8,9 +8,16 @@ import {
 import { bulkBookmark } from "./bookmark.bulk";
 
 export type { BookmarkResult } from "./bookmark.toggle";
+export { mapBookmarkContentType } from "./bookmark.toggle";
 
 export class UnifiedBookmarkService {
-  static toggleBookmark = toggleBookmark;
+  static toggleBookmark(
+    userId: string,
+    mediaId: string,
+    contentTypeHint?: string
+  ) {
+    return toggleBookmark(userId, mediaId, contentTypeHint);
+  }
   static getBookmarkCount = getBookmarkCount;
   static isBookmarked = isBookmarked;
   static getUserBookmarks = getUserBookmarks;

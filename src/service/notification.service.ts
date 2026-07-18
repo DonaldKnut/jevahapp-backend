@@ -14,6 +14,8 @@ export interface CreateNotificationData {
   metadata?: any;
   priority?: "low" | "medium" | "high";
   relatedId?: string;
+  /** When set, duplicate inserts (retries) are ignored via unique index */
+  dedupeKey?: string;
 }
 
 export class NotificationService {
@@ -31,6 +33,7 @@ export class NotificationService {
         metadata: data.metadata || {},
         priority: data.priority || "medium",
         relatedId: data.relatedId,
+        dedupeKey: data.dedupeKey,
       });
 
       await notification.save();
@@ -55,10 +58,20 @@ export class NotificationService {
         userId: data.userId,
         type: data.type,
         notificationId: notification._id,
+        dedupeKey: data.dedupeKey,
       });
 
       return notification;
-    } catch (error) {
+    } catch (error: any) {
+      // Duplicate dedupeKey — treat as success (idempotent notification)
+      if (error?.code === 11000 && data.dedupeKey) {
+        logger.info("Notification dedupe hit — skipping duplicate", {
+          userId: data.userId,
+          type: data.type,
+          dedupeKey: data.dedupeKey,
+        });
+        return null;
+      }
       logger.error("Failed to create notification:", error);
       throw error;
     }
@@ -77,6 +90,8 @@ export class NotificationService {
 
       if (!follower || !following) return;
 
+      // No permanent follow dedupeKey — unlike/refollow should notify again.
+      // Concurrent duplicate delivery is rare; mutation path is idempotent.
       await this.createNotification({
         userId: followingId,
         type: "follow",
@@ -100,7 +115,9 @@ export class NotificationService {
   static async notifyContentLike(
     likerId: string,
     contentId: string,
-    contentType: string
+    contentType: string,
+    /** Active Like document id — one notification per like cycle */
+    likeId?: string
   ): Promise<void> {
     try {
       const liker = await User.findById(likerId);
@@ -108,10 +125,14 @@ export class NotificationService {
 
       if (contentType === "media") {
         content = await Media.findById(contentId);
-        contentOwner = await User.findById(content.uploadedBy);
+        if (content?.uploadedBy) {
+          contentOwner = await User.findById(content.uploadedBy);
+        }
       } else if (contentType === "devotional") {
         content = await Devotional.findById(contentId);
-        contentOwner = await User.findById(content.submittedBy);
+        if (content?.submittedBy) {
+          contentOwner = await User.findById(content.submittedBy);
+        }
       }
 
       // Prevent self-notifications
@@ -130,8 +151,15 @@ export class NotificationService {
         return;
       }
 
+      const ownerId = contentOwner._id.toString();
+      // Per-cycle dedupe: same Like _id → suppress retry duplicates;
+      // unlike + relike creates a new Like → new notification allowed.
+      const dedupeKey = likeId
+        ? `like:${likeId}`
+        : undefined;
+
       await this.createNotification({
-        userId: contentOwner._id.toString(),
+        userId: ownerId,
         type: "like",
         title: "New Like",
         message: `${liker.firstName || liker.email} liked your ${contentType}`,
@@ -142,9 +170,11 @@ export class NotificationService {
           contentType,
           thumbnailUrl: content.thumbnailUrl,
           likeCount: content.likeCount || 0,
+          likeId,
         },
         priority: "low",
         relatedId: contentId,
+        dedupeKey,
       });
     } catch (error) {
       logger.error("Failed to send like notification:", error);

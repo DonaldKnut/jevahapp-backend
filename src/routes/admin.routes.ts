@@ -1,11 +1,10 @@
 import { Router } from "express";
-import { getAllUsers, updateUserRole } from "../controllers/admin.controller";
-import { verifyToken } from "../middleware/auth.middleware";
-import { requireAdmin } from "../middleware/role.middleware";
 
+/**
+ * Legacy admin router — duplicate /users routes removed so they no longer
+ * shadow the paginated handlers in adminDashboard.routes.ts.
+ * Kept as an empty router for backwards-compatible module mounts.
+ */
 const router = Router();
-
-router.get("/users", verifyToken, requireAdmin, getAllUsers);
-router.patch("/users/:id", verifyToken, requireAdmin, updateUserRole);
 
 export default router;

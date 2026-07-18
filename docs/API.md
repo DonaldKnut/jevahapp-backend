@@ -331,7 +331,37 @@ Ebook library and text-to-speech.
 
 ## Admin — `/api/admin`, `/api/logs`
 
-Admin dashboard, user management, audit logs.
+Full contracts: [ADMIN.md](./ADMIN.md) · UI guide: [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/dashboard/analytics` | Admin | Platform KPIs |
+| GET | `/api/admin/dashboard/feed` | Admin | Uploads / review / reports activity feed |
+| GET | `/api/admin/users` | Admin | List/filter users (+ online flags) |
+| GET | `/api/admin/users/presence` | Admin | Online / offline user list |
+| GET | `/api/admin/users/:id` | Admin | User detail |
+| POST | `/api/admin/users/:id/ban` | Admin | Ban user |
+| POST | `/api/admin/users/:id/unban` | Admin | Unban |
+| PATCH | `/api/admin/users/:id/role` | Admin | Change role |
+| PATCH | `/api/admin/users/:id/verification` | Admin | Creator/vendor/church/artist flags |
+| POST | `/api/admin/email` | Admin | Email users (Resend) |
+| GET | `/api/admin/media/recent` | Admin | Recent uploads |
+| GET | `/api/admin/reports` | Admin | Unified reports inbox |
+| GET | `/api/admin/reports/media/:reportId` | Admin | Media report detail |
+| POST | `/api/admin/reports/media/:reportId/review` | Admin | Review media report |
+| DELETE | `/api/admin/reports/media/:mediaId/content` | Admin | Delete reported media |
+| GET | `/api/admin/reports/comments` | Admin | Comment reports |
+| POST | `/api/admin/reports/comments/:commentId/hide` | Admin | Hide comment |
+| POST | `/api/admin/reports/comments/:commentId/unhide` | Admin | Unhide comment |
+| POST | `/api/admin/reports/comments/:commentId/dismiss` | Admin | Dismiss comment reports |
+| GET | `/api/admin/moderation/queue` | Admin | Upload moderation queue |
+| PATCH | `/api/admin/moderation/:id/status` | Admin | Approve/reject media |
+| DELETE | `/api/admin/media/:id` | Admin | Force-delete media |
+| PATCH | `/api/admin/churches/:id/verification` | Admin | Verify church entity |
+| GET | `/api/admin/activity` | Admin | Admin activity log |
+| GET | `/api/logs/logs` | Admin | Audit logs |
+
+User report intake (not admin-only): `POST /api/media/:id/report`, `POST /api/content/comments/:commentId/report`.
 
 ---
 

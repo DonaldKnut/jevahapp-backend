@@ -106,7 +106,10 @@ app.use(
       "Authorization",
       "X-Requested-With",
       "expo-platform",
+      "Idempotency-Key",
+      "X-Request-Id",
     ],
+    exposedHeaders: ["Retry-After", "X-Request-Id"],
   })
 );
 

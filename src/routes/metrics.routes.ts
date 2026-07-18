@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import cacheService from "../service/cache.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { analyticsQueue, mediaProcessingQueue } from "../queues/queues";
+import { getEngagementMetrics, isRedisConnected } from "../lib/engagementRedis";
 
 const router = Router();
 
@@ -42,6 +43,10 @@ router.get(
         externalMB: Math.round(mem.external / 1024 / 1024),
       },
       redisCache: stats,
+      engagementRedis: {
+        connected: isRedisConnected(),
+        metrics: getEngagementMetrics(),
+      },
       queues,
     });
   })

@@ -1,13 +1,14 @@
 import { Types } from "mongoose";
 import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
+import { Devotional } from "../../../models/devotional.model";
+import { DevotionalLike } from "../../../models/devotionalLike.model";
 import { Interaction } from "../../../models/interaction.model";
 import { Bookmark } from "../../../models/bookmark.model";
 import { Like } from "../../../models/like.model";
 import { ViewEvent } from "../../../models/viewEvent.model";
 import { ShareEvent } from "../../../models/shareEvent.model";
 import logger from "../../../utils/logger";
-import { getUserLikeState } from "../../../lib/redisCounters";
 import { BatchMetadataItem } from "../shared/engagement.types";
 import { normalizeContentType } from "../shared/contentType.resolver";
 
@@ -26,10 +27,16 @@ export class MetadataBatchService {
     const normalized = normalizeContentType(contentType);
     const contentIdsObj = validIds.map(id => new Types.ObjectId(id));
 
-    const [mediaDocs, commentCountMap] = await Promise.all([
+    const isDevotional = contentType === "devotional";
+    const [mediaDocs, devotionalDocs, commentCountMap] = await Promise.all([
       normalized === "media" || normalized === "merch"
         ? Media.find({ _id: { $in: contentIdsObj } })
             .select("likeCount shareCount viewCount bookmarkCount commentCount")
+            .lean()
+        : Promise.resolve([]),
+      isDevotional
+        ? Devotional.find({ _id: { $in: contentIdsObj } })
+            .select("likeCount commentCount viewCount shareCount bookmarkCount")
             .lean()
         : Promise.resolve([]),
       Interaction.aggregate([
@@ -50,6 +57,9 @@ export class MetadataBatchService {
     const mediaMap = new Map(
       (mediaDocs as any[]).map(m => [m._id.toString(), m])
     );
+    const devotionalMap = new Map(
+      (devotionalDocs as any[]).map(d => [d._id.toString(), d])
+    );
     const commentsMap = new Map(
       safeCommentCounts.map((r: { _id: Types.ObjectId; count: number }) => [
         r._id.toString(),
@@ -67,22 +77,15 @@ export class MetadataBatchService {
         const userIdObj = new Types.ObjectId(validUserId);
 
         if (normalized === "media") {
-          const [userLikes, notInDb] = await Promise.all([
-            Like.find({ userId: userIdObj, contentId: { $in: contentIdsObj } })
-              .select("contentId")
-              .lean(),
-            Promise.resolve(validIds),
-          ]);
+          // Durable Like rows only — do not hydrate liked=true from optimistic Redis
+          const userLikes = await Like.find({
+            userId: userIdObj,
+            contentId: { $in: contentIdsObj },
+            contentType: "media",
+          })
+            .select("contentId")
+            .lean();
           userLikes.forEach(l => userLikesMap.set(l.contentId.toString(), true));
-          const missing = notInDb.filter(id => !userLikesMap.has(id));
-          if (missing.length > 0) {
-            const redisChecks = await Promise.all(
-              missing.map(id => getUserLikeState({ userId: validUserId, contentId: id }))
-            );
-            missing.forEach((id, i) => {
-              if (redisChecks[i] === true) userLikesMap.set(id, true);
-            });
-          }
         } else if (normalized === "artist") {
           const user = await User.findById(userIdObj).select("following").lean();
           if ((user as any)?.following) {
@@ -101,6 +104,14 @@ export class MetadataBatchService {
             .select("contentId")
             .lean();
           userLikes.forEach(l => userLikesMap.set(l.contentId.toString(), true));
+        } else if (isDevotional) {
+          const userLikes = await DevotionalLike.find({
+            user: userIdObj,
+            devotional: { $in: contentIdsObj },
+          })
+            .select("devotional")
+            .lean();
+          userLikes.forEach(l => userLikesMap.set(l.devotional.toString(), true));
         }
 
         const [userBookmarks, userShares, userViews] = await Promise.all([
@@ -128,15 +139,17 @@ export class MetadataBatchService {
 
     return validIds.map(id => {
       const media = mediaMap.get(id);
+      const devotional = devotionalMap.get(id);
+      const doc = media ?? devotional;
       const commentCount =
-        commentsMap.get(id) ?? (media as any)?.commentCount ?? 0;
+        commentsMap.get(id) ?? (doc as any)?.commentCount ?? 0;
       return {
         id,
-        likeCount: (media as any)?.likeCount ?? 0,
+        likeCount: (doc as any)?.likeCount ?? 0,
         commentCount,
-        shareCount: (media as any)?.shareCount ?? 0,
-        bookmarkCount: (media as any)?.bookmarkCount ?? 0,
-        viewCount: (media as any)?.viewCount ?? 0,
+        shareCount: (doc as any)?.shareCount ?? 0,
+        bookmarkCount: (doc as any)?.bookmarkCount ?? 0,
+        viewCount: (doc as any)?.viewCount ?? 0,
         hasLiked: userLikesMap.has(id),
         hasBookmarked: userBookmarksMap.has(id),
         hasShared: userSharesMap.has(id),

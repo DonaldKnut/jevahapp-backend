@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
+import { Devotional } from "../../../models/devotional.model";
 import { Interaction } from "../../../models/interaction.model";
 import { Bookmark } from "../../../models/bookmark.model";
 import { ViewEvent } from "../../../models/viewEvent.model";
@@ -21,6 +22,7 @@ export class MetadataSingleService {
     }
 
     const normalized = normalizeContentType(contentType);
+    const isDevotional = contentType === "devotional";
     let content: any;
     let author: any;
 
@@ -40,6 +42,14 @@ export class MetadataSingleService {
         author = content;
         break;
       default:
+        if (isDevotional) {
+          content = await Devotional.findById(contentId).populate(
+            "submittedBy",
+            "firstName lastName avatar"
+          );
+          author = content?.submittedBy;
+          break;
+        }
         throw new Error(`Unsupported content type: ${contentType}`);
     }
 
@@ -111,6 +121,17 @@ export class MetadataSingleService {
         };
       }
       default:
+        if (contentType === "devotional") {
+          const devotional = await Devotional.findById(contentId);
+          const commentCount = await this.getCommentCount(contentId);
+          return {
+            likes: devotional?.likeCount || 0,
+            comments: commentCount,
+            shares: (devotional as any)?.shareCount || 0,
+            views: (devotional as any)?.viewCount || 0,
+            saves: 0,
+          };
+        }
         return { likes: 0, comments: 0, shares: 0, views: 0, saves: 0 };
     }
   }

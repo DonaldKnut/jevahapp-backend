@@ -11,12 +11,43 @@ import {
   UNIVERSAL_LIKE_CONTENT_TYPES,
 } from "./engagement.types";
 
-/** ebook and podcast are Media collection items — normalize to media for like/view logic */
+/**
+ * Feed / path aliases that persist as Media likes.
+ * ebook/podcast remain transitional Media mappings (separate collections out of core scope).
+ * Exact "devotional" stays on the Devotional collection path — do not map it to media here.
+ */
+const MEDIA_LIKE_ALIASES = new Set([
+  "media",
+  "video",
+  "videos",
+  "audio",
+  "music",
+  "live",
+  "sermon",
+  "sermons",
+  "teachings",
+  "recording",
+  "image",
+  "images",
+  "ebook",
+  "ebooks",
+  "e-books",
+  "books",
+  "podcast",
+  "podcasts",
+]);
+
+/** Normalize client path/body content types for like/view/metadata logic */
 export function normalizeContentType(contentType: string): string {
-  if (contentType === "ebook" || contentType === "podcast") {
-    return "media";
-  }
-  return contentType;
+  const t = (contentType || "").trim().toLowerCase();
+  if (MEDIA_LIKE_ALIASES.has(t)) return "media";
+  return t;
+}
+
+/** Comments only support media (incl. ebook/podcast) and devotional */
+export function resolveCommentContentType(contentType: string): string {
+  if (contentType === "devotional") return "devotional";
+  return normalizeContentType(contentType);
 }
 
 export function isValidLikeContentType(contentType: string): contentType is LikeContentType {
