@@ -3,7 +3,8 @@ import jwt from "jsonwebtoken";
 import { User } from "../models/user.model";
 import { BlacklistedToken } from "../models/blacklistedToken.model";
 import logger from "../utils/logger";
-import { redisSafe } from "../lib/redis";
+import cacheService, { CACHE_TTL } from "../service/cache.service";
+import { authUserKey } from "../lib/cacheKeys";
 import { JWT_SECRET } from "../config/tokenConfig";
 
 export const verifyToken = async (
@@ -125,16 +126,9 @@ export const verifyToken = async (
       return;
     }
 
-    // Cache user lookup briefly in Redis (optimization only)
-    const userCacheKey = `auth:user:${decoded.userId}`;
-    const cachedUser = await redisSafe<any | null>(
-      "authUserGet",
-      async (r) => {
-        const u = await r.get<any>(userCacheKey);
-        return u || null;
-      },
-      null
-    );
+    // Contabo Redis auth snapshot (optimization only — invalidate on ban/role/verification)
+    const userCacheKey = authUserKey(decoded.userId);
+    const cachedUser = await cacheService.getJSON<any>(userCacheKey);
 
     const user =
       cachedUser ||
@@ -149,16 +143,8 @@ export const verifyToken = async (
       return;
     }
 
-    // Refresh cache (best-effort)
     if (!cachedUser) {
-      redisSafe(
-        "authUserSet",
-        async (r) => {
-          await r.set(userCacheKey, user, { ex: 120 }); // 2 minutes
-          return true;
-        },
-        false
-      ).catch(() => {});
+      cacheService.setJSON(userCacheKey, user, CACHE_TTL.authUser).catch(() => {});
     }
 
     // Check if user is banned (non-blocking update if expired)

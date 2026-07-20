@@ -1,5 +1,4 @@
 import logger from "../../../utils/logger";
-import { engagementRedisSafe, bumpEngagementMetric } from "../../../lib/engagementRedis";
 
 /**
  * Emit like updates after a committed DB mutation.
@@ -45,24 +44,6 @@ export function emitLikeSocket(
     });
   } catch {
     // non-blocking
-  }
-}
-
-export async function invalidateFeedCaches(contentId: string, userId: string): Promise<void> {
-  try {
-    await engagementRedisSafe(
-      "feedInvalidate",
-      async r => {
-        const userKeys = await r.keys(`feed:user:${userId}:*`);
-        if (userKeys.length > 0) await r.del(...userKeys);
-        const globalKeys = await r.keys("feed:global:*");
-        if (globalKeys.length > 0) await r.del(...globalKeys);
-      },
-      undefined
-    );
-  } catch (error: any) {
-    bumpEngagementMetric("cacheFailures");
-    logger.warn("Failed to invalidate feed caches", { contentId, userId, error: error.message });
   }
 }
 

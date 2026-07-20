@@ -60,6 +60,24 @@ export interface IMedia extends Document {
   playbackUrl?: string;
   hlsUrl?: string; // New field for HLS URL
   dashUrl?: string; // New field for DASH URL
+  derivatives?: Array<{
+    kind: "mp4" | "hls";
+    objectKey: string;
+    url: string;
+    width?: number;
+    height?: number;
+    videoCodec?: string;
+    audioCodec?: string;
+    bitrate?: number;
+  }>;
+  processingMetadata?: {
+    sourceWidth?: number;
+    sourceHeight?: number;
+    durationSeconds?: number;
+    videoCodec?: string;
+    audioCodec?: string;
+    verifiedAt?: Date;
+  };
   rtmpUrl?: string;
   // Recording fields
   isRecording?: boolean;
@@ -117,18 +135,58 @@ export interface IMedia extends Document {
     requiresReview: boolean;
     moderatedAt?: Date;
   };
+  /** Free-text notes from admin review (approve/reject/hold or metadata edit). */
+  adminModerationNotes?: string;
   reportCount?: number;
   isHidden?: boolean; // Hidden from public view due to reports/moderation
+  /** SHA-256 of source file bytes for moderation decision reuse (not object sharing). */
+  contentHash?: string;
+  /** Cache-busting publication version — increments on each reprocess. */
+  assetVersion?: number;
+  publicationState?:
+    | "draft"
+    | "staged"
+    | "publishing"
+    | "live"
+    | "tombstoned";
+  publishedAt?: Date;
+  /** Absolute R2 prefix for this live version, e.g. media/{id}/v3 */
+  storagePrefix?: string;
+  derivativeKeys?: string[];
 
   /**
    * Background processing state (BullMQ worker).
    * This keeps async post-upload tasks observable and debuggable.
    */
   processing?: {
-    status?: "idle" | "queued" | "processing" | "completed" | "failed";
+    status?:
+      | "idle"
+      | "queued"
+      | "uploaded"
+      | "moderating"
+      | "awaiting_review"
+      | "transcoding"
+      | "processing"
+      | "ready"
+      | "completed"
+      | "rejected"
+      | "failed";
     jobType?: string;
     updatedAt?: Date;
     error?: string;
+    attempts?: number;
+    progress?: number;
+    jobId?: string;
+  };
+
+  /** Staging / direct-upload intent metadata (private until ready). */
+  uploadIntent?: {
+    intentId?: string;
+    stagingKey?: string;
+    thumbnailStagingKey?: string;
+    checksum?: string;
+    declaredSize?: number;
+    declaredMime?: string;
   };
 
   createdAt: Date;
@@ -320,6 +378,26 @@ const mediaSchema = new Schema<IMedia>(
     hlsUrl: {
       type: String,
     },
+    derivatives: [
+      {
+        kind: { type: String, enum: ["mp4", "hls"], required: true },
+        objectKey: { type: String, required: true },
+        url: { type: String, required: true },
+        width: Number,
+        height: Number,
+        videoCodec: String,
+        audioCodec: String,
+        bitrate: Number,
+      },
+    ],
+    processingMetadata: {
+      sourceWidth: Number,
+      sourceHeight: Number,
+      durationSeconds: Number,
+      videoCodec: String,
+      audioCodec: String,
+      verifiedAt: Date,
+    },
     dashUrl: {
       type: String,
     },
@@ -472,6 +550,25 @@ const mediaSchema = new Schema<IMedia>(
       default: "pending",
       index: true,
     },
+    contentHash: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    assetVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    publicationState: {
+      type: String,
+      enum: ["draft", "staged", "publishing", "live", "tombstoned"],
+      default: "draft",
+      index: true,
+    },
+    publishedAt: { type: Date },
+    storagePrefix: { type: String },
+    derivativeKeys: { type: [String], default: [] },
     moderationResult: {
       isApproved: {
         type: Boolean,
@@ -497,6 +594,11 @@ const mediaSchema = new Schema<IMedia>(
         type: Date,
       },
     },
+    adminModerationNotes: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+    },
     reportCount: {
       type: Number,
       default: 0,
@@ -512,13 +614,37 @@ const mediaSchema = new Schema<IMedia>(
     processing: {
       status: {
         type: String,
-        enum: ["idle", "queued", "processing", "completed", "failed"],
+        enum: [
+          "idle",
+          "queued",
+          "uploaded",
+          "moderating",
+          "awaiting_review",
+          "transcoding",
+          "processing",
+          "ready",
+          "completed",
+          "rejected",
+          "failed",
+        ],
         default: "idle",
         index: true,
       },
       jobType: { type: String },
       updatedAt: { type: Date },
       error: { type: String },
+      attempts: { type: Number, default: 0 },
+      progress: { type: Number, min: 0, max: 100 },
+      jobId: { type: String },
+    },
+
+    uploadIntent: {
+      intentId: { type: String, index: true },
+      stagingKey: { type: String },
+      thumbnailStagingKey: { type: String },
+      checksum: { type: String },
+      declaredSize: { type: Number },
+      declaredMime: { type: String },
     },
   },
   {
@@ -537,6 +663,16 @@ mediaSchema.index({
 });
 mediaSchema.index({ isDownloadable: 1 });
 mediaSchema.index({ shareUrl: 1 });
+// Global feed: moderation + visibility + recency
+mediaSchema.index(
+  { moderationStatus: 1, isHidden: 1, createdAt: -1 },
+  { name: "media_feed_moderation_createdAt" }
+);
+// Profile media grids
+mediaSchema.index(
+  { uploadedBy: 1, contentType: 1, createdAt: -1 },
+  { name: "media_uploader_type_createdAt" }
+);
 
 export const Media =
   mongoose.models.Media || mongoose.model<IMedia>("Media", mediaSchema);

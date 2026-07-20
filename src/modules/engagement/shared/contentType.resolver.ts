@@ -5,6 +5,7 @@ import { Devotional } from "../../../models/devotional.model";
 import { ForumPost } from "../../../models/forumPost.model";
 import { PrayerPost } from "../../../models/prayerPost.model";
 import { CopyrightFreeSong } from "../../../models/copyrightFreeSong.model";
+import { PUBLIC_MEDIA_FILTER } from "../../../lib/publicMediaVisibility";
 import {
   ALL_LIKE_CONTENT_TYPES,
   LikeContentType,
@@ -79,7 +80,12 @@ export async function verifyContentExists(
     switch (normalized) {
       case "media":
       case "merch": {
-        const media = await Media.findById(contentId).select("_id").setOptions(query);
+        const media = await Media.findOne({
+          _id: contentId,
+          ...PUBLIC_MEDIA_FILTER,
+        })
+          .select("_id")
+          .setOptions(query);
         return !!media;
       }
       case "artist": {

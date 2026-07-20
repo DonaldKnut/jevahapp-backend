@@ -3,6 +3,8 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  CopyObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -24,7 +26,70 @@ interface UploadApiResponse {
   version?: number;
 }
 
+export interface ExactObjectUpload {
+  objectKey: string;
+  secure_url: string;
+}
+
 class FileUploadService {
+  /**
+   * Upload to an exact key. Required for HLS because playlist-relative segment
+   * paths must match object keys exactly.
+   */
+  async uploadObjectExact(
+    objectKey: string,
+    body: Buffer | Uint8Array | string,
+    mimeType: string,
+    cacheControl = "public, max-age=31536000, immutable"
+  ): Promise<ExactObjectUpload> {
+    const contentLength =
+      typeof body === "string" ? Buffer.byteLength(body) : body.byteLength;
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        Body: body,
+        ContentType: mimeType,
+        ContentLength: contentLength,
+        CacheControl: cacheControl,
+      })
+    );
+    return {
+      objectKey,
+      secure_url: this.generatePublicUrl(objectKey),
+    };
+  }
+
+  /** Promote a private staging object without downloading it through the API. */
+  async copyObject(
+    sourceKey: string,
+    destinationKey: string,
+    mimeType: string,
+    cacheControl = "public, max-age=31536000, immutable"
+  ): Promise<ExactObjectUpload> {
+    const bucket = process.env.R2_BUCKET;
+    if (!bucket) throw new Error("R2_BUCKET is required");
+    const encodedSource = `${bucket}/${sourceKey
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}`;
+    await s3Client.send(
+      new CopyObjectCommand({
+        Bucket: bucket,
+        Key: destinationKey,
+        CopySource: encodedSource,
+        ContentType: mimeType,
+        CacheControl: cacheControl,
+        MetadataDirective: "REPLACE",
+      })
+    );
+    await this.headObject(destinationKey);
+    return {
+      objectKey: destinationKey,
+      secure_url: this.generatePublicUrl(destinationKey),
+    };
+  }
+
   /**
    * Upload media file to Cloudflare R2 with immutable URL structure
    * @param fileBuffer - File buffer to upload
@@ -191,26 +256,53 @@ class FileUploadService {
    * Generate permanent public URL for R2 object
    * Follows Cloudflare CDN URL structure for optimal caching
    */
-  private generatePublicUrl(objectKey: string): string {
+  generatePublicUrl(objectKey: string): string {
     const customDomain = process.env.R2_CUSTOM_DOMAIN;
 
     if (customDomain) {
-      // Use custom CDN domain: https://cdn.yourdomain.com/media/...
-      return `https://${customDomain}/${objectKey}`;
+      return `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/${objectKey}`;
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "R2_CUSTOM_DOMAIN is required in production (hard-coded r2.dev URLs are not allowed)"
+      );
     }
 
     const publicDevUrl =
       process.env.R2_PUBLIC_DEV_URL ||
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
-    const bucketName = process.env.R2_BUCKET || "jevah";
+    // r2.dev and R2 custom domains are already bound to a bucket. Prefixing
+    // the bucket name creates a non-existent object path.
+    return `${publicDevUrl.replace(/\/+$/, "")}/${objectKey}`;
+  }
 
-    // For R2 public dev URLs, the path starts with the bucket name
-    // Ensure we don't double-prefix if objectKey somehow already has it
-    if (objectKey.startsWith(`${bucketName}/`)) {
-      return `${publicDevUrl}/${objectKey}`;
-    }
+  /** Presigned PUT for direct-to-R2 client uploads (single-object). */
+  async getPresignedPutUrl(
+    objectKey: string,
+    mimeType: string,
+    sizeBytes?: number,
+    expiresInSeconds = 3600
+  ): Promise<string> {
+    return getSignedUrl(
+      s3Client,
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        ContentType: mimeType,
+        ...(sizeBytes ? { ContentLength: sizeBytes } : {}),
+      }),
+      { expiresIn: expiresInSeconds }
+    );
+  }
 
-    return `${publicDevUrl}/${bucketName}/${objectKey}`;
+  async headObject(objectKey: string) {
+    return s3Client.send(
+      new HeadObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+      })
+    );
   }
 }
 

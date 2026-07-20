@@ -2,7 +2,8 @@
 
 How to build the **admin web dashboard** (and optional admin views on mobile) against Jevah’s MongoDB-backed auth and `/api/admin` APIs.
 
-Companion API reference: [ADMIN.md](./ADMIN.md).
+Companion API reference: [ADMIN.md](./ADMIN.md).  
+**Content moderation / reports handoff (feed this to implementers):** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
 
 Same users collection powers **mobile app** and **admin web** — an account with `role: "admin"` can sign in on either; only the web dashboard should mount the admin routes/UI.
 
@@ -62,15 +63,15 @@ Content-Type: application/json
 const { accessToken, user } = await login(email, password);
 
 if (user.role !== "admin") {
-  // Same Mongo user can be learner / artist / etc. — refuse dashboard
   showError("This account is not an admin.");
   return;
 }
 
-localStorage.setItem("accessToken", accessToken); // or secure cookie jar
-localStorage.setItem("adminUser", JSON.stringify(user));
-router.replace("/admin"); // landing = Overview
+// Optional: prefer API flag over hardcoding email
+// user.isMasterAdmin === true for support@jevahapp.com
 ```
+
+**Master account:** `support@jevahapp.com` (seeded via `npm run seed:super-admin`). Only that account can change roles on the API. See [ADMIN.md](./ADMIN.md) § Master / super-admin.
 
 On every boot / refresh:
 
@@ -176,7 +177,7 @@ Poll feed + analytics every **30–60s** (no report websocket yet).
 | **Compose email** | `POST /api/admin/email` | Mail users by id or email |
 | **Reports** | `GET /api/admin/reports` | Media + comment inbox |
 | **Moderation** | `GET /api/admin/moderation/queue` | Approve / reject AI-held uploads |
-| **Churches** | church CRUD + verification PATCH | Catalog + verify |
+| **Churches** | `GET/POST/PATCH/DELETE /api/admin/churches` + email via `churchIds` | Catalog for onboarding + outreach |
 | **Audio library** | `/api/audio/copyright-free` CRUD | Curated songs |
 | **Activity** | `GET /api/admin/activity` | Audit of *your* admin actions |
 
@@ -262,9 +263,14 @@ Each row: title, type, thumbnail, uploader, `moderationStatus`, timestamps.
 
 ```http
 GET /api/admin/moderation/queue?status=under_review&page=1
+GET /api/admin/moderation/:mediaId
+GET /api/admin/moderation/:mediaId/case
 
 PATCH /api/admin/moderation/:mediaId/status
 { "status": "approved" | "rejected" | "under_review", "adminNotes": "…" }
+
+PATCH /api/admin/media/:mediaId
+{ "title": "…", "description": "…", "adminModerationNotes": "…" }
 ```
 
 Hard delete (also removes files):
@@ -273,7 +279,7 @@ Hard delete (also removes files):
 DELETE /api/admin/media/:mediaId
 ```
 
-Deletes are recorded via audit (`delete_media`) and surface on the feed / activity log — there is no separate “soft delete” ledger.
+Full contracts, card shapes, and report action wiring: [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
 
 ---
 
@@ -281,6 +287,9 @@ Deletes are recorded via audit (`delete_media`) and surface on the feed / activi
 
 ```http
 GET /api/admin/reports?type=all&status=pending&page=1&limit=20
+GET /api/admin/reports/media/:reportId
+POST /api/admin/reports/media/:reportId/review
+DELETE /api/admin/reports/media/:mediaId/content
 ```
 
 | Kind | Actions |
@@ -288,7 +297,7 @@ GET /api/admin/reports?type=all&status=pending&page=1&limit=20
 | **media** | dismiss / reviewed / resolve (hide) / delete forever / ban uploader |
 | **comment** | hide / unhide / dismiss reports |
 
-Details: [earlier sections in ADMIN.md](./ADMIN.md). Prefer `/api/admin/reports/*` over legacy `/api/media/reports/*`.
+**Implement detail + mutations next** — see [FRONTEND_MODERATION.md §5](./FRONTEND_MODERATION.md). Prefer `/api/admin/reports/*` over legacy `/api/media/reports/*`.
 
 ---
 

@@ -101,6 +101,31 @@ export const commentRepository = {
       .lean();
   },
 
+  /** Batch-load replies for many parents (avoids N+1) */
+  async findRepliesForParents(
+    parentIds: Types.ObjectId[],
+    limitPerParent = 50
+  ): Promise<Map<string, any[]>> {
+    const grouped = new Map<string, any[]>();
+    if (!parentIds.length) return grouped;
+    const rows = await Interaction.find({
+      parentCommentId: { $in: parentIds },
+      ...COMMENT_FILTER,
+    })
+      .populate("user", "firstName lastName avatar")
+      .sort("createdAt")
+      .lean();
+    for (const row of rows as any[]) {
+      const key = row.parentCommentId.toString();
+      const list = grouped.get(key) || [];
+      if (list.length < limitPerParent) {
+        list.push(row);
+        grouped.set(key, list);
+      }
+    }
+    return grouped;
+  },
+
   findRepliesPaginated(parentId: string, skip: number, limit: number) {
     const parentObjId = new Types.ObjectId(parentId);
     return Promise.all([
@@ -133,11 +158,15 @@ export const commentRepository = {
     ]);
   },
 
-  softDelete(id: string) {
-    return Interaction.findByIdAndUpdate(id, {
-      isRemoved: true,
-      content: "[Comment removed]",
-    });
+  softDelete(id: string, session?: ClientSession) {
+    return Interaction.findByIdAndUpdate(
+      id,
+      {
+        isRemoved: true,
+        content: "[Comment removed]",
+      },
+      session ? { session } : undefined
+    );
   },
 
   hide(id: string, moderatorId: string, reason?: string) {
@@ -149,7 +178,7 @@ export const commentRepository = {
         hiddenReason: reason?.slice(0, 500),
       },
       { new: true }
-    ).select("_id");
+    ).select("_id media");
   },
 
   unhide(id: string) {
@@ -213,8 +242,20 @@ export const commentRepository = {
     );
   },
 
-  decrementReplyCount(parentId: Types.ObjectId) {
-    return Interaction.findByIdAndUpdate(parentId, { $inc: { replyCount: -1 } });
+  decrementReplyCount(parentId: Types.ObjectId, session?: ClientSession) {
+    return Interaction.findByIdAndUpdate(
+      parentId,
+      [
+        {
+          $set: {
+            replyCount: {
+              $max: [0, { $subtract: [{ $ifNull: ["$replyCount", 0] }, 1] }],
+            },
+          },
+        },
+      ],
+      session ? { session } : undefined
+    );
   },
 
   report(id: string, userId: string) {

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { verifyToken } from "../middleware/auth.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
+import { idempotencyMiddleware } from "../middleware/idempotency.middleware";
+import { bookmarkRateLimiter } from "../middleware/bookmarkRateLimiter.middleware";
 import {
   toggleBookmark,
   getBookmarkStatus,
@@ -21,7 +23,13 @@ const router = Router();
  *       - bearerAuth: []
  */
 // Controller accepts :mediaId or :contentId param names
-router.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
+router.post(
+  "/:mediaId/toggle",
+  verifyToken,
+  idempotencyMiddleware(),
+  bookmarkRateLimiter,
+  toggleBookmark
+);
 
 /**
  * @swagger

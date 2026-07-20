@@ -2,9 +2,13 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { Media } from "../../models/media.model";
 import { mediaService } from "../../service/media.service";
-import cacheService from "../../service/cache.service";
+import cacheService, { CACHE_TTL } from "../../service/cache.service";
+import { feedCacheHash, feedGlobalKey } from "../../lib/cacheKeys";
+import { getFeedGeneration } from "../../lib/invalidateFeedCaches";
+import { attachFreshEngagementCounts } from "../../service/media/feedCountOverlay";
 import logger from "../../utils/logger";
 import { extractObjectKeyFromUrl, mapContentType } from "./shared";
+import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
 
 export const getPublicMedia = async (
   request: Request,
@@ -12,14 +16,14 @@ export const getPublicMedia = async (
 ): Promise<void> => {
   try {
     const filters = request.query;
-    const cacheKey = `media:public:${JSON.stringify(filters)}`;
+    const digest = feedCacheHash({ scope: "public-list", ...(filters as any) });
+    const cacheKey = `media:public:list:v2:${digest}`;
 
-    // Cache for 15 minutes (900 seconds)
-    const result = await cacheService.getOrSet(
+    const result = await cacheService.getOrSetSwr(
       cacheKey,
       async () => {
         const mediaList = await mediaService.getAllMedia(filters, {
-          actingUserId: request.userId
+          actingUserId: request.userId,
         });
         return {
           success: true,
@@ -27,10 +31,11 @@ export const getPublicMedia = async (
           pagination: mediaList.pagination,
         };
       },
-      900 // 15 minutes cache - aggressive caching for stable public data
+      { freshTtlSeconds: 900, staleTtlSeconds: 120 }
     );
 
-    response.status(200).json(result);
+    response.setHeader("X-Cache", result.status);
+    response.status(200).json(result.value);
   } catch (error: any) {
     console.error("Fetch public media error:", error);
     response.status(500).json({
@@ -102,8 +107,8 @@ export const getPublicAllContent = async (
     if (dateTo) options.dateTo = dateTo;
     if (search) options.search = search;
 
-    // Cache key includes query params so pagination/filters return correct data
-    const cacheKeyHash = JSON.stringify({
+    // Share generation-scoped feed list with authenticated all-content
+    const hash = feedCacheHash({
       page: options.page,
       limit: options.limit,
       contentType: options.contentType,
@@ -115,42 +120,62 @@ export const getPublicAllContent = async (
       search: options.search,
       sort: options.sort,
       order: options.order,
-      mood,
     });
-    const cacheKey = `media:public:all-content:${Buffer.from(cacheKeyHash).toString("base64").slice(0, 48)}`;
 
-    // Cache for 30 seconds (short TTL) so new uploads appear soon after approved
-    const result = await cacheService.getOrSetWithHeaders(
-      cacheKey,
-      async () => {
-        const mediaResult = await mediaService.getAllContentForAllTab(options);
+    const generation = await getFeedGeneration();
+    let media: any[];
+    let pagination: any;
+    let fromMongoMiss = false;
+    let cacheStatus: "HIT" | "STALE" | "MISS" | "BYPASS" = "BYPASS";
 
-        // Public endpoint can still include non-personalized recommendations
-        let recommendations: any = undefined;
-        try {
-          recommendations = await mediaService.getRecommendationsForAllContent(
-            undefined,
-            {
-              limitPerSection: 12,
-              mood,
-            }
-          );
-        } catch (err) {
-          recommendations = undefined;
-        }
-
-        return {
-          success: true,
-          data: {
+    if (generation === null) {
+      const mediaResult = await mediaService.getAllContentForAllTab(options);
+      media = mediaResult.media;
+      pagination = mediaResult.pagination;
+      fromMongoMiss = true;
+    } else {
+      const listKey = feedGlobalKey(hash, generation);
+      const loaded = await cacheService.getOrSetSwr(
+        listKey,
+        async () => {
+          const mediaResult = await mediaService.getAllContentForAllTab(options);
+          return {
             media: mediaResult.media,
             pagination: mediaResult.pagination,
-          },
-          ...(recommendations && { recommendations }),
-        };
+          };
+        },
+        {
+          freshTtlSeconds: CACHE_TTL.feed,
+          staleTtlSeconds: CACHE_TTL.feedStale,
+        }
+      );
+      media = loaded.value.media;
+      pagination = loaded.value.pagination;
+      cacheStatus = loaded.status;
+      fromMongoMiss = loaded.status === "MISS" || loaded.status === "BYPASS";
+    }
+
+    let recommendations: any = undefined;
+    try {
+      recommendations = await mediaService.getRecommendationsForAllContent(undefined, {
+        limitPerSection: 12,
+        mood,
+      });
+    } catch {
+      recommendations = undefined;
+    }
+
+    const mediaWithCounts = await attachFreshEngagementCounts(media, { fromMongoMiss });
+    response.setHeader("X-Cache", cacheStatus);
+
+    const result = {
+      success: true,
+      data: {
+        media: mediaWithCounts,
+        pagination,
       },
-      response,
-      30 // 30 seconds TTL as specified
-    );
+      ...(recommendations && { recommendations }),
+    };
 
     // Log performance metrics
     const duration = Date.now() - startTime;
@@ -163,6 +188,7 @@ export const getPublicAllContent = async (
         limit,
         contentType,
         total: result.data?.pagination?.total,
+        cached: cacheStatus,
       });
     }
 
@@ -182,6 +208,7 @@ export const getPublicAllContent = async (
       total: result.data?.pagination?.total,
       duration,
       responseSize,
+      cached: cacheStatus,
     });
 
     response.status(200).json(result);
@@ -337,6 +364,7 @@ export const getDefaultContent = async (
     const filter: any = {
       isDefaultContent: true,
       isOnboardingContent: true,
+      ...PUBLIC_MEDIA_FILTER,
     };
 
     // Add contentType filter if provided
@@ -496,6 +524,7 @@ export const getOnboardingContent = async (
     const onboardingContent = await Media.find({
       isOnboardingContent: true,
       isDefaultContent: true,
+      ...PUBLIC_MEDIA_FILTER,
     })
       .sort({ createdAt: -1 })
       .limit(15) // Show 15 items for onboarding

@@ -3,6 +3,7 @@ import { Media } from "../../../models/media.model";
 import { Devotional } from "../../../models/devotional.model";
 import logger from "../../../utils/logger";
 import { ViewEvent } from "../../../models/viewEvent.model";
+import { setPostCounter } from "../../../lib/redisCounters";
 
 type ContentType =
   | "media"
@@ -201,6 +202,12 @@ const viewService = {
       } else {
         throw e;
       }
+    }
+
+    // Refresh Redis view counter so cached feeds overlay the fresh count
+    // (setPostCounter never rejects)
+    if (counted) {
+      void setPostCounter({ postId: contentId, field: "views", count: viewCount });
     }
 
     try {

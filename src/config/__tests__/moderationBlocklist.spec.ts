@@ -11,7 +11,11 @@ describe("matchModerationBlocklist", () => {
     expect(matchModerationBlocklist("We must not celebrate bumbum as Christians")).toBeNull();
   });
 
-  it("matches regex profanity", () => {
-    expect(matchModerationBlocklist("this is bullshit content")).not.toBeNull();
+  it("matches regex profanity as hard", () => {
+    expect(matchModerationBlocklist("this is bullshit content")?.severity).toBe("hard");
+  });
+
+  it("marks ambiguous English tokens as soft", () => {
+    expect(matchModerationBlocklist("Brother Dick taught Romans")?.severity).toBe("soft");
   });
 });

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { Types } from "mongoose";
 import authService from "../../service/auth.service";
 import { User } from "../../models/user.model";
 import multer from "multer";
@@ -24,6 +25,8 @@ export async function completeUserProfile(
       section,
       role,
       location,
+      churchId,
+      churchBranchId,
       avatarUpload,
       interests,
       hasConsentedToPrivacyPolicy,
@@ -46,6 +49,43 @@ export async function completeUserProfile(
       updateFields.parentalControlEnabled = parentalControlEnabled;
     }
     if (parentEmail !== undefined) updateFields.parentEmail = parentEmail;
+
+    if (churchId !== undefined) {
+      if (churchId === null || churchId === "") {
+        updateFields.churchId = null;
+      } else if (Types.ObjectId.isValid(String(churchId))) {
+        const { Church } = await import("../../models/church.model");
+        const exists = await Church.exists({
+          _id: churchId,
+          isListed: { $ne: false },
+        });
+        if (!exists) {
+          return response.status(400).json({
+            success: false,
+            message: "Invalid or unlisted churchId",
+          });
+        }
+        updateFields.churchId = churchId;
+      } else {
+        return response.status(400).json({
+          success: false,
+          message: "Invalid churchId",
+        });
+      }
+    }
+
+    if (churchBranchId !== undefined) {
+      if (churchBranchId === null || churchBranchId === "") {
+        updateFields.churchBranchId = null;
+      } else if (Types.ObjectId.isValid(String(churchBranchId))) {
+        updateFields.churchBranchId = churchBranchId;
+      } else {
+        return response.status(400).json({
+          success: false,
+          message: "Invalid churchBranchId",
+        });
+      }
+    }
 
     const userBeforeUpdate = await User.findById(userId);
 

@@ -26,8 +26,31 @@ services:
         sync: false
       - key: GOOGLE_AI_API_KEY
         sync: false
+      - key: GEMINI_DEFAULT_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_MODERATION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_MODERATION_ESCALATION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TRANSCRIPTION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_DAILY_REQUEST_BUDGET
+        value: "500"
+      - key: GEMINI_DAILY_INPUT_TOKEN_BUDGET
+        value: "2000000"
+      - key: GEMINI_DAILY_OUTPUT_TOKEN_BUDGET
+        value: "200000"
+      - key: GEMINI_REQUEST_TIMEOUT_MS
+        value: "60000"
+      - key: GEMINI_MAX_RETRIES
+        value: "2"
+      - key: GEMINI_MAX_CONCURRENT
+        value: "3"
+      - key: MODERATION_DAILY_UPLOADS_PER_USER
+        value: "30"
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
+
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
@@ -100,6 +123,14 @@ services:
       - key: SESSION_SECRET
         sync: false
       - key: REDIS_URL
+        fromService:
+          type: redis
+          name: jevah-redis
+          property: connectionString
+      # Expo push (API registers devices; worker sends + polls receipts)
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
+      - key: R2_CUSTOM_DOMAIN
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
@@ -121,6 +152,77 @@ services:
       name: data
       mountPath: /opt/render/project/src/uploads
       sizeGB: 10
+
+  # BullMQ background worker (media-processing + analytics)
+  - type: worker
+    name: jevah-worker
+    env: node
+    plan: starter
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm run worker:start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: jevah-redis
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      - key: WORKER_CONCURRENCY
+        value: "4"
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: GEMINI_DEFAULT_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_MODERATION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_MODERATION_ESCALATION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TRANSCRIPTION_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_DAILY_REQUEST_BUDGET
+        value: "500"
+      - key: GEMINI_DAILY_INPUT_TOKEN_BUDGET
+        value: "2000000"
+      - key: GEMINI_DAILY_OUTPUT_TOKEN_BUDGET
+        value: "200000"
+      - key: GEMINI_REQUEST_TIMEOUT_MS
+        value: "60000"
+      - key: GEMINI_MAX_RETRIES
+        value: "2"
+      - key: GEMINI_MAX_CONCURRENT
+        value: "3"
+      - key: MODERATION_DAILY_UPLOADS_PER_USER
+        value: "30"
+      # Leave KAFKA_BROKERS unset unless Kafka is the sole analytics path
+      - key: KAFKA_BROKERS
+        sync: false
+      - key: KAFKA_ENGAGEMENT_TOPIC
+        value: jevah.engagement.events
+      # R2 for staged download / derivative upload in worker
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_CUSTOM_DOMAIN
+        sync: false
+      # Expo push delivery + receipt reconciliation
+      - key: EXPO_ACCESS_TOKEN
+        sync: false
+    autoDeploy: true
+
 
   # Redis Service for Caching and Sessions
   - type: redis

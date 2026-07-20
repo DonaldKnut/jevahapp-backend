@@ -174,6 +174,12 @@ interactionSchema.index({ media: 1 });
 // Index for user-based queries
 interactionSchema.index({ user: 1 });
 
+// Comment list: media + type + parent + date
+interactionSchema.index(
+  { media: 1, interactionType: 1, parentCommentId: 1, createdAt: -1 },
+  { name: "interaction_media_type_parent_createdAt" }
+);
+
 export const Interaction =
   mongoose.models.Interaction ||
   mongoose.model<IInteraction>("Interaction", interactionSchema);

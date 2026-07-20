@@ -58,17 +58,25 @@ export const toggleBookmark = async (
       contentTypeHint
     );
 
-    // Send real-time notification via Socket.IO
+    // Global count only; private bookmarked state to actor room
     try {
       const io = require("../socket/socketManager").getIO();
       if (io) {
-        io.emit("content-bookmark-update", {
+        const updatedAt = new Date().toISOString();
+        const countPayload = {
           mediaId,
           contentId: mediaId,
+          contentType: "media",
           bookmarkCount: result.bookmarkCount,
+          updatedAt,
+          timestamp: updatedAt,
+        };
+        io.emit("content-bookmark-count-updated", countPayload);
+        io.emit("content-bookmark-update", countPayload);
+        io.to(`user:${userId}`).emit("content-bookmark-state-updated", {
+          ...countPayload,
+          bookmarked: result.bookmarked,
           userBookmarked: result.bookmarked,
-          userId,
-          timestamp: new Date().toISOString(),
         });
       }
     } catch (socketError) {

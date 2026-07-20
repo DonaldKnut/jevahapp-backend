@@ -88,7 +88,7 @@ export async function sendMessage(data: MessageInput): Promise<any> {
       const preview = data.content.substring(0, 100);
       await NotificationService.createNotification({
         userId: data.recipientId,
-        type: "message" as any,
+        type: "message",
         title: "New Message",
         message: `${sender?.firstName || sender?.email || "Someone"}: ${preview}`,
         metadata: {
@@ -100,7 +100,7 @@ export async function sendMessage(data: MessageInput): Promise<any> {
           )?._id,
         },
         priority: "low",
-      } as any);
+      });
     } catch (msgNotifyError: any) {
       logger.warn("Failed to send message notification", {
         error: msgNotifyError?.message,

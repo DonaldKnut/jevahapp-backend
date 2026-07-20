@@ -5,18 +5,43 @@ import { normalizeContentType } from "../shared/contentType.resolver";
 import { commentRepository } from "./comment.repository";
 import { sanitizeCommentContent, formatComment, applyIsLiked } from "./comment.formatter";
 import { publishEngagementEvent } from "../../../lib/engagementEvents";
+import { NotificationService } from "../../../service/notification.service";
+import { setPostCounter } from "../../../lib/redisCounters";
+import { bumpCommentsVersion } from "./comment.version";
+import { emitCommentRoomEvents } from "./comment.realtime";
+import logger from "../../../utils/logger";
+import mentionDetectionService from "../../../service/mentionDetection.service";
+
+const FLOOR_COMMENT = [
+  {
+    $set: {
+      commentCount: {
+        $max: [0, { $subtract: [{ $ifNull: ["$commentCount", 0] }, 1] }],
+      },
+    },
+  },
+];
 
 async function bumpCommentCount(
   contentId: string,
   contentType: string,
   delta: number,
-  session: ClientSession
+  session?: ClientSession
 ) {
   const normalized = normalizeContentType(contentType);
+  const opts = session ? { session } : {};
+  if (delta < 0) {
+    if (normalized === "media") {
+      await Media.findByIdAndUpdate(contentId, FLOOR_COMMENT, opts);
+    } else if (normalized === "devotional") {
+      await Devotional.findByIdAndUpdate(contentId, FLOOR_COMMENT, opts);
+    }
+    return;
+  }
   if (normalized === "media") {
-    await Media.findByIdAndUpdate(contentId, { $inc: { commentCount: delta } }, { session });
+    await Media.findByIdAndUpdate(contentId, { $inc: { commentCount: delta } }, opts);
   } else if (normalized === "devotional") {
-    await Devotional.findByIdAndUpdate(contentId, { $inc: { commentCount: delta } }, { session });
+    await Devotional.findByIdAndUpdate(contentId, { $inc: { commentCount: delta } }, opts);
   }
 }
 
@@ -58,19 +83,116 @@ export class CommentService {
         return doc;
       });
 
+      const commentId = created._id.toString();
       publishEngagementEvent("comment.created", {
         userId,
         contentId,
         contentType: normalized,
-        commentId: created._id.toString(),
+        commentId,
         parentCommentId,
       });
 
+      bumpCommentsVersion(contentId);
+
       const populated = await commentRepository
-        .findById(created._id.toString())
+        .findById(commentId)
         .populate("user", "firstName lastName avatar")
         .lean();
-      return formatComment(populated);
+      const formatted = formatComment(populated);
+
+      let likeCount = 0;
+      let shareCount = 0;
+      let viewCount = 0;
+      let commentCount = 0;
+      let ownerUserId: string | undefined;
+      let contentTitle: string | undefined;
+      if (normalized === "media") {
+        const media = await Media.findById(contentId)
+          .select("likeCount shareCount viewCount commentCount uploadedBy title")
+          .lean();
+        likeCount = (media as any)?.likeCount || 0;
+        shareCount = (media as any)?.shareCount || 0;
+        viewCount = (media as any)?.viewCount || 0;
+        commentCount = (media as any)?.commentCount || 0;
+        ownerUserId = (media as any)?.uploadedBy?.toString?.();
+        contentTitle = (media as any)?.title;
+      } else if (normalized === "devotional") {
+        const d = await Devotional.findById(contentId)
+          .select("likeCount shareCount viewCount commentCount submittedBy title")
+          .lean();
+        likeCount = (d as any)?.likeCount || 0;
+        shareCount = (d as any)?.shareCount || 0;
+        viewCount = (d as any)?.viewCount || 0;
+        commentCount = (d as any)?.commentCount || 0;
+        ownerUserId = (d as any)?.submittedBy?.toString?.();
+        contentTitle = (d as any)?.title;
+      }
+
+      // Refresh Redis comment counter so cached feeds overlay the new count
+      // (no feed-cache invalidation needed). setPostCounter never rejects.
+      void setPostCounter({
+        postId: contentId,
+        field: "comments",
+        count: commentCount,
+      });
+
+      emitCommentRoomEvents({
+        contentId,
+        contentType: normalized,
+        comment: formatted,
+        commentCount,
+        likeCount,
+        shareCount,
+        viewCount,
+        ownerUserId,
+        actorUserId: userId,
+        contentTitle,
+      });
+
+      Promise.resolve(
+        NotificationService.notifyContentComment(
+          userId,
+          contentId,
+          normalized,
+          text,
+          commentId
+        )
+      ).catch((err) => {
+        logger.warn("Failed to send comment notification", {
+          error: (err as Error).message,
+          commentId,
+        });
+      });
+
+      void mentionDetectionService
+        .detectAndNotifyMentions(userId, contentId, normalized, text)
+        .catch((err: any) => {
+          logger.warn("Failed to send mention notifications", {
+            error: err?.message,
+            commentId,
+          });
+        });
+
+      if (parentCommentId && Types.ObjectId.isValid(parentCommentId)) {
+        Promise.resolve(
+          NotificationService.notifyCommentReply(
+            userId,
+            parentCommentId,
+            contentId,
+            normalized,
+            text,
+            commentId
+          )
+        ).catch((err) => {
+          logger.warn("Failed to send reply notification", {
+            error: (err as Error).message,
+            commentId,
+            parentCommentId,
+          });
+        });
+      }
+
+      return formatted;
     } finally {
       session.endSession();
     }
@@ -97,13 +219,14 @@ export class CommentService {
         ? await commentRepository.findTopByScore(contentId, skip, limit)
         : await commentRepository.findTopLevel(contentId, skip, limit, sort);
 
-    const withReplies = await Promise.all(
-      rows.map(async (c: any) => {
-        const formatted = formatComment(c);
-        formatted.replies = (await commentRepository.findReplies(c._id)).map(formatComment);
-        return applyIsLiked(formatted, userId);
-      })
+    const replyMap = await commentRepository.findRepliesForParents(
+      rows.map((c: any) => c._id)
     );
+    const withReplies = rows.map((c: any) => {
+      const formatted = formatComment(c);
+      formatted.replies = (replyMap.get(c._id.toString()) || []).map(formatComment);
+      return applyIsLiked(formatted, userId);
+    });
 
     const [topLevel, replies] = await commentRepository.countForContent(contentId);
     const total = topLevel + replies;
@@ -139,6 +262,7 @@ export class CommentService {
     );
     comment.reactions = reactions as any;
     await commentRepository.save(comment);
+    bumpCommentsVersion(comment.media?.toString());
 
     const totalLikes = (reactions.get("like") || []).length;
     return { liked: !has, totalLikes };
@@ -167,6 +291,7 @@ export class CommentService {
 
     const { text } = sanitizeCommentContent(newContent);
     await commentRepository.updateContent(commentId, text);
+    bumpCommentsVersion(comment.media?.toString());
     const updated = await commentRepository
       .findById(commentId)
       .populate("user", "firstName lastName avatar")
@@ -228,18 +353,55 @@ export class CommentService {
       throw new Error("Comment not found or you don't have permission to delete it");
     }
 
-    await commentRepository.softDelete(commentId);
-    if (comment.media) {
-      await Media.findByIdAndUpdate(comment.media, { $inc: { commentCount: -1 } });
+    const contentId = comment.media?.toString();
+    const session = await Media.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await commentRepository.softDelete(commentId, session);
+        if (contentId) {
+          await bumpCommentCount(contentId, "media", -1, session);
+        }
+        if (comment.parentCommentId) {
+          await commentRepository.decrementReplyCount(comment.parentCommentId, session);
+        }
+      });
+    } catch (error: any) {
+      if (
+        error.message?.includes("Transaction numbers are only allowed") ||
+        error.message?.includes("replica set")
+      ) {
+        await commentRepository.softDelete(commentId);
+        if (contentId) {
+          await bumpCommentCount(contentId, "media", -1);
+        }
+        if (comment.parentCommentId) {
+          await commentRepository.decrementReplyCount(comment.parentCommentId);
+        }
+      } else {
+        throw error;
+      }
+    } finally {
+      session.endSession();
     }
-    if (comment.parentCommentId) {
-      await commentRepository.decrementReplyCount(comment.parentCommentId);
+
+    if (contentId) {
+      bumpCommentsVersion(contentId);
+      // Refresh Redis comment counter from Mongo so cached feeds overlay
+      // the decremented count.
+      void (async () => {
+        const m = await Media.findById(contentId).select("commentCount").lean();
+        await setPostCounter({
+          postId: contentId,
+          field: "comments",
+          count: (m as any)?.commentCount || 0,
+        });
+      })().catch(() => {});
     }
 
     publishEngagementEvent("comment.removed", {
       userId,
       commentId,
-      contentId: comment.media?.toString(),
+      contentId,
     });
   }
 
@@ -249,6 +411,7 @@ export class CommentService {
     }
     const updated = await commentRepository.hide(commentId, moderatorId, reason);
     if (!updated) throw new Error("Comment not found");
+    bumpCommentsVersion((updated as any).media?.toString());
   }
 
   async moderateUnhideComment(commentId: string) {
@@ -259,6 +422,7 @@ export class CommentService {
     if (!comment) throw new Error("Comment not found");
     const updated = await commentRepository.unhide(commentId);
     if (!updated) throw new Error("Comment not found");
+    bumpCommentsVersion(comment.media?.toString());
   }
 
   async dismissCommentReports(commentId: string) {

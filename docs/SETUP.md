@@ -19,6 +19,11 @@ NODE_ENV=production
 PORT=4000
 FRONTEND_URL=https://your-frontend.com
 
+# Master admin (dashboard owner) — seed with:
+#   SUPER_ADMIN_PASSWORD='strong-password-here' npm run seed:super-admin
+SUPER_ADMIN_EMAIL=support@jevahapp.com
+# SUPER_ADMIN_PASSWORD is only needed at seed time (never commit it)
+
 # Redis (authoritative for likes / rate limits / idempotency — Contabo ioredis)
 REDIS_URL=redis://127.0.0.1:6379
 
@@ -32,7 +37,58 @@ KAFKA_CONSUMER_GROUP=jevah-engagement-workers
 
 # Pool tuning under load
 MONGODB_POOL_SIZE=30
+
+# Gemini moderation / transcription (gemini-1.5 is shut down)
+# One API key from https://aistudio.google.com/ — model IDs are not separate tokens
+GOOGLE_AI_API_KEY=...
+GEMINI_DEFAULT_MODEL=gemini-2.5-flash
+GEMINI_MODERATION_MODEL=gemini-2.5-flash
+GEMINI_MODERATION_ESCALATION_MODEL=gemini-2.5-flash
+GEMINI_TRANSCRIPTION_MODEL=gemini-2.5-flash
+# Free tier is OK for local/dev only — enable paid Tier 1 + budgets before public onboarding
+GEMINI_DAILY_REQUEST_BUDGET=500
+GEMINI_DAILY_INPUT_TOKEN_BUDGET=2000000
+GEMINI_DAILY_OUTPUT_TOKEN_BUDGET=200000
+GEMINI_REQUEST_TIMEOUT_MS=60000
+GEMINI_MAX_RETRIES=2
+GEMINI_MAX_CONCURRENT=3
+MODERATION_DAILY_UPLOADS_PER_USER=30
+MODERATION_MAX_VIDEO_FRAMES=10
+VERIFICATION_MAX_AUDIO_SEGMENTS=5
+
+# Object storage (Cloudflare R2)
+# Never use r2.dev in production. Set an R2 custom domain backed by Cloudflare CDN.
+# Add a Cloudflare WAF rule blocking public requests to /staging/*; API/worker
+# access uses the S3 endpoint and signed URLs, not the public custom domain.
+# Worker must also receive GOOGLE_AI_API_KEY + R2_* for staged moderation
+
+# Expo push (API + worker — closed-app delivery + receipt polling)
+EXPO_ACCESS_TOKEN=...
+# Optional worker poll interval (ms):
+# EXPO_RECEIPT_POLL_MS=60000
 ```
+
+See [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md) for the mobile registration contract.
+
+### Cloudflare video delivery
+
+- Configure `R2_CUSTOM_DOMAIN` (for example `media.example.com`) and disable the
+  bucket's `r2.dev` public URL in production.
+- WAF: block `http.request.uri.path starts_with "/staging/"`.
+- R2 CORS: allow your app/web origins, methods `GET`/`HEAD`, request header
+  `Range`, and expose `Content-Length`, `Content-Range`, `Accept-Ranges`,
+  `Content-Type`, and `ETag`.
+- Keep immutable cache rules for `/media-hls/*`, `/media-videos/*`, and
+  `/media-thumbnails/*`. Do not cache `/staging/*`.
+- Clients should prefer `hlsUrl` (adaptive 360p/720p/1080p, capped at source
+  resolution) and fall back to `playbackUrl` MP4. Do not construct object URLs.
+
+This provides a production baseline similar to short-video feeds: direct staged
+uploads, moderation before publication, CDN delivery, adaptive HLS, MP4
+fallback, poster images, and byte-range support. TikTok/Instagram additionally
+operate proprietary multi-codec encoding, per-device/network rendition
+selection, global multi-CDN routing, predictive prefetch, and much larger
+observability systems; R2 alone does not provide those layers.
 
 ## Startup checklist
 

@@ -30,6 +30,7 @@
     "cleanup:users": "node scripts/cleanup-orphaned-users.js",
     "delete:all-users": "node scripts/delete-all-users.js",
     "seed:forums": "node scripts/seed-forum-categories.js",
+    "seed:super-admin": "node scripts/seed-super-admin.js",
     "seed:polls": "node scripts/seed-polls.js",
     "seed:polls:clear": "node scripts/seed-polls.js --clear",
     "seed:copyright-free": "node scripts/seed-copyright-free-songs.js",
@@ -44,6 +45,7 @@
     "loadtest": "artillery run artillery.yml",
     "test:redis": "node scripts/test-redis-connection.js",
     "smoke:engagement": "node scripts/smoke-engagement.js",
+    "measure:latency": "node scripts/measure-latency.js",
     "fix:like-counts": "node scripts/fix-negative-like-counts.js"
   },
   "keywords": [

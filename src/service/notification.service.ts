@@ -38,10 +38,12 @@ export class NotificationService {
 
       await notification.save();
 
-      // Send push notification
-      await this.sendPushNotification(
-        data.userId,
-        {
+      // Durable push via BullMQ worker (survives API crash after Mongo commit)
+      const { enqueueNotificationPush } = await import("../queues/enqueue");
+      try {
+        await enqueueNotificationPush({
+          userId: data.userId,
+          notificationId: notification._id.toString(),
           title: data.title,
           body: data.message,
           data: {
@@ -50,11 +52,19 @@ export class NotificationService {
             ...data.metadata,
           },
           priority: data.priority === "high" ? "high" : "normal",
-        },
-        data.type as any
-      );
+          notificationType: data.type,
+          dedupeKey: data.dedupeKey,
+        });
+      } catch (enqueueErr: any) {
+        logger.error("Push enqueue failed after inbox insert", {
+          userId: data.userId,
+          notificationId: notification._id,
+          error: enqueueErr?.message,
+        });
+        // Keep inbox record; outbox reconciler (Phase 1) will retry.
+      }
 
-      logger.info("Notification created and sent", {
+      logger.info("Notification created and push enqueued", {
         userId: data.userId,
         type: data.type,
         notificationId: notification._id,
@@ -188,7 +198,8 @@ export class NotificationService {
     commenterId: string,
     contentId: string,
     contentType: string,
-    commentText: string
+    commentText: string,
+    commentId?: string
   ): Promise<void> {
     try {
       const commenter = await User.findById(commenterId);
@@ -231,12 +242,73 @@ export class NotificationService {
           thumbnailUrl: content.thumbnailUrl,
           commentText: commentText.substring(0, 100),
           commentCount: content.commentCount || 0,
+          commentId,
         },
         priority: "medium",
         relatedId: contentId,
+        dedupeKey: commentId ? `comment:${commentId}` : undefined,
       });
     } catch (error) {
       logger.error("Failed to send comment notification:", error);
+    }
+  }
+
+  /**
+   * Notify the parent comment author when someone replies.
+   * Uses a distinct dedupeKey from the content-owner notification.
+   */
+  static async notifyCommentReply(
+    replierId: string,
+    parentCommentId: string,
+    contentId: string,
+    contentType: string,
+    commentText: string,
+    commentId?: string
+  ): Promise<void> {
+    try {
+      const { Interaction } = await import("../models/interaction.model");
+      const [replier, parent] = await Promise.all([
+        User.findById(replierId),
+        Interaction.findById(parentCommentId).select("user").lean(),
+      ]);
+
+      const parentAuthorId = (parent as any)?.user?.toString?.();
+      if (!replier || !parentAuthorId || replierId === parentAuthorId) {
+        return;
+      }
+
+      // Content owner already gets notifyContentComment — skip duplicate for same recipient
+      let contentOwnerId: string | undefined;
+      if (contentType === "media") {
+        const content = await Media.findById(contentId).select("uploadedBy").lean();
+        contentOwnerId = (content as any)?.uploadedBy?.toString?.();
+      } else if (contentType === "devotional") {
+        const content = await Devotional.findById(contentId).select("submittedBy").lean();
+        contentOwnerId = (content as any)?.submittedBy?.toString?.();
+      }
+      if (contentOwnerId && contentOwnerId === parentAuthorId) {
+        return;
+      }
+
+      await this.createNotification({
+        userId: parentAuthorId,
+        type: "comment",
+        title: "New Reply",
+        message: `${replier.firstName || replier.email} replied to your comment`,
+        metadata: {
+          actorName: replier.firstName || replier.email,
+          actorAvatar: replier.avatar,
+          contentType,
+          commentText: commentText.substring(0, 100),
+          commentId,
+          parentCommentId,
+        },
+        priority: "medium",
+        relatedId: contentId,
+        dedupeKey: commentId ? `comment:${commentId}:reply` : undefined,
+      });
+    } catch (error) {
+      logger.error("Failed to send reply notification:", error);
     }
   }
 
@@ -422,10 +494,10 @@ export class NotificationService {
       const actor = await User.findById(actorId);
       if (!actor) return;
 
-      // Get actor's followers
+      // Get actor's followers who opted into public activity
       const followers = await User.find({
         _id: { $in: actor.followers || [] },
-        "notificationPreferences.publicActivity": true,
+        "pushNotifications.preferences.publicActivity": { $ne: false },
       });
 
       if (followers.length === 0) return;
@@ -495,9 +567,28 @@ export class NotificationService {
     preferences: any
   ): Promise<any> {
     try {
+      // Merge preferences only — never wipe deviceTokens / enabled.
+      const prefs =
+        preferences?.preferences && typeof preferences.preferences === "object"
+          ? preferences.preferences
+          : preferences;
+      const update: Record<string, any> = {};
+      if (prefs && typeof prefs === "object") {
+        for (const [key, value] of Object.entries(prefs)) {
+          if (typeof value === "boolean") {
+            update[`pushNotifications.preferences.${key}`] = value;
+          }
+        }
+      }
+      if (typeof preferences?.enabled === "boolean") {
+        update["pushNotifications.enabled"] = preferences.enabled;
+      }
+      if (Object.keys(update).length === 0) {
+        return this.getNotificationPreferences(userId);
+      }
       const user = await User.findByIdAndUpdate(
         userId,
-        { $set: { pushNotifications: preferences } },
+        { $set: update },
         { new: true }
       ).select("pushNotifications");
 
@@ -588,7 +679,8 @@ export class NotificationService {
   static async notifyContentBookmark(
     bookmarkerId: string,
     contentId: string,
-    contentType: string
+    contentType: string,
+    bookmarkId?: string
   ): Promise<void> {
     try {
       const bookmarker = await User.findById(bookmarkerId);
@@ -619,9 +711,11 @@ export class NotificationService {
           contentType,
           thumbnailUrl: content.thumbnailUrl,
           bookmarkCount: content.bookmarkCount || 0,
+          bookmarkId,
         },
         priority: "low",
         relatedId: contentId,
+        dedupeKey: bookmarkId ? `bookmark:${bookmarkId}` : undefined,
       });
     } catch (error) {
       logger.error("Failed to send bookmark notification:", error);
@@ -776,10 +870,10 @@ export class NotificationService {
 
       const [notifications, total, unreadCount] = await Promise.all([
         Notification.find(query)
-          .populate("user", "firstName lastName avatar email")
-          .sort({ createdAt: -1 })
+          .sort({ createdAt: -1, _id: -1 })
           .skip((page - 1) * limit)
-          .limit(limit),
+          .limit(limit)
+          .lean(),
         Notification.countDocuments(query),
         Notification.countDocuments({ user: userId, isRead: false }),
       ]);

@@ -4,10 +4,50 @@
 
 | Store | Env | Used for |
 |-------|-----|----------|
-| **Contabo / local ioredis** | `REDIS_URL` | Like counters, user like state, like rate limits, Idempotency-Key, Socket.IO adapter (optional), sessions/queues |
-| Upstash REST (optional) | `UPSTASH_REDIS_REST_*` | Non-critical caches only — **not** the like hot path |
+| **Contabo / local ioredis** | `REDIS_URL` | **All app cache** via `CacheService`: feed lists (`feed:user:*` / `feed:global:*`), auth user snapshots (`auth:user:*`), like counters, rate limits, Idempotency-Key, sessions, BullMQ, optional Socket.IO adapter |
+| Upstash REST (optional) | `UPSTASH_REDIS_REST_*` | Legacy/non-critical only — **not** feed, auth, or like hot path |
 
-Do **not** split like counters across two Redis instances.
+Do **not** split feed cache writes and invalidation across two Redis instances. Feed get/set and `invalidateFeedCaches` both use Contabo `REDIS_URL` (SCAN via `cacheService.delPattern`, never `KEYS`).
+
+### Feed + auth keys
+
+| Pattern | TTL | Notes |
+|---------|-----|--------|
+| `feed:user:{userId}:{hash}` / `feed:global:{hash}` | 600s | List payload without per-JWT flags; flags overlaid after hit |
+| `auth:user:{userId}` | 120s | Ban/role/verification — deleted on admin mutations |
+
+`flushAll` is blocked in production unless `ALLOW_REDIS_FLUSH=true`.
+
+### Analytics ingest (no double path)
+
+`publishEngagementEvent` uses **Kafka XOR BullMQ** — never both. If `KAFKA_BROKERS` is set and the producer connects, events go to Kafka only; otherwise they enqueue to BullMQ. Deploy a worker (`npm run worker:start` / docker-compose `worker`) so jobs process.
+
+Leave `KAFKA_BROKERS` **unset** on Contabo unless Kafka is intentional (Kafka XOR BullMQ for analytics).
+
+### Notifications queue
+
+After Mongo notification insert, the API enqueues a `notifications` BullMQ job (`push`) with deterministic `jobId` (`notify:{dedupeKey|notificationId}`). The **worker** delivers Expo/push with retries. Do not rely on in-request push for durability.
+
+## Contabo PM2 layout (API + worker)
+
+Two processes share localhost Redis and Mongo Atlas:
+
+```text
+API (npm start)  →  Redis 127.0.0.1  →  Worker (npm run worker:start)
+Mongo Atlas (authoritative writes)
+```
+
+```bash
+# .env on Contabo
+REDIS_URL=redis://127.0.0.1:6379
+# Do not set KAFKA_BROKERS unless you run Kafka
+
+# ecosystem (see ecosystem.config.cjs)
+pm2 start ecosystem.config.cjs
+pm2 status
+```
+
+Queues the worker consumes: `media-processing`, `analytics`, `notifications`.
 
 ## Contabo binding (recommended)
 
@@ -49,9 +89,35 @@ REDIS_URL=redis://127.0.0.1:6379
       "rateLimitRejections": 0,
       "cacheFailures": 0
     }
+  },
+  "redisCache": {
+    "feed": {
+      "freshHits": 0,
+      "staleHits": 0,
+      "misses": 0,
+      "coalesced": 0
+    }
+  },
+  "moderation": {
+    "providerAvailable": true,
+    "aiBudget": {
+      "day": "2026-07-19",
+      "requests": 0,
+      "budgetBlocks": 0,
+      "quarantines": 0
+    }
   }
 }
 ```
+
+### Feed cache keys (v2)
+
+| Pattern | Notes |
+|---------|--------|
+| `feed:gen` | Generation counter — bump on publish/removal |
+| `feed:global:v2:{gen}:{sha256}` | Shared public list cache (collision-safe hash) |
+| `feed:userflags:{userId}:{mediaId}` | Tri-state like/bookmark flags |
+| `post:counters:{mediaId}` | Like/view/comment/share overlay |
 
 Structured logs: `idempotency_replay`, `like_rate_limited`, `like_toggle_completed`.
 

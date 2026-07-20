@@ -3,24 +3,21 @@ import {
   uploadMedia,
   generateMediaDescription,
 } from "../../controllers/media.controller";
+import {
+  createStagedUploadIntent,
+  finalizeStagedUpload,
+  abortStagedUpload,
+  getStagedUploadStatus,
+} from "../../controllers/media/staged/stagedUpload.controller";
 import { verifyToken } from "../../middleware/auth.middleware";
 import {
   mediaUploadRateLimiter,
   aiDescriptionRateLimiter,
 } from "../../middleware/rateLimiter";
-import { logRequest, upload } from "./shared";
+import { logRequest, upload, handleUploadMulterError } from "./shared";
 
 const router = Router();
 
-/**
- * @route   POST /api/media/generate-description
- * @desc    Generate AI-powered description for media creation (helps users create engaging descriptions)
- *          Enhanced with multimodal analysis: analyzes video frames, audio transcript, and thumbnail image
- * @access  Protected (Authenticated users only - optional, works without auth too)
- * @body    { title: string, contentType: "music" | "videos" | "books" | "live" | "audio" | "sermon" | "devotional" | "ebook" | "podcast", category?: string, topics?: string[] }
- * @files   Optional: { file?: File (video/audio), thumbnail?: File (image) }
- * @returns { success: boolean, description: string, bibleVerses?: string[], enhancedDescription?: string, message: string }
- */
 router.post(
   "/generate-description",
   verifyToken,
@@ -29,16 +26,11 @@ router.post(
     { name: "file", maxCount: 1 },
     { name: "thumbnail", maxCount: 1 },
   ]),
+  handleUploadMulterError,
   generateMediaDescription
 );
 
-/**
- * @route   POST /api/media/upload
- * @desc    Upload a new media item (music, video, or book) with thumbnail
- * @access  Protected (Authenticated users only)
- * @body    { title: string, contentType: "music" | "videos" | "books", description?: string, category?: string, topics?: string[], duration?: number, file: File, thumbnail: File }
- * @returns { success: boolean, message: string, media: object }
- */
+/** Legacy memory-buffered upload (kept for backward compatibility). Prefer staged. */
 router.post(
   "/upload",
   verifyToken,
@@ -48,7 +40,39 @@ router.post(
     { name: "file", maxCount: 1 },
     { name: "thumbnail", maxCount: 1 },
   ]),
+  handleUploadMulterError,
   uploadMedia
 );
+
+/**
+ * Staged direct-to-R2 upload:
+ * 1) POST /upload/intent → presigned PUT
+ * 2) Client PUTs bytes to R2
+ * 3) POST /upload/:mediaId/finalize → queue moderation + transcode
+ */
+router.post(
+  "/upload/intent",
+  verifyToken,
+  mediaUploadRateLimiter,
+  createStagedUploadIntent
+);
+
+router.post(
+  "/upload/:mediaId/finalize",
+  verifyToken,
+  mediaUploadRateLimiter,
+  upload.fields([{ name: "thumbnail", maxCount: 1 }]),
+  handleUploadMulterError,
+  finalizeStagedUpload
+);
+
+router.delete(
+  "/upload/:mediaId",
+  verifyToken,
+  mediaUploadRateLimiter,
+  abortStagedUpload
+);
+
+router.get("/upload/:mediaId/status", verifyToken, getStagedUploadStatus);
 
 export default router;

@@ -10,12 +10,16 @@ Gospel media platform API — feed, copyright-free audio, live streaming, commun
 | Doc | Description |
 |-----|-------------|
 | [docs/README.md](docs/README.md) | Documentation index |
+| [docs/CREATED_SO_FAR.md](docs/CREATED_SO_FAR.md) | Inventory of everything built toward launch |
 | [docs/API.md](docs/API.md) | Full endpoint reference |
 | [docs/ENGAGEMENT.md](docs/ENGAGEMENT.md) | Likes, views, shares, saves, comments (feed + copyright-free) |
 | [docs/FRONTEND_ENGAGEMENT.md](docs/FRONTEND_ENGAGEMENT.md) | Frontend UI integration — optimistic updates, player wiring, screen recipes |
 | [docs/ADMIN.md](docs/ADMIN.md) | Admin dashboard API — reports, moderation, verification, bans |
 | [docs/FRONTEND_ADMIN.md](docs/FRONTEND_ADMIN.md) | Admin UI — screen recipes, reports inbox, action maps |
+| [docs/FRONTEND_MODERATION.md](docs/FRONTEND_MODERATION.md) | Moderation + reports handoff for web admin (preview cards, P1 actions) |
+| [docs/SUPER_ADMIN.md](docs/SUPER_ADMIN.md) | Master admin seed + protections (`support@jevahapp.com`) |
 | [docs/SETUP.md](docs/SETUP.md) | Environment, workers, Redis, Kafka, deployment |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Shareholder performance brief — API latency, CPU/RAM, upload & verification |
 | [docs/WEBSOCKETS.md](docs/WEBSOCKETS.md) | Socket.IO events and rooms |
 | [docs/DEPRECATED.md](docs/DEPRECATED.md) | Legacy routes — do not use in new code |
 

@@ -7,6 +7,7 @@ import logger from "../utils/logger";
 import { redisRateLimit } from "../lib/redisRateLimit";
 import likeService from "../modules/engagement/like/like.service";
 import { incrPostCounter } from "../lib/redisCounters";
+import { addCommunityComment } from "../modules/engagement/comments/communityComment.command";
 
 /**
  * Toggle like on a prayer post
@@ -273,27 +274,19 @@ export const commentOnPrayer = async (req: Request, res: Response): Promise<void
       }
     }
 
-    // Create comment
-    const comment = await Interaction.create({
-      user: userId,
-      media: new Types.ObjectId(prayerId),
-      interactionType: "comment",
-      content: content.trim(),
-      parentCommentId: parentCommentId ? new Types.ObjectId(parentCommentId) : undefined,
-      lastInteraction: new Date(),
-      count: 1,
-      isRemoved: false,
+    const { doc: comment } = await addCommunityComment({
+      userId: userId!,
+      contentId: prayerId,
+      contentKind: "prayer",
+      content,
+      parentCommentId,
+      bumpCount: async () => {
+        prayer.commentsCount = (prayer.commentsCount || 0) + 1;
+        await prayer.save();
+        incrPostCounter({ postId: prayerId, field: "comments", delta: 1 }).catch(() => {});
+        return prayer.commentsCount;
+      },
     });
-
-    // Update prayer commentsCount
-    prayer.commentsCount = (prayer.commentsCount || 0) + 1;
-    await prayer.save();
-    incrPostCounter({ postId: prayerId, field: "comments", delta: 1 }).catch(() => { });
-
-    // Populate user info
-    await comment.populate("user", "firstName lastName username avatar");
-
-    logger.info("Prayer comment created", { prayerId, userId, commentId: comment._id });
 
     res.status(201).json({
       success: true,

@@ -117,6 +117,9 @@ export interface IUser {
   section?: UserSection;
   role?: UserRole;
   location?: string;
+  /** Church selected during onboarding (from catalog / places suggest). */
+  churchId?: mongoose.Types.ObjectId;
+  churchBranchId?: mongoose.Types.ObjectId;
 
   interests?: InterestType[];
 
@@ -222,7 +225,13 @@ const userSchema = new Schema<IUserDocument>(
   {
     firstName: { type: String },
     lastName: { type: String },
-    email: { type: String, required: true, unique: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
     provider: { type: String, enum: ["clerk", "email"], required: true },
     clerkId: { type: String },
     avatar: { type: String }, // optional legacy avatar field
@@ -252,6 +261,18 @@ const userSchema = new Schema<IUserDocument>(
       ],
     },
     location: { type: String },
+    churchId: {
+      type: Schema.Types.ObjectId,
+      ref: "Church",
+      index: true,
+      sparse: true,
+    },
+    churchBranchId: {
+      type: Schema.Types.ObjectId,
+      ref: "ChurchBranch",
+      index: true,
+      sparse: true,
+    },
 
     interests: {
       type: [String],

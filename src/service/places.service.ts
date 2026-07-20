@@ -225,19 +225,41 @@ export class PlacesService {
       branchFilter.churchId = new mongoose.Types.ObjectId(churchId);
     }
 
+    // Only listed churches appear in onboarding / places suggest.
+    // Unlisted = drafted by admin until they are ready to show.
+    const churchFilter: any = {
+      isListed: { $ne: false },
+      $or: [{ name: re }, { branchName: re }, { address: re }, { denomination: re }],
+    };
+
     const [branches, churches] = await Promise.all([
       ChurchBranch.find(branchFilter).limit(50),
-      Church.find({
-        $or: [{ name: re }, { branchName: re }, { address: re }],
-      }).limit(30),
+      Church.find(churchFilter).limit(30),
     ]);
 
     const churchMap = new Map<string, any>();
     churches.forEach(c => churchMap.set(c._id.toString(), c));
 
+    // Ensure branch parents are loaded so we can respect isListed
+    const missingParentIds = [
+      ...new Set(
+        branches
+          .map(b => b.churchId?.toString())
+          .filter((id): id is string => Boolean(id) && !churchMap.has(id))
+      ),
+    ];
+    if (missingParentIds.length > 0) {
+      const parents = await Church.find({
+        _id: { $in: missingParentIds },
+        isListed: { $ne: false },
+      });
+      parents.forEach(c => churchMap.set(c._id.toString(), c));
+    }
+
     const internal: NormalizedResult[] = [];
     for (const b of branches) {
       const c = churchMap.get(b.churchId?.toString());
+      if (b.churchId && !c) continue; // parent unlisted or missing
       const normalized = normalizeInternalBranch(b, c, near, radius);
       const ts = textScore(`${normalized.name} ${c?.name || ""}`, q);
       const ps =

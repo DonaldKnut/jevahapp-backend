@@ -10,6 +10,8 @@ import fileUploadService from "../fileUpload.service";
 import aiReengagementService from "../aiReengagement.service";
 import { TOKEN_EXPIRATION } from "../../config/tokenConfig";
 import { JWT_SECRET_ASSERTED } from "./shared";
+import { normalizeEmail } from "./register.service";
+import { isMasterAdminEmail } from "../../config/superAdmin";
 
 export async function oauthLogin(
   provider: string,
@@ -30,7 +32,7 @@ export async function oauthLogin(
       );
     }
 
-    let user = await User.findOne({ email: tokenData.email });
+    let user = await User.findOne({ email: normalizeEmail(tokenData.email) });
     const isNewUser = !user;
 
     if (!user) {
@@ -99,7 +101,7 @@ export async function clerkLogin(token: string, userInfo: any) {
       throw new Error("Email not found in Clerk token");
     }
 
-    let user = await User.findOne({ email: tokenData.email });
+    let user = await User.findOne({ email: normalizeEmail(tokenData.email) });
     const isNewUser = !user;
 
     if (!user) {
@@ -159,7 +161,10 @@ export async function loginUser(
   ipAddress?: string,
   userAgent?: string
 ) {
-  const user = await User.findOne({ email, provider: "email" });
+  const user = await User.findOne({
+    email: normalizeEmail(email),
+    provider: "email",
+  });
   if (!user || !(await bcrypt.compare(password, user.password || ""))) {
     throw new Error("Invalid email or password");
   }
@@ -227,6 +232,7 @@ export async function loginUser(
       avatar: user.avatar,
       role: user.role,
       isProfileComplete: user.isProfileComplete,
+      isMasterAdmin: isMasterAdminEmail(user.email),
     },
   };
 }
@@ -256,6 +262,7 @@ export async function getCurrentUser(userId: string) {
     role: user.role,
     isProfileComplete: user.isProfileComplete || false,
     isEmailVerified: user.isEmailVerified || false,
+    isMasterAdmin: isMasterAdminEmail(user.email),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

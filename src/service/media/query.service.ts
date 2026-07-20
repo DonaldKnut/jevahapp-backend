@@ -6,27 +6,13 @@ import enhancedMediaService from "../enhancedMedia.service";
 import { recommendationEngineService } from "../recommendationEngine.service";
 import logger from "../../utils/logger";
 import { DurationRangeKey, LeanUserViewedMedia } from "./types";
+import { buildMediaVisibilityQuery } from "./query/visibility";
 
 export class MediaQueryService {
   async getAllMedia(filters: any = {}, options: { enforceModeration?: boolean; actingUserId?: string } = { enforceModeration: true }) {
-    const query: any = {};
-
-    // Apply strict moderation if enforced (defaulted to true for safety)
-    const shouldEnforce = options.enforceModeration !== false;
-
-    if (shouldEnforce) {
-      if (options.actingUserId) {
-        // Show only approved OR content uploaded by the current user
-        query.$or = [
-          { moderationStatus: "approved", isHidden: { $ne: true } },
-          { uploadedBy: new Types.ObjectId(options.actingUserId) }
-        ];
-      } else {
-        // Show only approved content
-        query.moderationStatus = "approved";
-        query.isHidden = { $ne: true };
-      }
-    }
+    const query: any = {
+      ...buildMediaVisibilityQuery(options),
+    };
 
     if (filters.search) {
       query.title = { $regex: filters.search, $options: "i" };
@@ -208,40 +194,49 @@ export class MediaQueryService {
         }
       }
 
-      // Build sort object
+      // Sort on native Media fields BEFORE $lookup (page first, then join author)
       const sortField = options?.sort || "createdAt";
       const sortOrder = options?.order === "asc" ? 1 : -1;
       const sortObj: Record<string, 1 | -1> = {};
-
-      // Map sort fields to aggregation-compatible fields
       if (sortField === "views" || sortField === "viewCount") {
-        sortObj.totalViews = sortOrder;
+        sortObj.viewCount = sortOrder;
       } else if (sortField === "likes" || sortField === "likeCount") {
-        sortObj.totalLikes = sortOrder;
-      } else if (sortField === "createdAt") {
-        sortObj.createdAt = sortOrder;
+        sortObj.likeCount = sortOrder;
       } else {
-        sortObj.createdAt = sortOrder; // Default
+        sortObj.createdAt = sortOrder;
       }
+      // Stable cursor tie-break
+      if (!sortObj._id) sortObj._id = sortOrder;
 
-      // Reuse the shared aggregation pipeline with author + engagement info
-      const pipeline = this.buildAggregationPipeline(
-        matchQuery,
-        {
-          sort: sortObj,
-        }
-      );
+      const pipeline = this.buildAggregationPipeline(matchQuery, {
+        sort: sortObj,
+        skip,
+        limit,
+        pageBeforeLookup: true,
+      });
 
-      if (skip > 0) {
-        pipeline.push({ $skip: skip });
-      }
-      pipeline.push({ $limit: limit });
+      // Avoid exact countDocuments on every page when possible — cache-friendly estimate for deep pages
+      const countPromise =
+        page === 1
+          ? Media.countDocuments(matchQuery)
+          : Media.countDocuments(matchQuery).maxTimeMS(2000).catch(() => -1);
 
-      // Count query uses the same matchQuery (search already included)
-      const [mediaList, total] = await Promise.all([
+      const [mediaList, totalRaw] = await Promise.all([
         Media.aggregate(pipeline),
-        Media.countDocuments(matchQuery),
+        countPromise,
       ]);
+      const total = typeof totalRaw === "number" && totalRaw >= 0 ? totalRaw : skip + mediaList.length;
+      const totalPages = totalRaw >= 0 ? Math.ceil(total / limit) : undefined;
+
+      const nextCursor =
+        mediaList.length > 0
+          ? Buffer.from(
+              JSON.stringify({
+                createdAt: mediaList[mediaList.length - 1].createdAt,
+                _id: mediaList[mediaList.length - 1]._id,
+              })
+            ).toString("base64url")
+          : undefined;
 
       return {
         media: mediaList,
@@ -250,9 +245,13 @@ export class MediaQueryService {
           page,
           limit,
           total,
-          totalPages: Math.ceil(total / limit),
-          hasNextPage: page < Math.ceil(total / limit),
+          totalPages: totalPages ?? Math.ceil(total / limit),
+          hasNextPage:
+            totalRaw >= 0
+              ? page < Math.ceil(total / limit)
+              : mediaList.length === limit,
           hasPreviousPage: page > 1,
+          nextCursor,
         },
       };
     } catch (error: any) {
@@ -278,11 +277,25 @@ export class MediaQueryService {
       sort?: Record<string, 1 | -1>;
       sampleSize?: number;
       limit?: number;
+      skip?: number;
+      pageBeforeLookup?: boolean;
     }
   ) {
     const pipeline: any[] = [];
     if (matchStage && Object.keys(matchStage).length > 0) {
       pipeline.push({ $match: matchStage });
+    }
+
+    if (options?.pageBeforeLookup) {
+      if (options?.sort) {
+        pipeline.push({ $sort: options.sort });
+      }
+      if (options?.skip && options.skip > 0) {
+        pipeline.push({ $skip: options.skip });
+      }
+      if (options?.limit && options.limit > 0) {
+        pipeline.push({ $limit: options.limit });
+      }
     }
 
     // Only lookup user info (needed for author details)
@@ -407,14 +420,16 @@ export class MediaQueryService {
       }
     );
 
-    if (options?.sort) {
-      pipeline.push({ $sort: options.sort });
-    }
-    if (options?.sampleSize && options.sampleSize > 0) {
-      pipeline.push({ $sample: { size: options.sampleSize } });
-    }
-    if (options?.limit && options.limit > 0) {
-      pipeline.push({ $limit: options.limit });
+    if (!options?.pageBeforeLookup) {
+      if (options?.sort) {
+        pipeline.push({ $sort: options.sort });
+      }
+      if (options?.sampleSize && options.sampleSize > 0) {
+        pipeline.push({ $sample: { size: options.sampleSize } });
+      }
+      if (options?.limit && options.limit > 0) {
+        pipeline.push({ $limit: options.limit });
+      }
     }
 
     return pipeline;

@@ -165,14 +165,17 @@ export const recordMediaInteraction = async (
   }
 };
 
-// New method for tracking views with duration
+/**
+ * @deprecated Prefer POST /api/content/media/:contentId/view
+ * Redirects Redis-first view tracking to Mongo-authoritative contentView.service.
+ */
 export const trackViewWithDuration = async (
   request: Request,
   response: Response
 ): Promise<void> => {
   try {
     const userId = request.userId;
-    const { mediaId, duration, isComplete } = request.body;
+    const { mediaId, duration, isComplete, progressPct } = request.body;
 
     if (!userId) {
       response.status(401).json({
@@ -182,57 +185,53 @@ export const trackViewWithDuration = async (
       return;
     }
 
-    if (
-      !mediaId ||
-      typeof duration !== "number" ||
-      typeof isComplete !== "boolean"
-    ) {
+    if (!mediaId || typeof duration !== "number") {
       response.status(400).json({
         success: false,
-        message: "Missing required fields: mediaId, duration, isComplete",
+        message: "Missing required fields: mediaId, duration",
       });
       return;
     }
 
-    // Fast path: Update Redis counter immediately, return response
-    const viewCount = await incrPostCounter({ postId: mediaId, field: "views", delta: 1 });
-
-    // Return immediately with optimistic response
-    response.status(200).json({
-      success: true,
-      data: {
-        countedAsView: true,
-        viewCount: viewCount || 0,
-        duration,
-        isComplete,
-      },
+    const viewService = (await import("../../modules/engagement/view/view.service")).default;
+    // Legacy clients often send seconds; contentView thresholds are in ms
+    const durationMs = duration < 1000 ? duration * 1000 : duration;
+    const result = await viewService.recordView({
+      userId,
+      contentId: mediaId,
+      contentType: "media",
+      durationMs,
+      progressPct,
+      isComplete: !!isComplete,
+      source: "legacy:trackViewWithDuration",
+      ip: request.ip,
+      userAgent: request.get("User-Agent"),
     });
 
-    // Do DB work in background (non-blocking)
-    Promise.all([
-      mediaService.trackViewWithDuration({
-        userIdentifier: userId,
-        mediaIdentifier: mediaId,
-        duration,
-        isComplete,
-      }),
-      enqueueAnalyticsEvent({
-        name: "media_view_duration",
-        payload: {
-          userId,
-          mediaId,
-          duration,
-          isComplete,
-          createdAt: new Date().toISOString(),
-        },
-        requestId: (request as any).requestId,
-      }),
-    ]).catch((err) => {
-      logger.error("Background view tracking failed", {
-        error: err.message,
+    enqueueAnalyticsEvent({
+      name: "media_view_duration",
+      payload: {
         userId,
         mediaId,
-      });
+        duration,
+        isComplete: !!isComplete,
+        counted: result.counted,
+        createdAt: new Date().toISOString(),
+      },
+      requestId: (request as any).requestId,
+    });
+
+    response.status(200).json({
+      success: true,
+      deprecated: true,
+      successor: "POST /api/content/media/:contentId/view",
+      data: {
+        countedAsView: result.counted,
+        viewCount: result.viewCount,
+        hasViewed: result.hasViewed,
+        duration,
+        isComplete: !!isComplete,
+      },
     });
   } catch (error: any) {
     logger.error("Track view error", {

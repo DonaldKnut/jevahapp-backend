@@ -1,5 +1,6 @@
 import { User } from "../models/user.model";
 import { Media } from "../models/media.model";
+import { PUBLIC_MEDIA_FILTER } from "../lib/publicMediaVisibility";
 
 export interface TrendingUser {
   user: any;
@@ -51,7 +52,7 @@ export class TrendingService {
 
       const results = await Promise.all(
         users.map(async user => {
-          const media = await Media.find({ uploadedBy: user._id })
+          const media = await Media.find({ uploadedBy: user._id, ...PUBLIC_MEDIA_FILTER })
             .select(
               "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
             )
@@ -101,6 +102,7 @@ export class TrendingService {
           const ebooks = await Media.find({
             uploadedBy: user._id,
             contentType: "ebook",
+            ...PUBLIC_MEDIA_FILTER,
           })
             .select(
               "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
@@ -154,6 +156,7 @@ export class TrendingService {
           const audioContent = await Media.find({
             uploadedBy: user._id,
             contentType: { $in: ["audio", "music", "podcast"] },
+            ...PUBLIC_MEDIA_FILTER,
           })
             .select(
               "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
@@ -208,6 +211,7 @@ export class TrendingService {
           const sermons = await Media.find({
             uploadedBy: user._id,
             contentType: "sermon",
+            ...PUBLIC_MEDIA_FILTER,
           })
             .select(
               "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
@@ -265,6 +269,7 @@ export class TrendingService {
           const liveStreams = await Media.find({
             uploadedBy: user._id,
             contentType: "live",
+            ...PUBLIC_MEDIA_FILTER,
           })
             .select(
               "contentType viewCount likeCount readCount listenCount createdAt actualEnd"
@@ -338,6 +343,7 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "live",
         isLive: true,
+        ...PUBLIC_MEDIA_FILTER,
       })
         .select(
           "contentType viewCount likeCount readCount listenCount createdAt actualEnd concurrentViewers uploadedBy"
@@ -381,6 +387,7 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "ended",
         actualEnd: { $gte: since },
+        ...PUBLIC_MEDIA_FILTER,
       })
         .select(
           "contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy"
@@ -427,6 +434,7 @@ export class TrendingService {
         contentType: "live",
         liveStreamStatus: "scheduled",
         scheduledStart: { $gte: from, $lte: to },
+        ...PUBLIC_MEDIA_FILTER,
       })
         .select(
           "contentType viewCount likeCount readCount listenCount createdAt actualEnd scheduledStart uploadedBy"
@@ -463,7 +471,7 @@ export class TrendingService {
 
   private async getPopularLiveStreamers(): Promise<TrendingUser[]> {
     try {
-      const liveStreams = await Media.find({ contentType: "live" })
+      const liveStreams = await Media.find({ contentType: "live", ...PUBLIC_MEDIA_FILTER })
         .select(
           "contentType viewCount likeCount readCount listenCount createdAt actualEnd uploadedBy"
         )

@@ -3,6 +3,9 @@ import { verifyToken } from "../../middleware/auth.middleware";
 import { rateLimiter, apiRateLimiter } from "../../middleware/rateLimiter";
 import { verifyTokenOptional } from "../../middleware/optionalAuth.middleware";
 import { likeRateLimiter } from "../../middleware/likeRateLimiter.middleware";
+import { bookmarkRateLimiter } from "../../middleware/bookmarkRateLimiter.middleware";
+import { commentRateLimiter as redisCommentRateLimiter } from "../../middleware/commentRateLimiter.middleware";
+import { shareRateLimiter } from "../../middleware/shareRateLimiter.middleware";
 import { idempotencyMiddleware } from "../../middleware/idempotency.middleware";
 import {
   toggleContentLike,
@@ -41,7 +44,6 @@ import {
 } from "./messaging/messaging.controller";
 
 const interactionRateLimiter = rateLimiter(10, 60000);
-const commentRateLimiter = rateLimiter(5, 60000);
 const messageRateLimiter = rateLimiter(20, 60000);
 
 // ─── Content interactions (like, share, view, metadata) ─────────────────────
@@ -58,7 +60,8 @@ contentRouter.post(
 contentRouter.post(
   "/:contentType/:contentId/share",
   verifyToken,
-  interactionRateLimiter,
+  idempotencyMiddleware(),
+  shareRateLimiter,
   shareContent
 );
 contentRouter.post(
@@ -79,7 +82,8 @@ contentRouter.get("/:contentType/:contentId/likers", getContentLikers);
 contentRouter.post(
   "/:contentType/:contentId/comment",
   verifyToken,
-  commentRateLimiter,
+  idempotencyMiddleware(),
+  redisCommentRateLimiter,
   addContentComment
 );
 contentRouter.delete("/comments/:commentId", verifyToken, removeContentComment);
@@ -96,7 +100,13 @@ contentRouter.post("/comments/:commentId/hide", verifyToken, hideContentComment)
 // ─── Save / Bookmark ─────────────────────────────────────────────────────────
 const saveRouter = express.Router();
 // Single pattern — controller reads mediaId OR contentId from params
-saveRouter.post("/:mediaId/toggle", verifyToken, apiRateLimiter, toggleBookmark);
+saveRouter.post(
+  "/:mediaId/toggle",
+  verifyToken,
+  idempotencyMiddleware(),
+  bookmarkRateLimiter,
+  toggleBookmark
+);
 saveRouter.get("/:mediaId/status", verifyToken, getBookmarkStatus);
 saveRouter.get("/user", verifyToken, getUserBookmarks);
 saveRouter.get("/:mediaId/stats", getBookmarkStats);

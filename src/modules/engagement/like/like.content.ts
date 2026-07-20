@@ -12,10 +12,11 @@ import {
   incrPostCounter,
   clampCount,
 } from "../../../lib/redisCounters";
+import { setFeedUserLikeFlag } from "../../../service/media/feedUserFlags";
 import { LikeToggleResult } from "../shared/engagement.types";
 import { toLikeContentType, verifyContentExists } from "../shared/contentType.resolver";
 import { getLikeCountFromDB } from "./like.counts";
-import { emitLikeSocket, invalidateFeedCaches, fireLikeNotifications } from "./like.sideEffects";
+import { emitLikeSocket, fireLikeNotifications } from "./like.sideEffects";
 import { LikeOperationError } from "./like.errors";
 
 const CONTENT_TYPES = ["media", "artist", "merch"] as const;
@@ -46,6 +47,7 @@ async function refreshLikeCaches(params: {
   likeCount: number;
 }): Promise<void> {
   const { userId, contentId, contentType, liked, likeCount } = params;
+  // No feed-cache invalidation: counts + flags are overlaid at read time.
   await Promise.all([
     setPostCounter({
       postId: contentId,
@@ -54,7 +56,9 @@ async function refreshLikeCaches(params: {
       contentType,
     }),
     setUserLikeState({ userId, contentId, liked, contentType }),
-    invalidateFeedCaches(contentId, userId),
+    contentType === "media"
+      ? setFeedUserLikeFlag(userId, contentId, liked)
+      : Promise.resolve(),
   ]);
 }
 

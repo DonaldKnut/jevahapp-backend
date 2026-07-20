@@ -60,10 +60,13 @@ export async function getUserBookmarks(
       .populate({
         path: "media",
         match: { _id: { $exists: true } },
+        select:
+          "title description contentType category thumbnailUrl fileUrl likeCount viewCount commentCount bookmarkCount createdAt uploadedBy moderationStatus isHidden",
       })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     const validBookmarks = bookmarks.filter(
       bookmark => bookmark.media !== null
@@ -93,12 +96,17 @@ export async function getUserBookmarks(
       user: new Types.ObjectId(userId),
     });
 
-    const bookmarkedMedia = validBookmarks.map(bookmark => ({
-      ...bookmark.media.toObject(),
-      isBookmarked: true,
-      bookmarkedAt: bookmark.createdAt,
-      bookmarkId: bookmark._id,
-    }));
+    const bookmarkedMedia = validBookmarks.map((bookmark: any) => {
+      const mediaDoc = bookmark.media?.toObject
+        ? bookmark.media.toObject()
+        : bookmark.media;
+      return {
+        ...mediaDoc,
+        isBookmarked: true,
+        bookmarkedAt: bookmark.createdAt,
+        bookmarkId: bookmark._id,
+      };
+    });
 
     logger.info("Get user bookmarks successful", {
       userId,

@@ -7,3 +7,4 @@ export * from "./engagement.controller";
 export * from "./download.controller";
 export * from "./livestream.controller";
 export * from "./public.controller";
+export * from "./staged/stagedUpload.controller";

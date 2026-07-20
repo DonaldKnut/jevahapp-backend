@@ -17,7 +17,9 @@ export type NotificationType =
   | "merch_purchase" // Merchandise purchase
   | "content_report" // Admin: content reported by a user
   | "content_moderation" // Uploader: content removed / moderated
-  | "moderation_alert"; // Admin: AI / auto moderation alert
+  | "moderation_alert" // Admin: AI / auto moderation alert
+  | "message" // Direct message
+  | "reengagement"; // AI re-engagement nudge
 
 // TypeScript interface for a Notification
 export interface INotification extends Document {
@@ -87,6 +89,8 @@ const notificationSchema = new Schema<INotification>(
         "content_report",
         "content_moderation",
         "moderation_alert",
+        "message",
+        "reengagement",
       ],
       required: true,
     },
@@ -124,6 +128,8 @@ notificationSchema.index(
     name: "unique_notification_dedupeKey",
   }
 );
+notificationSchema.index({ user: 1, createdAt: -1 }, { name: "notification_user_createdAt" });
+notificationSchema.index({ user: 1, isRead: 1 }, { name: "notification_user_isRead" });
 
 // Export model
 export const Notification =

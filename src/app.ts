@@ -23,6 +23,12 @@ import socketManager from "./socket/socketManager";
 
 // Create Express app
 const app = express();
+
+// Running behind a reverse proxy (Render/nginx). Required so express-rate-limit
+// and req.ip use the real client IP from X-Forwarded-For instead of the proxy's,
+// and so rate-limit validation doesn't reject proxied requests in production.
+app.set("trust proxy", 1);
+
 const server = createServer(app);
 
 // Request ID must be first so every log line can include it

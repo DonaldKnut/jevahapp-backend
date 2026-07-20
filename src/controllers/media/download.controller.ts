@@ -185,6 +185,12 @@ export const downloadMediaFile = async (
       // Non-blocking
     }
 
+    // Prefer CDN redirect (avoids proxying large files through Node)
+    if ((result as any).redirectUrl) {
+      response.redirect(302, (result as any).redirectUrl);
+      return;
+    }
+
     // Set appropriate headers for file download (supports Range / resumable downloads)
     response.setHeader(
       "Content-Type",

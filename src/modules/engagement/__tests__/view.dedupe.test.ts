@@ -31,6 +31,10 @@ jest.mock("../../../utils/logger", () => ({
 
 jest.mock("../../../socket/socketManager", () => ({ getIO: () => null }));
 
+jest.mock("../../../lib/redisCounters", () => ({
+  setPostCounter: jest.fn().mockResolvedValue(undefined),
+}));
+
 import viewService from "../view/view.service";
 
 describe("ViewService — dedupe & thresholds", () => {

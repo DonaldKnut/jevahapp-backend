@@ -272,6 +272,18 @@ export const deleteUser = async (
       return;
     }
 
+    const { User } = await import("../../models/user.model");
+    const { isMasterAdminUser } = await import("../../config/superAdmin");
+    const target = await User.findById(userId).select("email role");
+    if (isMasterAdminUser(target)) {
+      response.status(403).json({
+        success: false,
+        message: "Cannot delete the master admin account",
+        code: "MASTER_ADMIN_PROTECTED",
+      });
+      return;
+    }
+
     const result = await userService.deleteUser(userId);
 
     logger.info("User account deleted", {

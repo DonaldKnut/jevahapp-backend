@@ -36,9 +36,14 @@ const requiredEnvVars = {
   'R2_SECRET_ACCESS_KEY': 'R2 secret access key',
   'R2_BUCKET': 'R2 bucket name (jevah)',
   'R2_ACCOUNT_ID': 'Cloudflare account ID',
+  'R2_ENDPOINT': 'R2 S3 API endpoint',
+  'R2_CUSTOM_DOMAIN': 'Public CDN domain (required in production; no r2.dev)',
   
   // External Services
-  'GOOGLE_AI_API_KEY': 'Google AI API key for chatbot',
+  'GOOGLE_AI_API_KEY': 'Google AI Studio API key (gemini-2.5-flash)',
+  'GEMINI_MODERATION_MODEL': 'Optional; defaults to gemini-2.5-flash',
+  'REDIS_URL': 'Contabo/local Redis for budgets, likes, queues',
+  'EXPO_ACCESS_TOKEN': 'Expo access token for push + receipt API (API + worker)',
   'CLOUDINARY_CLOUD_NAME': 'Cloudinary cloud name',
   'CLOUDINARY_API_KEY': 'Cloudinary API key',
   'CLOUDINARY_API_SECRET': 'Cloudinary API secret',

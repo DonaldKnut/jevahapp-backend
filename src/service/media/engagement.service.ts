@@ -359,6 +359,9 @@ export class MediaEngagementService {
     return viewedMedia ? viewedMedia.viewedMedia : [];
   }
 
+  /**
+   * @deprecated Use modules/engagement/view contentView.service (Mongo + ViewEvent dedupe).
+   */
   async trackViewWithDuration(data: ViewTrackingInput) {
     const {
       userIdentifier,
@@ -375,80 +378,22 @@ export class MediaEngagementService {
       throw new Error("Duration must be a positive number");
     }
 
-    // Optimize: Only fetch media (user check is not critical for view tracking)
-    const media = await Media.findById(mediaIdentifier).select("viewThreshold uploadedBy title").lean();
-    if (!media) {
-      throw new Error("Media not found");
+    const viewService = (await import("../../modules/engagement/view/view.service")).default;
+    const result = await viewService.recordView({
+      userId: userIdentifier,
+      contentId: mediaIdentifier,
+      contentType: "media",
+      // Legacy callers passed seconds; contentView expects ms when values are large
+      durationMs: duration < 1000 ? duration * 1000 : duration,
+      isComplete,
+      source: "legacy:mediaEngagement.trackViewWithDuration",
+    });
+
+    if (result.counted) {
+      this.addToViewedMedia(userIdentifier, mediaIdentifier).catch(() => {});
     }
 
-    let shouldCountAsView = false;
-    const session: ClientSession = await Media.startSession();
-    try {
-      const result = await session.withTransaction(async () => {
-        const viewThreshold = (media as any).viewThreshold || 30;
-        shouldCountAsView = duration >= viewThreshold;
-
-        if (shouldCountAsView) {
-          await Media.findByIdAndUpdate(
-            mediaIdentifier,
-            { $inc: { viewCount: 1 } },
-            { session }
-          );
-
-          await Interaction.findOneAndUpdate(
-            {
-              user: new Types.ObjectId(userIdentifier),
-              media: new Types.ObjectId(mediaIdentifier),
-              interactionType: "view",
-            },
-            {
-              $inc: { count: 1 },
-              $set: { lastInteraction: new Date() },
-              $push: {
-                interactions: {
-                  timestamp: new Date(),
-                  duration,
-                  isComplete,
-                },
-              },
-            },
-            { upsert: true, session }
-          );
-
-          // Add to viewed media (non-blocking, can fail silently)
-          this.addToViewedMedia(userIdentifier, mediaIdentifier).catch(() => { });
-
-          // Send email notification in background (non-blocking)
-          if ((media as any).uploadedBy?.toString() !== userIdentifier) {
-            User.findById((media as any).uploadedBy)
-              .select("email emailNotifications firstName artistProfile")
-              .lean()
-              .then((artist: any) => {
-                if (
-                  artist &&
-                  artist.email &&
-                  artist.emailNotifications?.mediaLikes
-                ) {
-                  EmailService.sendMediaLikedEmail(
-                    artist.email,
-                    (media as any).title,
-                    artist.firstName ||
-                    artist.artistProfile?.artistName ||
-                    "Artist"
-                  ).catch(() => { });
-                }
-              })
-              .catch(() => { }); // Never block on email
-          }
-        }
-
-        return { success: true, countedAsView: shouldCountAsView };
-      });
-
-      return result;
-    } finally {
-      session.endSession();
-    }
+    return { success: true, countedAsView: result.counted, viewCount: result.viewCount };
   }
 
   async getMediaWithEngagement(mediaId: string, userId: string) {

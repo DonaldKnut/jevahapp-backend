@@ -8,7 +8,7 @@ Authorization: Bearer <access_token>
 
 Caller must have `role: "admin"` (`requireAdmin`).
 
-**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md)
+**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) · **Moderation handoff:** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)
 
 ---
 
@@ -66,11 +66,14 @@ flowchart TD
 {
   "userIds": ["…"],
   "emails": ["user@example.com"],
+  "churchIds": ["…"],
   "subject": "Notice from Jevah",
   "message": "Plain text (auto-wrapped as HTML)",
   "html": "<p>Optional raw HTML instead of message</p>"
 }
 ```
+
+`churchIds` resolves each church’s `contactEmail` (skipped if missing).
 
 ---
 
@@ -83,11 +86,25 @@ flowchart TD
 | GET | `/api/admin/users/:id` | User detail + stats |
 | POST | `/api/admin/users/:id/ban` | Ban (`reason?`, `duration?` days) |
 | POST | `/api/admin/users/:id/unban` | Unban |
-| PATCH | `/api/admin/users/:id/role` | Change role |
+| PATCH | `/api/admin/users/:id/role` | Change role (**master admin only**) |
 | PATCH | `/api/admin/users/:id/verification` | Set verification flags |
-| DELETE | `/api/users/:userId` | Hard-delete user (also admin) |
+| DELETE | `/api/users/:userId` | Hard-delete user (also admin; **cannot delete master**) |
 
 **Presence:** online = active Socket.IO JWT connection (mobile or web). Offline users include `lastSeenAt` / `lastLoginAt`.
+
+### Master / super-admin (`support@jevahapp.com`)
+
+| Rule | Backend |
+|------|---------|
+| Default email | `support@jevahapp.com` (override with `SUPER_ADMIN_EMAIL`) |
+| Seed | `SUPER_ADMIN_PASSWORD='…' npm run seed:super-admin` |
+| Role changes | **Only** master may `PATCH …/role` |
+| Ban master | Blocked (`MASTER_ADMIN_PROTECTED`) |
+| Demote master | Blocked |
+| Ban other admins | Master only |
+| Login /me flag | `user.isMasterAdmin: true` |
+
+Frontend login allowlist is UX; JWT + these rules are the real gate.
 
 ### Verification body
 
@@ -154,24 +171,83 @@ Prefer `/api/admin/reports/*` for new UI:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/admin/moderation/queue` | Media with moderation status filter |
+| GET | `/api/admin/moderation/queue` | Shaped media cards + preview URLs (`pending`+`under_review` by default) |
+| GET | `/api/admin/moderation/:id` | Single media card + latest AI case summary |
+| GET | `/api/admin/moderation/:id/case` | Full ModerationCase history (AI evidence) |
 | PATCH | `/api/admin/moderation/:id/status` | `approved` \| `rejected` \| `under_review` + `adminNotes?` |
+| PATCH | `/api/admin/media/:id` | Admin metadata edit (`title`, `description`, `adminModerationNotes`, `category`) |
 | DELETE | `/api/admin/media/:id` | Admin force-delete any media |
 | DELETE | `/api/media/:id` | Owner or admin delete |
+
+Queue/detail cards expose `preview.mediaUrl` / `preview.thumbnailUrl` (signed when content is still private/staged). See [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
 
 ---
 
 ## Churches & catalog
 
+Churches in Mongo power **onboarding church search** (`GET /api/places/suggest`). When an admin adds a church with `isListed: true` (default), users can find and select it during profile completion.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| PATCH | `/api/admin/churches/:id/verification` | `{ "isVerified": true }` |
-| POST | `/api/churches` | Create church (admin) |
+| GET | `/api/admin/churches` | Paginated list (`search`, `isVerified`, `isListed`, `source`, `hasContactEmail`) |
+| POST | `/api/admin/churches` | **Add church** for onboarding catalog (+ contact fields) |
+| PATCH | `/api/admin/churches/:id` | Update name/contact/`isListed`/`isVerified`/notes |
+| DELETE | `/api/admin/churches/:id` | Remove church (+ branches by default) |
+| PATCH | `/api/admin/churches/:id/verification` | `{ "isVerified": true }` only |
+| POST | `/api/churches` | Same create (legacy mount) |
 | POST | `/api/churches/:id/branches` | Add branch |
 | POST | `/api/churches/bulk` | Bulk upsert |
 | POST | `/api/audio/copyright-free` | Create copyright-free song |
 | PUT | `/api/audio/copyright-free/:songId` | Update |
 | DELETE | `/api/audio/copyright-free/:songId` | Delete |
+
+### Create church body
+
+```json
+{
+  "name": "Redeemed Christian Church of God",
+  "state": "Lagos",
+  "lga": "Ikeja",
+  "address": "…",
+  "denomination": "Pentecostal",
+  "website": "https://…",
+  "contactName": "Pastor Ada",
+  "contactEmail": "church@example.com",
+  "contactPhone": "+234…",
+  "source": "outreach",
+  "isVerified": true,
+  "isListed": true,
+  "adminNotes": "Reached out via Instagram July 2026"
+}
+```
+
+- `isListed: true` → immediately searchable in onboarding (`/api/places/suggest`)
+- `isListed: false` → draft / hidden until ready
+- `source: "outreach"` when a church asked to be added
+
+### Email churches
+
+```http
+POST /api/admin/email
+{
+  "churchIds": ["64f…", "64a…"],
+  "subject": "Welcome to Jevah",
+  "message": "Thanks for joining our church directory…"
+}
+```
+
+Uses each church’s `contactEmail`. Churches without email are skipped (`churchesSkippedNoEmail` in response). You can mix `churchIds` with `userIds` / `emails`.
+
+### Onboarding selection (mobile)
+
+```http
+GET /api/places/suggest?q=redeemed
+# complete profile:
+POST /api/auth/complete-profile   # or your complete-profile route
+{ "churchId": "…", "churchBranchId": "…", … }
+```
+
+Full UI recipes: [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md) § Churches.
 
 ---
 

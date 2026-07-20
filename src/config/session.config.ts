@@ -2,87 +2,79 @@
 // Redis-based session configuration with memory store fallback
 
 import session from "express-session";
-import { redisClient, isRedisConnected } from "../lib/redisClient";
+import { redisClient } from "../lib/redisClient";
 import logger from "../utils/logger";
 
 /**
  * Session Configuration with Redis Store (fallback to memory)
- * 
- * Tries to use Redis for:
- * - Scalability (multiple server instances can share sessions)
- * - Performance (fast session lookups)
- * - Persistence (sessions survive server restarts)
- * 
- * Falls back to memory store if Redis is unavailable
- * 
- * To use cloud Redis, update REDIS_URL in .env
+ *
+ * Prefer RedisStore whenever REDIS_URL is configured — do NOT gate on
+ * isRedisConnected() at module load (that race permanently stuck MemoryStore
+ * because connectRedis() runs after app import).
+ *
+ * ioredis queues commands until ready; connect-redis works with a connecting client.
  */
 
-// Session secret (should be in .env)
-const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "change-me-in-production";
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || process.env.JWT_SECRET || "change-me-in-production";
 
-// Try to create Redis store, fallback to memory store if Redis fails
 let sessionStore: session.Store;
 
+const redisUrl = process.env.REDIS_URL || process.env.REDIS_URI;
+
 try {
-  if (isRedisConnected()) {
+  if (redisUrl) {
     const RedisStore = require("connect-redis").default;
     sessionStore = new RedisStore({
       client: redisClient,
-      prefix: "session:", // All session keys will be prefixed with "session:"
+      prefix: "session:",
     });
-    logger.info("✅ Using Redis session store");
+    logger.info("Using Redis session store (client connects via REDIS_URL)");
   } else {
-    throw new Error("Redis not connected");
+    throw new Error("REDIS_URL not configured");
   }
 } catch (error) {
-  // Fallback to memory store if Redis fails (built-in, no extra package needed)
-  logger.warn("⚠️  Redis session store unavailable, using memory store", { error: (error as Error)?.message });
+  logger.warn("Redis session store unavailable, using memory store", {
+    error: (error as Error)?.message,
+  });
   sessionStore = new session.MemoryStore();
-  logger.info("✅ Using memory session store (sessions will be lost on restart)");
+  logger.info("Using memory session store (sessions will be lost on restart)");
 }
 
-// Session configuration
 export const sessionConfig: session.SessionOptions = {
   store: sessionStore,
   secret: SESSION_SECRET,
-  resave: false, // Don't save session if unmodified
-  saveUninitialized: false, // Don't create session until something stored
-  name: "jevah.sid", // Session cookie name
+  resave: false,
+  saveUninitialized: false,
+  name: "jevah.sid",
   cookie: {
-    secure: process.env.NODE_ENV === "production", // Only send over HTTPS in production
-    httpOnly: true, // Prevent XSS attacks
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // CSRF protection
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     path: "/",
   },
-  // Rolling sessions - extend session on activity
   rolling: true,
 };
 
-// Initialize session middleware
 export const sessionMiddleware = session(sessionConfig);
 
-// Helper to check if session store is ready
 export function isSessionStoreReady(): boolean {
-  // Only check if using Redis store
   if ((sessionStore as any).client) {
-    return (sessionStore as any).client?.status === "ready";
+    const status = (sessionStore as any).client?.status;
+    return status === "ready" || status === "connecting" || status === "connect";
   }
-  // Memory store is always "ready"
   return true;
 }
 
-// Log session store status (only for Redis)
 if ((sessionStore as any).client) {
   (sessionStore as any).client?.on("ready", () => {
-    logger.info("✅ Redis session store ready");
+    logger.info("Redis session store ready");
   });
 
   (sessionStore as any).client?.on("error", (err: any) => {
-    logger.error("❌ Redis session store error", { error: err?.message });
+    logger.error("Redis session store error", { error: err?.message });
   });
 }
 
 export default sessionMiddleware;
-

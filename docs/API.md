@@ -122,8 +122,21 @@ See [ENGAGEMENT.md](./ENGAGEMENT.md) for full contracts.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/upload` | Upload media (multipart) |
+| POST | `/upload` | Legacy multipart upload (buffered; lower video ceiling) |
+| POST | `/upload/intent` | Create private staging intent + presigned PUT |
+| POST | `/upload/:mediaId/finalize` | Verify staging object, enqueue processing (202) |
+| DELETE | `/upload/:mediaId` | Abort intent / cleanup staging |
+| GET | `/upload/:mediaId/status` | Poll processing / moderation state |
 | POST | `/generate-description` | AI description |
+
+**Frontend migration:** prefer staged intent → client SHA-256 of file bytes → direct PUT to storage → finalize with matching checksum. Legacy `POST /upload` remains during migration. Media is **private** (`isHidden`, not `approved`) until moderation + processing mark it `ready` / `approved`. Identical file bytes reuse a prior moderation **decision** only (never another user's storage object).
+
+`checksumSha256` is required on intent creation as 64 lowercase/uppercase hex
+characters calculated from the exact source-file bytes. The presigned PUT binds
+that checksum (converted to S3's base64 form), and the worker independently
+streams/downloads the object and compares SHA-256 before moderation. A mismatch
+rejects processing. PUT using the returned URL and the exact `Content-Type` and
+file size supplied when creating the intent.
 
 ### Engagement (media-specific)
 
@@ -354,14 +367,25 @@ Full contracts: [ADMIN.md](./ADMIN.md) · UI guide: [FRONTEND_ADMIN.md](./FRONTE
 | POST | `/api/admin/reports/comments/:commentId/hide` | Admin | Hide comment |
 | POST | `/api/admin/reports/comments/:commentId/unhide` | Admin | Unhide comment |
 | POST | `/api/admin/reports/comments/:commentId/dismiss` | Admin | Dismiss comment reports |
-| GET | `/api/admin/moderation/queue` | Admin | Upload moderation queue |
+| GET | `/api/admin/moderation/queue` | Admin | Upload moderation queue (shaped + preview) |
+| GET | `/api/admin/moderation/:id` | Admin | Media detail + latest AI case |
+| GET | `/api/admin/moderation/:id/case` | Admin | ModerationCase history |
 | PATCH | `/api/admin/moderation/:id/status` | Admin | Approve/reject media |
+| PATCH | `/api/admin/media/:id` | Admin | Edit title/description/notes |
 | DELETE | `/api/admin/media/:id` | Admin | Force-delete media |
+| GET | `/api/admin/churches` | Admin | Church catalog (onboarding source) |
+| POST | `/api/admin/churches` | Admin | Add church for onboarding |
+| PATCH | `/api/admin/churches/:id` | Admin | Update church / contact / listed |
+| DELETE | `/api/admin/churches/:id` | Admin | Delete church |
 | PATCH | `/api/admin/churches/:id/verification` | Admin | Verify church entity |
 | GET | `/api/admin/activity` | Admin | Admin activity log |
 | GET | `/api/logs/logs` | Admin | Audit logs |
 
+`POST /api/admin/email` also accepts `churchIds[]` (uses each church’s `contactEmail`).
+
 User report intake (not admin-only): `POST /api/media/:id/report`, `POST /api/content/comments/:commentId/report`.
+
+Full admin UI contracts: [ADMIN.md](./ADMIN.md) · [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
 
 ---
 

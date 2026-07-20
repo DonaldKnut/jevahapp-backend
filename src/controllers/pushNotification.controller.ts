@@ -229,21 +229,21 @@ export const sendTestNotification = async (
       priority: "high",
     };
 
-    const success = await PushNotificationService.sendToUser(
-      userId,
-      notification
-    );
-
-    if (success) {
+    try {
+      await PushNotificationService.sendToUser(userId, notification);
       response.status(200).json({
         success: true,
         message: "Test notification sent successfully",
       });
-    } else {
-      response.status(400).json({
-        success: false,
-        message: "Failed to send test notification",
-      });
+    } catch (err: any) {
+      if (err?.name === "PushDeliverySkippedError") {
+        response.status(400).json({
+          success: false,
+          message: err.message || "Push skipped",
+        });
+        return;
+      }
+      throw err;
     }
   } catch (error) {
     logger.error("Send test notification error:", error);

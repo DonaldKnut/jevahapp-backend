@@ -128,8 +128,15 @@ export const getUsersPresence = async (req: Request, res: Response): Promise<voi
 
 /**
  * POST /api/admin/email
- * Send email to specific users / emails (Resend)
- * Body: { userIds?: string[], emails?: string[], subject: string, message: string, html?: string }
+ * Send email to users and/or church contacts (Resend)
+ * Body: {
+ *   userIds?: string[],
+ *   emails?: string[],
+ *   churchIds?: string[],   // uses Church.contactEmail
+ *   subject: string,
+ *   message?: string,
+ *   html?: string
+ * }
  */
 export const sendAdminEmail = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -139,7 +146,7 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { userIds, emails, subject, message, html } = req.body || {};
+    const { userIds, emails, churchIds, subject, message, html } = req.body || {};
 
     if (!subject || typeof subject !== "string" || !subject.trim()) {
       res.status(400).json({ success: false, message: "subject is required" });
@@ -154,6 +161,7 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
     }
 
     const recipientSet = new Set<string>();
+    const churchRecipientMeta: Array<{ churchId: string; email: string; name: string }> = [];
 
     if (Array.isArray(emails)) {
       for (const e of emails) {
@@ -173,11 +181,31 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
       }
     }
 
+    if (Array.isArray(churchIds) && churchIds.length > 0) {
+      const { Church } = await import("../models/church.model");
+      const validIds = churchIds.filter((id: string) => Types.ObjectId.isValid(id));
+      const churches = await Church.find({ _id: { $in: validIds } })
+        .select("name contactEmail")
+        .lean();
+      for (const c of churches as any[]) {
+        if (c.contactEmail && String(c.contactEmail).includes("@")) {
+          const email = String(c.contactEmail).trim().toLowerCase();
+          recipientSet.add(email);
+          churchRecipientMeta.push({
+            churchId: c._id.toString(),
+            email,
+            name: c.name,
+          });
+        }
+      }
+    }
+
     const recipients = Array.from(recipientSet);
     if (recipients.length === 0) {
       res.status(400).json({
         success: false,
-        message: "Provide userIds and/or emails of at least one recipient",
+        message:
+          "Provide userIds, emails, and/or churchIds (churches need contactEmail)",
       });
       return;
     }
@@ -218,12 +246,22 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
       recipientCount: recipients.length,
       sent,
       recipients: recipients.slice(0, 20),
+      churchIds: Array.isArray(churchIds) ? churchIds.slice(0, 20) : undefined,
+      churchRecipientMeta: churchRecipientMeta.slice(0, 20),
     });
 
     res.status(200).json({
       success: true,
       message: `Sent ${sent} of ${recipients.length} emails`,
-      data: { sent, failed: recipients.length - sent, results },
+      data: {
+        sent,
+        failed: recipients.length - sent,
+        results,
+        churchesEmailed: churchRecipientMeta,
+        churchesSkippedNoEmail: Array.isArray(churchIds)
+          ? churchIds.length - churchRecipientMeta.length
+          : 0,
+      },
     });
   } catch (error: any) {
     logger.error("Admin send email error", { error: error.message });

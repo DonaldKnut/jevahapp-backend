@@ -44,7 +44,9 @@ export class AIContentDescriptionService {
       this.model = null;
     } else {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      this.model = this.genAI.getGenerativeModel({
+        model: process.env.GEMINI_DEFAULT_MODEL || "gemini-2.5-flash",
+      });
     }
   }
 

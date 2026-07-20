@@ -1,35 +1,73 @@
 import { Router, Request, Response } from "express";
 import cacheService from "../service/cache.service";
 import { asyncHandler } from "../utils/asyncHandler";
-import { analyticsQueue, mediaProcessingQueue } from "../queues/queues";
+import {
+  analyticsQueue,
+  mediaProcessingQueue,
+  notificationsQueue,
+} from "../queues/queues";
 import { getEngagementMetrics, isRedisConnected } from "../lib/engagementRedis";
+import { getAiBudgetSnapshot } from "../service/moderation/aiBudget.service";
+import { contentModerationService } from "../service/contentModeration.service";
+import { verifyToken } from "../middleware/auth.middleware";
+import { requireAdmin } from "../middleware/role.middleware";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
+const execFileAsync = promisify(execFile);
 const router = Router();
 
+async function hasBinary(cmd: string): Promise<boolean> {
+  try {
+    await execFileAsync(cmd, ["-version"], { timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Basic metrics endpoint (lightweight).
- * Intended for internal monitoring, not public exposure.
+ * Internal metrics — admin JWT required (do not expose publicly).
  */
 router.get(
   "/",
+  verifyToken,
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const mem = process.memoryUsage();
     const stats = await cacheService.getStats();
     let queues: any = undefined;
 
     try {
-      const [analyticsCounts, mediaCounts] = await Promise.all([
+      const [analyticsCounts, mediaCounts, notifyCounts] = await Promise.all([
         analyticsQueue.getJobCounts("waiting", "active", "delayed", "failed"),
-        mediaProcessingQueue.getJobCounts("waiting", "active", "delayed", "failed"),
+        mediaProcessingQueue.getJobCounts(
+          "waiting",
+          "active",
+          "delayed",
+          "failed"
+        ),
+        notificationsQueue.getJobCounts(
+          "waiting",
+          "active",
+          "delayed",
+          "failed"
+        ),
       ]);
 
       queues = {
         analytics: analyticsCounts,
         mediaProcessing: mediaCounts,
+        notifications: notifyCounts,
       };
     } catch {
       queues = { error: "Queue stats unavailable" };
     }
+
+    const [ffmpeg, ffprobe] = await Promise.all([
+      hasBinary("ffmpeg"),
+      hasBinary("ffprobe"),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -47,10 +85,19 @@ router.get(
         connected: isRedisConnected(),
         metrics: getEngagementMetrics(),
       },
+      moderation: {
+        providerAvailable: contentModerationService.isAvailable(),
+        aiBudget: await getAiBudgetSnapshot(),
+      },
+      mediaTools: { ffmpeg, ffprobe },
+      env: {
+        hasExpoToken: Boolean(process.env.EXPO_ACCESS_TOKEN),
+        hasR2CustomDomain: Boolean(process.env.R2_CUSTOM_DOMAIN),
+        nodeEnv: process.env.NODE_ENV,
+      },
       queues,
     });
   })
 );
 
 export default router;
-

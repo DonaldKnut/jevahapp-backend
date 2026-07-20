@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { MediaReport } from "../models/mediaReport.model";
+import { Media } from "../models/media.model";
 import { Interaction } from "../models/interaction.model";
 import { AuditService } from "../service/audit.service";
 import commentService from "../modules/engagement/comments/comment.service";
@@ -8,6 +9,10 @@ import {
   reviewReport,
   deleteReportedMedia,
 } from "./mediaReport.controller";
+import {
+  resolveAdminMediaPreview,
+  shapeAdminMediaCard,
+} from "../service/admin/mediaPreview.service";
 import logger from "../utils/logger";
 
 /**
@@ -199,10 +204,6 @@ export const getAdminMediaReportDetail = async (
     }
 
     const report = await MediaReport.findById(reportId)
-      .populate(
-        "mediaId",
-        "title description contentType thumbnailUrl fileUrl uploadedBy moderationStatus isHidden reportCount likeCount viewCount"
-      )
       .populate("reportedBy", "firstName lastName username email avatar")
       .populate("reviewedBy", "firstName lastName username email")
       .lean();
@@ -212,19 +213,33 @@ export const getAdminMediaReportDetail = async (
       return;
     }
 
-    const media = (report as any).mediaId;
+    const mediaId = (report as any).mediaId;
+    const mediaDoc = mediaId
+      ? await Media.findById(mediaId)
+          .select(
+            "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+          )
+          .populate("uploadedBy", "firstName lastName username email avatar role")
+          .lean()
+      : null;
+
+    let mediaCard = null;
     let uploader = null;
-    if (media?.uploadedBy) {
-      const { User } = await import("../models/user.model");
-      uploader = await User.findById(media.uploadedBy)
-        .select("firstName lastName username email avatar role")
-        .lean();
+    if (mediaDoc) {
+      const preview = await resolveAdminMediaPreview(mediaDoc as any);
+      mediaCard = shapeAdminMediaCard(mediaDoc, preview);
+      uploader = mediaCard.uploader;
     }
 
+    const siblingMediaId =
+      (mediaDoc as any)?._id ||
+      (typeof mediaId === "object" && mediaId?._id) ||
+      mediaId;
+
     const siblingReports = await MediaReport.find({
-      mediaId: media?._id || (report as any).mediaId,
+      mediaId: siblingMediaId,
     })
-      .select("reason status createdAt reportedBy")
+      .select("reason status description createdAt reportedBy adminNotes reviewedAt")
       .populate("reportedBy", "firstName lastName username")
       .sort({ createdAt: -1 })
       .lean();
@@ -232,9 +247,59 @@ export const getAdminMediaReportDetail = async (
     res.status(200).json({
       success: true,
       data: {
-        report,
+        report: {
+          id: (report as any)._id.toString(),
+          status: (report as any).status,
+          reason: (report as any).reason,
+          description: (report as any).description || null,
+          adminNotes: (report as any).adminNotes || null,
+          reviewedAt: (report as any).reviewedAt || null,
+          createdAt: (report as any).createdAt,
+          reporter: (report as any).reportedBy
+            ? {
+                id: (report as any).reportedBy._id?.toString?.(),
+                firstName: (report as any).reportedBy.firstName,
+                lastName: (report as any).reportedBy.lastName,
+                username: (report as any).reportedBy.username,
+                email: (report as any).reportedBy.email,
+                avatar: (report as any).reportedBy.avatar,
+              }
+            : null,
+          reviewedBy: (report as any).reviewedBy
+            ? {
+                id: (report as any).reviewedBy._id?.toString?.(),
+                firstName: (report as any).reviewedBy.firstName,
+                lastName: (report as any).reviewedBy.lastName,
+                username: (report as any).reviewedBy.username,
+                email: (report as any).reviewedBy.email,
+              }
+            : null,
+        },
+        media: mediaCard,
         uploader,
-        siblingReports,
+        siblingReports: siblingReports.map((r: any) => ({
+          id: r._id.toString(),
+          reason: r.reason,
+          status: r.status,
+          description: r.description || null,
+          adminNotes: r.adminNotes || null,
+          createdAt: r.createdAt,
+          reviewedAt: r.reviewedAt || null,
+          reporter: r.reportedBy
+            ? {
+                id: r.reportedBy._id?.toString?.(),
+                firstName: r.reportedBy.firstName,
+                lastName: r.reportedBy.lastName,
+                username: r.reportedBy.username,
+              }
+            : null,
+        })),
+        /** Actions the UI should offer for this report */
+        actions: {
+          review: ["reviewed", "resolved", "dismissed"],
+          deleteContent: Boolean(mediaCard),
+          banUploader: Boolean(uploader?.id),
+        },
       },
     });
   } catch (error: any) {

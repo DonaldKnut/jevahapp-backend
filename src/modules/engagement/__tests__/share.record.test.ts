@@ -7,6 +7,10 @@ jest.mock("../../../lib/engagementEvents", () => ({
   publishEngagementEvent: jest.fn(),
 }));
 
+jest.mock("../../../lib/redisCounters", () => ({
+  setPostCounter: jest.fn().mockResolvedValue(undefined),
+}));
+
 import shareService from "../share/share.service";
 
 describe("ShareService — recording", () => {
@@ -15,6 +19,11 @@ describe("ShareService — recording", () => {
 
   beforeEach(() => {
     jest.spyOn(contentTypeResolver, "verifyContentExists").mockResolvedValue(true);
+    jest.spyOn(ShareEvent, "findOne").mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      }),
+    } as any);
     jest.spyOn(ShareEvent, "create").mockResolvedValue([{ _id: "se1" }] as any);
     jest.spyOn(Media, "startSession").mockResolvedValue({
       withTransaction: jest.fn(async (fn: () => Promise<void>) => fn()),

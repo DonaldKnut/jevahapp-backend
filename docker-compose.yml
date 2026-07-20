@@ -9,6 +9,7 @@ services:
       - NODE_ENV=development
       - PORT=4000
       - MONGODB_URI=mongodb://mongo:27017/jevah
+      - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-development-jwt-secret
       - RESEND_API_KEY=your-resend-api-key
       - FRONTEND_URL=http://localhost:3000
@@ -20,6 +21,29 @@ services:
       - ./src:/app/src
     depends_on:
       - mongo
+      - redis
+      - kafka
+    restart: unless-stopped
+    networks:
+      - jevah-network
+
+  # BullMQ worker (media-processing + analytics). Required for queue jobs to run.
+  worker:
+    build: .
+    command: ["npm", "run", "worker:dev"]
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/jevah
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_ENGAGEMENT_TOPIC=jevah.engagement.events
+      - LOG_LEVEL=debug
+    volumes:
+      - ./logs:/app/logs
+      - ./src:/app/src
+    depends_on:
+      - mongo
+      - redis
       - kafka
     restart: unless-stopped
     networks:

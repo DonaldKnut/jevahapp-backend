@@ -3,41 +3,283 @@ import mongoose from "mongoose";
 import { Church } from "../models/church.model";
 import { ChurchBranch } from "../models/church-branch.model";
 import { NG_STATES } from "../constants/ngStates";
+import { AuditService } from "../service/audit.service";
+import logger from "../utils/logger";
 
+function shapeChurch(doc: any) {
+  return {
+    id: doc._id.toString(),
+    name: doc.name,
+    branchName: doc.branchName || null,
+    denomination: doc.denomination || null,
+    address: doc.address || null,
+    state: doc.state,
+    lga: doc.lga || null,
+    location: doc.location || null,
+    website: doc.website || null,
+    contactEmail: doc.contactEmail || null,
+    contactPhone: doc.contactPhone || null,
+    contactName: doc.contactName || null,
+    source: doc.source || "manual",
+    adminNotes: doc.adminNotes || null,
+    isListed: doc.isListed !== false,
+    isVerified: Boolean(doc.isVerified),
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
+}
+
+function parseLocation(location: any) {
+  if (!location || typeof location !== "object") return undefined;
+  const lat = Number(location.lat);
+  const lng = Number(location.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  return { lat, lng };
+}
+
+/**
+ * POST /api/churches  (and POST /api/admin/churches)
+ * Add a church to the catalog — appears in onboarding places suggest when isListed.
+ */
 export async function createChurch(
   request: Request,
   response: Response
 ): Promise<void> {
-  const {
-    name,
-    aliases,
-    denomination,
-    website,
-    verified,
-    popularityScore,
-    address,
-    state,
-    lga,
-    location,
-  } = request.body || {};
-  if (!name || !state) {
-    response
-      .status(400)
-      .json({ success: false, message: "name and state are required" });
-    return;
+  try {
+    const adminId = request.userId;
+    const {
+      name,
+      denomination,
+      website,
+      verified,
+      isVerified,
+      isListed,
+      address,
+      state,
+      lga,
+      location,
+      contactEmail,
+      contactPhone,
+      contactName,
+      source,
+      adminNotes,
+      branchName,
+    } = request.body || {};
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      response.status(400).json({ success: false, message: "name is required" });
+      return;
+    }
+    if (!state || typeof state !== "string" || !state.trim()) {
+      response
+        .status(400)
+        .json({ success: false, message: "state is required" });
+      return;
+    }
+
+    if (contactEmail && !String(contactEmail).includes("@")) {
+      response
+        .status(400)
+        .json({ success: false, message: "contactEmail is invalid" });
+      return;
+    }
+
+    const doc: any = {
+      name: name.trim(),
+      denomination: denomination?.trim() || undefined,
+      address: address?.trim() || undefined,
+      state: state.trim(),
+      lga: lga?.trim() || undefined,
+      location: parseLocation(location),
+      website: website?.trim() || undefined,
+      contactEmail: contactEmail
+        ? String(contactEmail).trim().toLowerCase()
+        : undefined,
+      contactPhone: contactPhone?.trim() || undefined,
+      contactName: contactName?.trim() || undefined,
+      source: ["manual", "outreach", "bulk", "import"].includes(source)
+        ? source
+        : "manual",
+      adminNotes: adminNotes?.trim() || undefined,
+      branchName: branchName?.trim() || undefined,
+      isVerified: Boolean(verified ?? isVerified),
+      isListed: isListed === false ? false : true,
+      createdByUser: adminId || undefined,
+    };
+
+    const created = await Church.create(doc);
+
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "create_church", created._id.toString(), {
+        name: created.name,
+        state: created.state,
+        source: created.source,
+      });
+    }
+
+    response.status(201).json({
+      success: true,
+      message: "Church added to catalog",
+      data: shapeChurch(created.toObject()),
+      church: created, // legacy alias
+    });
+  } catch (error: any) {
+    logger.error("Create church error", { error: error?.message });
+    response.status(500).json({ success: false, message: "Failed to create church" });
   }
-  const doc: any = {
-    name,
-    denomination,
-    address,
-    state,
-    lga,
-    location,
-    isVerified: Boolean(verified),
-  };
-  const created = await Church.create(doc);
-  response.status(201).json({ success: true, church: created });
-  return;
+}
+
+/**
+ * PATCH /api/admin/churches/:id
+ */
+export async function updateChurch(
+  request: Request,
+  response: Response
+): Promise<void> {
+  try {
+    const adminId = request.userId;
+    const { id } = request.params;
+    if (!mongoose.isValidObjectId(id)) {
+      response.status(400).json({ success: false, message: "Invalid church id" });
+      return;
+    }
+
+    const body = request.body || {};
+    const updates: Record<string, unknown> = {};
+
+    if (typeof body.name === "string" && body.name.trim()) {
+      updates.name = body.name.trim();
+    }
+    if (typeof body.denomination === "string") {
+      updates.denomination = body.denomination.trim() || undefined;
+    }
+    if (typeof body.address === "string") {
+      updates.address = body.address.trim() || undefined;
+    }
+    if (typeof body.state === "string" && body.state.trim()) {
+      updates.state = body.state.trim();
+    }
+    if (typeof body.lga === "string") {
+      updates.lga = body.lga.trim() || undefined;
+    }
+    if (typeof body.website === "string") {
+      updates.website = body.website.trim() || undefined;
+    }
+    if (typeof body.contactEmail === "string") {
+      const email = body.contactEmail.trim().toLowerCase();
+      if (email && !email.includes("@")) {
+        response
+          .status(400)
+          .json({ success: false, message: "contactEmail is invalid" });
+        return;
+      }
+      updates.contactEmail = email || undefined;
+    }
+    if (typeof body.contactPhone === "string") {
+      updates.contactPhone = body.contactPhone.trim() || undefined;
+    }
+    if (typeof body.contactName === "string") {
+      updates.contactName = body.contactName.trim() || undefined;
+    }
+    if (typeof body.adminNotes === "string") {
+      updates.adminNotes = body.adminNotes.trim() || undefined;
+    }
+    if (typeof body.branchName === "string") {
+      updates.branchName = body.branchName.trim() || undefined;
+    }
+    if (typeof body.isListed === "boolean") {
+      updates.isListed = body.isListed;
+    }
+    if (typeof body.isVerified === "boolean") {
+      updates.isVerified = body.isVerified;
+    } else if (typeof body.verified === "boolean") {
+      updates.isVerified = body.verified;
+    }
+    if (["manual", "outreach", "bulk", "import"].includes(body.source)) {
+      updates.source = body.source;
+    }
+    if (body.location !== undefined) {
+      updates.location = parseLocation(body.location) || undefined;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      response.status(400).json({
+        success: false,
+        message: "Provide at least one field to update",
+      });
+      return;
+    }
+
+    const church = await Church.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!church) {
+      response.status(404).json({ success: false, message: "Church not found" });
+      return;
+    }
+
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "update_church", id, { updates });
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Church updated",
+      data: shapeChurch(church.toObject()),
+    });
+  } catch (error: any) {
+    logger.error("Update church error", { error: error?.message });
+    response.status(500).json({ success: false, message: "Failed to update church" });
+  }
+}
+
+/**
+ * DELETE /api/admin/churches/:id
+ * Removes church (+ optional branches). Prefer isListed:false to hide without delete.
+ */
+export async function deleteChurch(
+  request: Request,
+  response: Response
+): Promise<void> {
+  try {
+    const adminId = request.userId;
+    const { id } = request.params;
+    if (!mongoose.isValidObjectId(id)) {
+      response.status(400).json({ success: false, message: "Invalid church id" });
+      return;
+    }
+
+    const church = await Church.findById(id);
+    if (!church) {
+      response.status(404).json({ success: false, message: "Church not found" });
+      return;
+    }
+
+    const deleteBranches = request.query.deleteBranches !== "false";
+    if (deleteBranches) {
+      await ChurchBranch.deleteMany({ churchId: church._id });
+    }
+    await Church.deleteOne({ _id: church._id });
+
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "delete_church", id, {
+        name: church.name,
+        deleteBranches,
+      });
+    }
+
+    response.status(200).json({
+      success: true,
+      message: "Church deleted",
+      data: { churchId: id, name: church.name },
+    });
+  } catch (error: any) {
+    logger.error("Delete church error", { error: error?.message });
+    response.status(500).json({ success: false, message: "Failed to delete church" });
+  }
 }
 
 export async function createBranch(
@@ -69,7 +311,7 @@ export async function createBranch(
     address,
     state,
     lga,
-    location,
+    location: parseLocation(location),
     isVerified: Boolean(verified),
   });
   response.status(201).json({ success: true, branch: created });
@@ -105,6 +347,12 @@ export async function bulkUpsert(
         address: c.branches?.[0]?.addressLine1 || c.address,
         state: c.branches?.[0]?.state || c.state,
         location: c.branches?.[0]?.location || c.location,
+        contactEmail: c.contactEmail,
+        contactPhone: c.contactPhone,
+        contactName: c.contactName,
+        website: c.website,
+        source: c.source || "bulk",
+        isListed: c.isListed === false ? false : true,
         isVerified: Boolean(c.verified),
       },
       { upsert: true, new: true }
@@ -133,10 +381,8 @@ export async function bulkUpsert(
       }
     }
 
-    // Auto-generate state-wide branches if requested via flag
     if (request.query.generateStateBranches === "true") {
       for (const ns of NG_STATES) {
-        // Skip if a branch already exists for this state
         const existing = await ChurchBranch.findOne({
           churchId: church._id,
           state: ns.state,
@@ -167,7 +413,6 @@ export async function reindex(
   _request: Request,
   response: Response
 ): Promise<void> {
-  // With Mongo, we rely on indexes. If we add Atlas Search later, trigger its pipelines here.
   response.status(200).json({ success: true, message: "Reindex queued" });
   return;
 }

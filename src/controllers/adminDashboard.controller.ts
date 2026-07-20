@@ -6,6 +6,14 @@ import { MediaReport } from "../models/mediaReport.model";
 import { AuditService } from "../service/audit.service";
 import resendEmailService from "../service/resendEmail.service";
 import cacheService from "../service/cache.service";
+import fileUploadService from "../service/fileUpload.service";
+import { enqueueMediaPostUpload } from "../queues/enqueue";
+import {
+  resolveAdminMediaPreview,
+  shapeAdminMediaCard,
+} from "../service/admin/mediaPreview.service";
+import { recordReviewerOutcome } from "../service/admin/recordReviewerOutcome";
+import { isMasterAdminUser } from "../config/superAdmin";
 import logger from "../utils/logger";
 
 /**
@@ -339,13 +347,27 @@ export const banUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Security: Prevent banning other admins
-    if (user.role === "admin") {
+    // Security: Never ban the master / super-admin account
+    if (isMasterAdminUser(user)) {
       res.status(403).json({
         success: false,
-        message: "Cannot ban admin users",
+        message: "Cannot ban the master admin account",
+        code: "MASTER_ADMIN_PROTECTED",
       });
       return;
+    }
+
+    // Security: Only master admin may ban other admins
+    if (user.role === "admin") {
+      const actor = await User.findById(adminId).select("email role");
+      if (!isMasterAdminUser(actor)) {
+        res.status(403).json({
+          success: false,
+          message: "Only the master admin can ban other admin users",
+          code: "MASTER_ADMIN_REQUIRED",
+        });
+        return;
+      }
     }
 
     const banUntil = duration
@@ -359,6 +381,9 @@ export const banUser = async (req: Request, res: Response): Promise<void> => {
       banUntil,
       bannedBy: new Types.ObjectId(adminId),
     });
+
+    const { invalidateAuthUserCache } = await import("../lib/invalidateAuthUserCache");
+    await invalidateAuthUserCache(id);
 
     // Log admin action
     await AuditService.logAdminAction(
@@ -421,6 +446,9 @@ export const unbanUser = async (
       banUntil: undefined,
       bannedBy: undefined,
     });
+
+    const { invalidateAuthUserCache } = await import("../lib/invalidateAuthUserCache");
+    await invalidateAuthUserCache(id);
 
     // Log admin action
     await AuditService.logAdminAction(
@@ -497,6 +525,26 @@ export const updateUserRole = async (
       return;
     }
 
+    const actor = await User.findById(adminId).select("email role");
+    if (!isMasterAdminUser(actor)) {
+      res.status(403).json({
+        success: false,
+        message: "Only the master admin can change user roles",
+        code: "MASTER_ADMIN_REQUIRED",
+      });
+      return;
+    }
+
+    // Never demote / alter the master account away from admin
+    if (isMasterAdminUser(user) && role !== "admin") {
+      res.status(403).json({
+        success: false,
+        message: "Cannot change the role of the master admin account",
+        code: "MASTER_ADMIN_PROTECTED",
+      });
+      return;
+    }
+
     const oldRole = user.role;
 
     // Security: Prevent removing your own admin role
@@ -508,16 +556,10 @@ export const updateUserRole = async (
       return;
     }
 
-    // Security: Prevent removing admin role from other admins
-    if (user.role === "admin" && role !== "admin") {
-      res.status(403).json({
-        success: false,
-        message: "Cannot remove admin role from other admins",
-      });
-      return;
-    }
-
     await User.findByIdAndUpdate(id, { role });
+
+    const { invalidateAuthUserCache } = await import("../lib/invalidateAuthUserCache");
+    await invalidateAuthUserCache(id);
 
     // Log admin action
     await AuditService.logAdminAction(
@@ -546,7 +588,7 @@ export const updateUserRole = async (
 };
 
 /**
- * Get moderation queue
+ * Get moderation queue (shaped cards + preview URLs for admin UI)
  */
 export const getModerationQueue = async (
   req: Request,
@@ -554,7 +596,7 @@ export const getModerationQueue = async (
 ): Promise<void> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const skip = (page - 1) * limit;
     const status = req.query.status as string;
 
@@ -564,24 +606,37 @@ export const getModerationQueue = async (
         : { $in: ["pending", "under_review"] },
     };
 
-    const [media, total] = await Promise.all([
+    const [docs, total] = await Promise.all([
       Media.find(query)
-        .populate("uploadedBy", "firstName lastName email")
+        .select(
+          "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+        )
+        .populate("uploadedBy", "firstName lastName email username")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       Media.countDocuments(query),
     ]);
+
+    const media = await Promise.all(
+      docs.map(async (doc) => {
+        const preview = await resolveAdminMediaPreview(doc as any);
+        return shapeAdminMediaCard(doc, preview);
+      })
+    );
 
     res.status(200).json({
       success: true,
       data: {
         media,
+        /** Alias for clients that expect `items` */
+        items: media,
         pagination: {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit),
+          pages: Math.ceil(total / limit) || 1,
         },
       },
     });
@@ -633,10 +688,33 @@ export const updateModerationStatus = async (
       return;
     }
 
+    const needsProcessing =
+      status === "approved" &&
+      ((media.uploadIntent?.stagingKey?.startsWith("staging/") &&
+        media.processing?.status !== "ready" &&
+        media.processing?.status !== "completed") ||
+        !(media.playbackUrl || media.hlsUrl || media.fileUrl)?.startsWith?.(
+          "http"
+        ));
+
     const updateData: any = {
       moderationStatus: status,
-      isHidden: status === "rejected",
+      isHidden: true,
+      publicationState:
+        status === "rejected"
+          ? "tombstoned"
+          : status === "under_review"
+            ? "staged"
+            : needsProcessing
+              ? "publishing"
+              : "live",
     };
+    // Fully published assets → make visible immediately
+    if (status === "approved" && !needsProcessing) {
+      updateData.isHidden = false;
+      updateData.publicationState = "live";
+      updateData.publishedAt = new Date();
+    }
 
     if (adminNotes) {
       updateData.adminModerationNotes = adminNotes;
@@ -644,8 +722,43 @@ export const updateModerationStatus = async (
 
     await Media.findByIdAndUpdate(id, updateData);
 
-    // Invalidate cache when content becomes publicly visible (approved)
+    const reviewerStatus =
+      status === "approved"
+        ? "approved"
+        : status === "rejected"
+          ? "rejected"
+          : "pending";
+    await recordReviewerOutcome(
+      id,
+      adminId!,
+      reviewerStatus,
+      typeof adminNotes === "string" ? adminNotes : undefined
+    );
+
+    // Invalidate cache when content becomes publicly visible (approved + live)
     if (status === "approved") {
+      const stagingKey = media.uploadIntent?.stagingKey;
+      if (needsProcessing && stagingKey?.startsWith("staging/")) {
+        const inputUrl = await fileUploadService.getPresignedGetUrl(
+          stagingKey!,
+          7200
+        );
+        enqueueMediaPostUpload({
+          mediaId: id,
+          userId: String(media.uploadedBy),
+          contentType: media.contentType,
+          fileUrl: inputUrl,
+          requestId: `admin-approval:${id}`,
+          jobIdSuffix: `approval-${Date.now()}`,
+          skipModeration: true,
+        });
+      } else if (!needsProcessing) {
+        const { invalidateFeedCaches } = await import(
+          "../lib/invalidateFeedCaches"
+        );
+        await invalidateFeedCaches(id, String(media.uploadedBy));
+        await cacheService.del(`media:public:${id}`);
+      }
       await cacheService.delPattern("media:public:all-content*");
     }
 
@@ -679,9 +792,21 @@ export const updateModerationStatus = async (
 
     logger.info("Moderation status updated", { mediaId: id, adminId, status });
 
+    const refreshed = await Media.findById(id)
+      .select(
+        "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+      )
+      .populate("uploadedBy", "firstName lastName email username")
+      .lean();
+
+    const preview = refreshed
+      ? await resolveAdminMediaPreview(refreshed as any)
+      : null;
+
     res.status(200).json({
       success: true,
       message: "Moderation status updated successfully",
+      data: refreshed && preview ? shapeAdminMediaCard(refreshed, preview) : { id, moderationStatus: status },
     });
   } catch (error: any) {
     logger.error("Update moderation status error:", error);

@@ -2,9 +2,10 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { User } from "../../models/user.model";
 import emailService from "../email.service";
+import { normalizeEmail } from "./register.service";
 
 export async function initiatePasswordReset(email: string) {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: normalizeEmail(email) });
   if (!user) {
     throw new Error("User not found");
   }
@@ -27,7 +28,7 @@ export async function initiatePasswordReset(email: string) {
 
 export async function verifyResetCode(email: string, code: string) {
   const user = await User.findOne({
-    email,
+    email: normalizeEmail(email),
     resetPasswordToken: code,
     resetPasswordExpires: { $gt: Date.now() },
   });
@@ -48,7 +49,7 @@ export async function resetPasswordWithCode(
   newPassword: string
 ) {
   const user = await User.findOne({
-    email,
+    email: normalizeEmail(email),
     resetPasswordToken: code,
     resetPasswordExpires: { $gt: Date.now() },
   });
@@ -73,7 +74,7 @@ export async function resetPassword(
   newPassword: string
 ) {
   const user = await User.findOne({
-    email,
+    email: normalizeEmail(email),
     resetPasswordToken: token,
     resetPasswordExpires: { $gt: Date.now() },
   });

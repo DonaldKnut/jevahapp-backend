@@ -1,10 +1,13 @@
-import { Types, ClientSession } from "mongoose";
+import { Types } from "mongoose";
 import { Media } from "../../../models/media.model";
 import { Devotional } from "../../../models/devotional.model";
 import { ShareEvent } from "../../../models/shareEvent.model";
 import { ShareResult } from "../shared/engagement.types";
 import { normalizeContentType, verifyContentExists } from "../shared/contentType.resolver";
 import { publishEngagementEvent } from "../../../lib/engagementEvents";
+import { setPostCounter } from "../../../lib/redisCounters";
+import { NotificationService } from "../../../service/notification.service";
+import logger from "../../../utils/logger";
 
 export interface ShareLink {
   url: string;
@@ -13,6 +16,9 @@ export interface ShareLink {
   image?: string;
   platform: string;
 }
+
+/** Windowed append dedupe — same user+content within this window does not re-increment */
+const SHARE_DEDUPE_WINDOW_MS = Number(process.env.SHARE_DEDUPE_WINDOW_MS || 5 * 60 * 1000);
 
 export class EngagementShareService {
   private readonly baseUrl = process.env.API_BASE_URL || process.env.FRONTEND_URL || "http://localhost:4000";
@@ -31,6 +37,20 @@ export class EngagementShareService {
     }
 
     const normalized = normalizeContentType(contentType);
+    const since = new Date(Date.now() - SHARE_DEDUPE_WINDOW_MS);
+    const recent = await ShareEvent.findOne({
+      userId: new Types.ObjectId(userId),
+      contentId: new Types.ObjectId(contentId),
+      sharedAt: { $gte: since },
+    })
+      .select("_id")
+      .lean();
+
+    if (recent) {
+      const shareCount = await this.getShareCount(contentId, contentType);
+      return { shared: true, shareCount };
+    }
+
     const session = await Media.startSession();
     try {
       await session.withTransaction(async () => {
@@ -57,12 +77,27 @@ export class EngagementShareService {
     }
 
     const shareCount = await this.getShareCount(contentId, contentType);
+    // Refresh Redis share counter so cached feeds overlay the fresh count
+    // (setPostCounter never rejects)
+    void setPostCounter({ postId: contentId, field: "shares", count: shareCount });
     publishEngagementEvent("content.shared", {
       userId,
       contentId,
       contentType: normalized,
       platform: sharePlatform,
       shareCount,
+    });
+
+    void NotificationService.notifyContentShare(
+      userId,
+      contentId,
+      normalized,
+      sharePlatform
+    ).catch(err => {
+      logger.warn("Failed to send share notification", {
+        error: (err as Error).message,
+        contentId,
+      });
     });
 
     return { shared: true, shareCount };

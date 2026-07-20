@@ -42,32 +42,46 @@ async function getProducer(): Promise<Producer | null> {
   }
 }
 
-/** Fire-and-forget — BullMQ always; Kafka when KAFKA_BROKERS is set */
+/**
+ * Fire-and-forget analytics ingest.
+ * Prefer Kafka when KAFKA_BROKERS is set; otherwise BullMQ.
+ * Never dual-publish (avoids duplicate AnalyticsEvent / counter bumps).
+ */
 export function publishEngagementEvent(
   name: string,
   payload: Record<string, unknown>
 ): void {
-  enqueueAnalyticsEvent({ name, payload });
-
   void (async () => {
     const p = await getProducer();
-    if (!p) return;
+    if (p) {
+      await p.send({
+        topic: TOPIC,
+        messages: [
+          {
+            key: String(payload.contentId || payload.userId || ""),
+            value: JSON.stringify({
+              name,
+              payload,
+              ts: new Date().toISOString(),
+            }),
+          },
+        ],
+      });
+      return;
+    }
 
-    await p.send({
-      topic: TOPIC,
-      messages: [
-        {
-          key: String(payload.contentId || payload.userId || ""),
-          value: JSON.stringify({
-            name,
-            payload,
-            ts: new Date().toISOString(),
-          }),
-        },
-      ],
-    });
+    enqueueAnalyticsEvent({ name, payload });
   })().catch(err => {
-    logger.warn("Kafka publish failed", { name, error: (err as Error).message });
+    logger.warn("Engagement event publish failed", {
+      name,
+      error: (err as Error).message,
+    });
+    // Last resort: BullMQ if Kafka send failed after producer existed
+    try {
+      enqueueAnalyticsEvent({ name, payload });
+    } catch {
+      /* ignore */
+    }
   });
 }
 

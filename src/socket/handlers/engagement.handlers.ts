@@ -4,6 +4,8 @@ import { MediaUserAction } from "../../models/mediaUserAction.model";
 import logger from "../../utils/logger";
 import likeService from "../../modules/engagement/like/like.service";
 import commentService from "../../modules/engagement/comments/comment.service";
+import { checkCommentRateLimit } from "../../modules/engagement/comments/comment.rateLimit";
+import { normalizeContentType } from "../../modules/engagement/shared/contentType.resolver";
 import {
   AuthenticatedUser,
   CommentData,
@@ -11,6 +13,76 @@ import {
   SocketContext,
 } from "../types";
 import { getContentById } from "../helpers";
+
+const TYPING_TTL_MS = Number(process.env.TYPING_TTL_MS || 3000);
+/** key → timeout that auto-clears stuck typing indicators */
+const typingTimers = new Map<string, NodeJS.Timeout>();
+
+type TypingTarget =
+  | { kind: "media"; mediaId: string; rooms: string[] }
+  | { kind: "content"; contentId: string; contentType: string; rooms: string[] };
+
+function resolveTypingTarget(
+  data: string | { mediaId?: string; contentId?: string; contentType?: string }
+): TypingTarget | null {
+  if (typeof data === "string" && data.trim()) {
+    const mediaId = data.trim();
+    return {
+      kind: "media",
+      mediaId,
+      rooms: [`media:${mediaId}`, `content:media:${mediaId}`],
+    };
+  }
+  if (data && typeof data === "object") {
+    if (data.mediaId) {
+      const mediaId = String(data.mediaId);
+      return {
+        kind: "media",
+        mediaId,
+        rooms: [`media:${mediaId}`, `content:media:${mediaId}`],
+      };
+    }
+    if (data.contentId && data.contentType) {
+      const contentId = String(data.contentId);
+      const contentType = normalizeContentType(String(data.contentType));
+      const rooms = [`content:${contentType}:${contentId}`];
+      if (contentType === "media") {
+        rooms.push(`media:${contentId}`);
+      }
+      return { kind: "content", contentId, contentType, rooms };
+    }
+  }
+  return null;
+}
+
+function typingKey(userId: string, target: TypingTarget): string {
+  if (target.kind === "media") return `${userId}:media:${target.mediaId}`;
+  return `${userId}:content:${target.contentType}:${target.contentId}`;
+}
+
+function clearTypingTimer(key: string): void {
+  const existing = typingTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    typingTimers.delete(key);
+  }
+}
+
+function emitTyping(
+  socket: any,
+  user: AuthenticatedUser,
+  rooms: string[],
+  isTyping: boolean
+): void {
+  const payload = {
+    userId: user.userId,
+    firstName: user.firstName,
+    isTyping,
+  };
+  for (const room of rooms) {
+    socket.to(room).emit("user-typing", payload);
+  }
+}
 
 export async function handleNewComment(
   ctx: SocketContext,
@@ -20,37 +92,40 @@ export async function handleNewComment(
 ): Promise<void> {
   try {
     const { mediaId, content, parentCommentId } = data;
-    const media = await Media.findById(mediaId);
+    const rl = await checkCommentRateLimit({
+      userId: user.userId,
+      contentType: "media",
+      contentId: mediaId,
+    });
+    if (!rl.allowed) {
+      socket.emit("error", {
+        message: "Too many comments. Please wait a moment.",
+        code: "COMMENT_RATE_LIMITED",
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+      return;
+    }
+
+    const media = await Media.findById(mediaId).select("_id").lean();
     if (!media) {
       socket.emit("error", { message: "Media not found" });
       return;
     }
 
-    const comment = await Interaction.create({
-      user: user.userId,
-      media: mediaId,
-      interactionType: "comment",
+    // Canonical comment service handles Mongo + room fan-out + notifications
+    const comment = await commentService.addComment(
+      user.userId,
+      mediaId,
+      "media",
       content,
-      parentCommentId,
-    });
+      parentCommentId
+    );
 
-    const commentData = {
-      id: comment._id,
-      content: comment.content,
-      user: {
-        id: user.userId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      createdAt: comment.createdAt,
-      parentCommentId,
-    };
-
-    ctx.io.to(`media:${mediaId}`).emit("new-comment", commentData);
+    socket.emit("comment-created", comment);
     logger.info("New comment created", {
       userId: user.userId,
       mediaId,
-      commentId: comment._id,
+      commentId: comment.id || comment._id,
     });
   } catch (error) {
     logger.error("Error creating comment", { error: (error as Error).message });
@@ -102,7 +177,6 @@ export async function handleMediaReaction(
     const { mediaId, actionType } = data;
 
     if (actionType === "like") {
-      // Durable toggle — same authority as HTTP (no Redis-first optimistic mutation)
       const result = await likeService.toggleLike(user.userId, mediaId, "media");
 
       ctx.io.to(`media:${mediaId}`).emit("media-reaction", {
@@ -218,6 +292,21 @@ export async function handleContentComment(
 ): Promise<void> {
   try {
     const { contentId, contentType, content: commentContent, parentCommentId } = data;
+    const normalized = normalizeContentType(contentType);
+
+    const rl = await checkCommentRateLimit({
+      userId: user.userId,
+      contentType: normalized,
+      contentId,
+    });
+    if (!rl.allowed) {
+      socket.emit("error", {
+        message: "Too many comments. Please wait a moment.",
+        code: "COMMENT_RATE_LIMITED",
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
+      return;
+    }
 
     const comment = await commentService.addComment(
       user.userId,
@@ -227,45 +316,7 @@ export async function handleContentComment(
       parentCommentId
     );
 
-    const commentData = {
-      id: comment.id || comment._id,
-      content: comment.content,
-      user: {
-        id: user.userId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-      },
-      createdAt: comment.createdAt,
-      parentCommentId,
-      contentType,
-    };
-
-    const content = await getContentById(contentId, contentType);
-
-    ctx.io.to(`content:${contentType}:${contentId}`).emit("content-comment", commentData);
-    ctx.io.to(`content:${contentType}:${contentId}`).emit("count-update", {
-      contentId,
-      contentType,
-      likeCount: content?.likeCount || 0,
-      commentCount: content?.commentCount || 0,
-      shareCount: content?.shareCount || 0,
-      viewCount: content?.viewCount || 0,
-    });
-
-    if (content?.uploadedBy && content.uploadedBy.toString() !== user.userId) {
-      ctx.io.to(`user:${content.uploadedBy}`).emit("new-comment-notification", {
-        contentId,
-        contentType,
-        contentTitle: content.title,
-        comment: commentData,
-        commenter: {
-          id: user.userId,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        },
-        commentCount: content?.commentCount || 0,
-      });
-    }
+    socket.emit("comment-created", comment);
 
     logger.info("Content comment created", {
       userId: user.userId,
@@ -282,25 +333,39 @@ export async function handleContentComment(
 export function handleTypingStart(
   socket: any,
   user: AuthenticatedUser,
-  mediaId: string
+  data: string | { mediaId?: string; contentId?: string; contentType?: string }
 ): void {
-  socket.to(`media:${mediaId}`).emit("user-typing", {
-    userId: user.userId,
-    firstName: user.firstName,
-    isTyping: true,
-  });
+  const target = resolveTypingTarget(data);
+  if (!target) return;
+
+  const key = typingKey(user.userId, target);
+  clearTypingTimer(key);
+  emitTyping(socket, user, target.rooms, true);
+
+  const timer = setTimeout(() => {
+    typingTimers.delete(key);
+    emitTyping(socket, user, target.rooms, false);
+  }, TYPING_TTL_MS);
+  timer.unref?.();
+  typingTimers.set(key, timer);
 }
 
 export function handleTypingStop(
   socket: any,
   user: AuthenticatedUser,
-  mediaId: string
+  data: string | { mediaId?: string; contentId?: string; contentType?: string }
 ): void {
-  socket.to(`media:${mediaId}`).emit("user-typing", {
-    userId: user.userId,
-    firstName: user.firstName,
-    isTyping: false,
-  });
+  const target = resolveTypingTarget(data);
+  if (!target) return;
+
+  clearTypingTimer(typingKey(user.userId, target));
+  emitTyping(socket, user, target.rooms, false);
+}
+
+/** Test helper — clears TTL map between unit tests */
+export function _resetTypingTimersForTests(): void {
+  for (const t of typingTimers.values()) clearTimeout(t);
+  typingTimers.clear();
 }
 
 export function handleUserPresence(

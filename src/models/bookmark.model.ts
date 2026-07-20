@@ -28,6 +28,7 @@ const bookmarkSchema = new Schema<IBookmark>(
 
 // Prevent duplicate bookmarks
 bookmarkSchema.index({ user: 1, media: 1 }, { unique: true });
+bookmarkSchema.index({ user: 1, createdAt: -1 }, { name: "bookmark_user_createdAt" });
 
 // Export model
 export const Bookmark =

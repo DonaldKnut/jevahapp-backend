@@ -135,11 +135,12 @@ class SocketService {
       socket.on("content-comment", async (data) =>
         engagement.handleContentComment(ctx, socket, user, data)
       );
-      socket.on("typing-start", (mediaId: string) =>
-        engagement.handleTypingStart(socket, user, mediaId)
+      // Typing: string mediaId (legacy) or { contentId, contentType } / { mediaId }
+      socket.on("typing-start", (data) =>
+        engagement.handleTypingStart(socket, user, data)
       );
-      socket.on("typing-stop", (mediaId: string) =>
-        engagement.handleTypingStop(socket, user, mediaId)
+      socket.on("typing-stop", (data) =>
+        engagement.handleTypingStop(socket, user, data)
       );
       socket.on("user-presence", (status: "online" | "away" | "offline") =>
         engagement.handleUserPresence(socket, user, status)

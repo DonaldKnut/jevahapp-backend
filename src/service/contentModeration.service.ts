@@ -1,5 +1,23 @@
+import { createHash } from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { matchModerationBlocklist } from "../config/moderationBlocklist";
+import { ModerationCase } from "../models/moderationCase.model";
+import {
+  reserveAiBudget,
+  recordAiUsage,
+} from "./moderation/aiBudget.service";
+import {
+  getActiveModerationModelId,
+  getGoogleAiApiKey,
+  MODERATION_POLICY_VERSION,
+  MODERATION_PROMPT_VERSION,
+  assertSupportedGeminiModel,
+} from "./moderation/geminiConfig";
+import { generateContentWithRetry } from "./moderation/geminiClient";
+import {
+  getEvidenceProfile,
+  hasMinimumEvidence,
+} from "./moderation/evidenceProfile";
 import logger from "../utils/logger";
 
 export interface ModerationResult {
@@ -8,6 +26,8 @@ export interface ModerationResult {
   reason?: string;
   flags: string[];
   requiresReview: boolean;
+  languageCandidates?: string[];
+  modelId?: string;
 }
 
 export interface ModerationInput {
@@ -17,6 +37,9 @@ export interface ModerationInput {
   title?: string;
   description?: string;
   contentType: string;
+  mediaId?: string;
+  contentHash?: string;
+  fileMimeType?: string;
 }
 
 const MODERATION_TRANSCRIPT_PROMPT_MAX = 12000;
@@ -30,10 +53,69 @@ const MODERATION_MAX_VIDEO_FRAMES = Math.min(
 export class ContentModerationService {
   private genAI: GoogleGenerativeAI | null;
   private model: any;
+  private modelId: string | null = null;
 
   /** All user-provided text for policy checks (full transcript — not truncated). */
   private policyText(input: ModerationInput): string {
     return `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`;
+  }
+
+  /** Heuristic language candidates for Nigerian multilingual evidence logging. */
+  private detectLanguageCandidates(text: string): string[] {
+    const t = (text || "").toLowerCase();
+    const out = new Set<string>(["en"]);
+    if (/\b(?:wetin|dey|abi|naija|no be|make we|oya|sef)\b/.test(t)) out.add("pcm");
+    if (/\b(?:oluwa|olorun|adura|igbagbo|jesu|yesu|ẹni|fun)\b/.test(t) || /[ẹọṣàáéíóúǹ]/.test(t))
+      out.add("yo");
+    if (/\b(?:chukwu|chineke|chisom|nke|nwanne|jisos|ekpere)\b/.test(t)) out.add("ig");
+    if (/\b(?:ubangiji|addu'?a|ibada|yesu|allah)\b/.test(t)) out.add("ha");
+    return [...out];
+  }
+
+  private async persistCase(
+    input: ModerationInput,
+    result: ModerationResult,
+    softSignal?: boolean
+  ): Promise<void> {
+    if (!input.mediaId) return;
+    try {
+      const evidenceHashes = [
+        createHash("sha256")
+          .update(this.policyText(input).slice(0, 8000))
+          .digest("hex")
+          .slice(0, 32),
+      ];
+      await ModerationCase.create({
+        mediaId: input.mediaId,
+        contentHash: input.contentHash,
+        provider: this.model ? "google-gemini" : "offline",
+        modelId: result.modelId || this.modelId || undefined,
+        promptVersion: MODERATION_PROMPT_VERSION,
+        policyVersion: MODERATION_POLICY_VERSION,
+        evidenceHashes,
+        modalityCoverage: {
+          title: !!input.title,
+          description: !!input.description,
+          transcript: !!input.transcript,
+          thumbnail: !!input.thumbnail,
+          frames: !!(input.videoFrames && input.videoFrames.length),
+          frameCount: input.videoFrames?.length || 0,
+        },
+        languageCandidates: result.languageCandidates || this.detectLanguageCandidates(this.policyText(input)),
+        decision: {
+          isApproved: result.isApproved,
+          confidence: result.confidence,
+          reason: result.reason,
+          flags: [
+            ...(result.flags || []),
+            ...(softSignal ? ["soft_blocklist_signal"] : []),
+          ],
+          requiresReview: result.requiresReview,
+        },
+      });
+    } catch (err) {
+      logger.warn("Failed to persist moderation case", { err });
+    }
   }
 
   /** Evenly sample frames so the model sees the beginning, middle, and end of the video (not only the first 3 timestamps). */
@@ -53,21 +135,27 @@ export class ContentModerationService {
   }
 
   constructor() {
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    const apiKey = getGoogleAiApiKey();
     if (!apiKey) {
       logger.warn(
-        "GOOGLE_AI_API_KEY not found. Content moderation will use basic checks only."
+        "GOOGLE_AI_API_KEY not found. Content moderation will quarantine for review (never auto-approve)."
       );
       this.genAI = null;
       this.model = null;
     } else {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      // Use gemini-1.5-pro for better multimodal analysis and accuracy
-      // Pro model has better detection rates for inappropriate content
-      const useProModel = process.env.USE_GEMINI_PRO_MODEL === "true" || process.env.NODE_ENV === "production";
+      const modelId = getActiveModerationModelId();
+      assertSupportedGeminiModel(modelId, "moderation");
+      this.modelId = modelId;
       this.model = this.genAI.getGenerativeModel({
-        model: useProModel ? "gemini-1.5-pro" : "gemini-1.5-flash", // Use Pro for production for better accuracy
+        model: modelId,
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 1024,
+          responseMimeType: "application/json",
+        },
       });
+      logger.info("Content moderation model configured", { modelId });
     }
   }
 
@@ -77,10 +165,40 @@ export class ContentModerationService {
   async moderateContent(
     input: ModerationInput
   ): Promise<ModerationResult> {
+    let aiBudgetReserved = false;
     try {
+      const languages = this.detectLanguageCandidates(this.policyText(input));
+      const profile = getEvidenceProfile(input.contentType, input.fileMimeType);
+      const coverage = {
+        title: !!input.title?.trim(),
+        description: !!input.description?.trim(),
+        transcript: !!input.transcript?.trim(),
+        transcriptChars: input.transcript?.length || 0,
+        frames: !!(input.videoFrames && input.videoFrames.length),
+        frameCount: input.videoFrames?.length || 0,
+        thumbnail: !!input.thumbnail,
+        textChars: input.transcript?.length || 0,
+      };
+
+      if (!hasMinimumEvidence(profile, coverage)) {
+        const low: ModerationResult = {
+          isApproved: false,
+          confidence: 0.1,
+          reason:
+            "Insufficient evidence coverage for this media type — queued for manual review",
+          flags: ["insufficient_evidence", "requires_human_review"],
+          requiresReview: true,
+          languageCandidates: languages,
+          modelId: this.modelId || undefined,
+        };
+        await recordAiUsage({ outcome: "quarantine", countedRequest: false });
+        await this.persistCase(input, low);
+        return low;
+      }
+
       const block = matchModerationBlocklist(this.policyText(input));
-      if (block) {
-        return {
+      if (block && block.severity === "hard") {
+        const hard: ModerationResult = {
           isApproved: false,
           confidence: 0.95,
           reason: `Content blocked by platform policy (inappropriate term or phrase in title, description, or transcript).`,
@@ -91,16 +209,68 @@ export class ContentModerationService {
             ...(block.pattern ? [`blocked_pattern`] : []),
           ],
           requiresReview: false,
+          languageCandidates: languages,
+          modelId: this.modelId || undefined,
         };
+        await recordAiUsage({ outcome: "reject", countedRequest: false });
+        await this.persistCase(input, hard);
+        return hard;
       }
 
-      // If no AI model available, use basic keyword checks
+      const softSignal = block?.severity === "soft";
+
+      // If no AI model available, quarantine for review — never auto-approve publicly
       if (!this.model) {
-        return this.basicModeration(input);
+        const fallback = this.basicModeration(input);
+        const quarantined: ModerationResult = {
+          ...fallback,
+          isApproved: false,
+          requiresReview: true,
+          reason:
+            fallback.reason ||
+            "AI moderation unavailable — queued for manual review",
+          flags: [
+            ...(fallback.flags || []),
+            "provider_unavailable",
+            ...(softSignal ? ["soft_blocklist_signal"] : []),
+          ],
+          languageCandidates: languages,
+        };
+        await recordAiUsage({ outcome: "quarantine", countedRequest: false });
+        await this.persistCase(input, quarantined, softSignal);
+        return quarantined;
       }
 
-      // Build the prompt for Gemini
+      // Build before reservation so the atomic token estimate reflects this
+      // request rather than a generic default.
       const prompt = this.buildModerationPrompt(input);
+      const sampledFrameCount = Math.min(
+        input.videoFrames?.length || 0,
+        MODERATION_MAX_VIDEO_FRAMES,
+        profile.maxFrames || MODERATION_MAX_VIDEO_FRAMES
+      );
+      const estimatedInputTokens =
+        Math.ceil(prompt.length / 4) + sampledFrameCount * 258;
+      const estimatedOutputTokens = 1024;
+      aiBudgetReserved = await reserveAiBudget(
+        estimatedInputTokens,
+        estimatedOutputTokens
+      );
+      if (!aiBudgetReserved) {
+        const budgetBlocked: ModerationResult = {
+          isApproved: false,
+          confidence: 0,
+          reason:
+            "AI moderation budget exhausted — queued for manual review (never auto-approved)",
+          flags: ["ai_budget_exhausted", "requires_human_review"],
+          requiresReview: true,
+          languageCandidates: languages,
+          modelId: this.modelId || undefined,
+        };
+        await recordAiUsage({ outcome: "budget_block", countedRequest: false });
+        await this.persistCase(input, budgetBlocked, softSignal);
+        return budgetBlocked;
+      }
 
       // Prepare content parts for multimodal analysis: prompt + thumbnail (if any) + video frames (if any)
       const parts: any[] = [{ text: prompt }];
@@ -122,7 +292,10 @@ export class ContentModerationService {
       if (input.videoFrames && input.videoFrames.length > 0) {
         const framesForModel = this.sampleVideoFramesForModeration(
           input.videoFrames,
-          MODERATION_MAX_VIDEO_FRAMES
+          Math.min(
+            MODERATION_MAX_VIDEO_FRAMES,
+            profile.maxFrames || MODERATION_MAX_VIDEO_FRAMES
+          )
         );
         framesForModel.forEach((frame) => {
           parts.push({
@@ -134,26 +307,68 @@ export class ContentModerationService {
         });
       }
 
-      // Generate content with Gemini
-      const result = await this.model.generateContent({
-        contents: [{ role: "user", parts }],
-      });
+      const result = await generateContentWithRetry(
+        this.model,
+        { contents: [{ role: "user", parts }] },
+        { label: "moderation" }
+      );
 
       const response = await result.response;
       const aiResponse = response.text();
 
-      return this.parseModerationResponse(aiResponse, input);
+      let parsed = this.parseModerationResponse(aiResponse, input);
+      parsed = {
+        ...parsed,
+        languageCandidates: languages,
+        modelId: this.modelId || undefined,
+        flags: [
+          ...(parsed.flags || []),
+          ...(softSignal ? ["soft_blocklist_signal"] : []),
+        ],
+      };
+      // Soft blocklist or low evidence → never silent public approve
+      if (softSignal && parsed.isApproved && parsed.confidence < 0.9) {
+        parsed = {
+          ...parsed,
+          isApproved: false,
+          requiresReview: true,
+          reason:
+            parsed.reason ||
+            "Ambiguous policy signal — queued for manual review",
+        };
+      }
+      await recordAiUsage({
+        inputTokens: Math.ceil(prompt.length / 4) + (input.videoFrames?.length || 0) * 258,
+        outputTokens: Math.ceil((aiResponse?.length || 0) / 4),
+        usageReserved: true,
+        outcome: parsed.requiresReview
+          ? "quarantine"
+          : parsed.isApproved
+            ? "approve"
+            : "reject",
+      });
+      await this.persistCase(input, parsed, softSignal);
+      return parsed;
     } catch (error: any) {
       logger.error("Error in content moderation:", error);
       // Do not auto-approve when the model fails — block upload and force manual review path
-      return {
+      const errResult: ModerationResult = {
         isApproved: false,
         confidence: 0,
         reason:
           "Automated moderation could not complete. Upload is held until the content can be reviewed.",
         flags: ["moderation_service_error"],
         requiresReview: true,
+        languageCandidates: this.detectLanguageCandidates(this.policyText(input)),
+        modelId: this.modelId || undefined,
       };
+      await recordAiUsage({
+        outcome: "error",
+        countedRequest: aiBudgetReserved,
+        usageReserved: aiBudgetReserved,
+      });
+      await this.persistCase(input, errResult);
+      return errResult;
     }
   }
 
@@ -228,6 +443,13 @@ Analyze this content and determine if it is:
 - **Transactional / street sex slang** (**ashawo**, **olosho**, **runs** in a sexual bragging sense) in a **non-sermon**, **celebratory** music context is usually non-gospel — **REJECT** unless clearly framed as **repentance/testimony or biblical warning** in the transcript.
 - **Do NOT** treat Pidgin gospel worship or biblical teaching as "low quality" — approve when the **substance** is praise, scripture, sermon, or Christian testimony, even if informal language is used.
 - If the **primary purpose** is entertainment, flexing, or sexual themes rather than **Jesus, the Word of God, worship, or biblical teaching**, REJECT or set requiresReview = true.
+
+**CRITICAL - Nigerian Christian / God-related names (do NOT flag as inappropriate):**
+- Personal and theophoric names are common and **must be allowed**: Godwin, Godspower, Godstime, Blessing, Grace, Favour, Faith, Hope, Charity, Gift, Miracle, Praise, Glory, Emmanuel, Immanuel, Joshua, David, Daniel, Samuel, Esther, Ruth, Mary, Martha, Deborah, Joseph, Michael, Gabriel.
+- Yoruba: Oluwa-*, Olu-, Jesu, Yesu, Olodumare (in Christian worship/testimony context).
+- Igbo: Chukwu-*, Chi-*, Chineke, Yesu.
+- Hausa/Arabic-influenced Christian usage: Yesu, Allah as a **personal-name component or quoted scripture** in a Christian sermon/testimony is **not** automatic rejection — judge teaching intent.
+- Allow **repentance/testimony**, **biblical violence** narratives, **Song of Songs / marriage teaching**, **apologetics**, and **respectful interfaith comparison**. Reject only **severe** safety violations or clearly anti-Christian blasphemy as the *primary* purpose.
 
 **CRITICAL - Video frames (must use together with transcript):**
 - The attached images include **video stills** sampled across the timeline (not only the opening).
@@ -310,225 +532,84 @@ Now analyze the content and provide your response in the exact JSON format above
         };
       }
 
-      // Non-JSON response: do not guess approval — fall back to keyword/blocklist checks
-      logger.warn("Moderation response was not valid JSON; using conservative fallback");
-      return this.basicModeration(input);
+      // Non-JSON / parse failure → quarantine, never auto-approve
+      logger.warn("Moderation response was not valid JSON; quarantining for review");
+      return {
+        isApproved: false,
+        confidence: 0,
+        reason: "Moderation response could not be parsed — queued for manual review",
+        flags: ["moderation_parse_error"],
+        requiresReview: true,
+      };
     } catch (error) {
       logger.error("Error parsing moderation response:", error);
-      return this.basicModeration(input);
+      return {
+        isApproved: false,
+        confidence: 0,
+        reason: "Moderation parse error — queued for manual review",
+        flags: ["moderation_parse_error"],
+        requiresReview: true,
+      };
     }
   }
 
   /**
-   * Basic moderation using keyword checks (fallback)
+   * Offline fallback: hard-reject only unambiguous severe signals.
+   * Ambiguous / gospel-like content is quarantined for review — never auto-approved
+   * via short substrings like "god" / "mark" / "john".
    */
   private basicModeration(input: ModerationInput): ModerationResult {
     const block = matchModerationBlocklist(this.policyText(input));
     if (block) {
-      return {
-        isApproved: false,
-        confidence: 0.9,
-        reason: "Policy blocklist (offline moderation)",
-        flags: ["policy_blocklist", "inappropriate_content"],
-        requiresReview: false,
-      };
+      // Hard blocklist remains reject; soft signals handled below
+      if (block.severity !== "soft") {
+        return {
+          isApproved: false,
+          confidence: 0.9,
+          reason: "Policy blocklist (offline moderation)",
+          flags: ["policy_blocklist", "inappropriate_content"],
+          requiresReview: false,
+        };
+      }
     }
 
-    // Substring checks: unambiguous coarse themes (not "sex" — false positives on "sexual immorality" sermons).
-    const inappropriateSubstrings = [
-      "explicit",
-      "nude",
-      "porn",
-      "violence",
-      "blasphemy",
-      "blaspheme",
-    ];
+    const text = this.policyText(input).toLowerCase();
 
-    // Strong profanity only (word boundaries; avoids "skill"/"Essex"-style substring noise).
     const strongProfanityPattern =
       /\b(?:fuck|fucking|fucker|motherfucker|shit|bullshit|bitch|bitches|nigga|niggas|pussy|cunt|slut|whore)\b/i;
+    const severeThemes =
+      /\b(?:porn|porno|xxx|nude|nudity|blaspheme|blasphemy)\b/i;
 
-    const gospelKeywords = [
-      // Core names and worship
-      "jesus",
-      "christ",
-      "god",
-      "lord",
-      "prayer",
-      "worship",
-      "praise",
-      "gospel",
-      "bible",
-      "scripture",
-      "faith",
-      "church",
-      "sermon",
-      "hymn",
-      "devotional",
-      "blessing",
-      "amen",
-      "hallelujah",
-      "hosanna",
-      // Scriptural / theological (sermons may rarely say "Jesus" but use these)
-      "salvation",
-      "redemption",
-      "repentance",
-      "resurrection",
-      "holy spirit",
-      "spirit of god",
-      "covenant",
-      "grace",
-      "righteousness",
-      "righteous",
-      "sinner",
-      "saved",
-      "eternal life",
-      "kingdom of god",
-      "kingdom of heaven",
-      "word of god",
-      "word of the lord",
-      "testimony",
-      "testify",
-      "preach",
-      "preaching",
-      "pastor",
-      "minister",
-      "congregation",
-      "altar",
-      "saved",
-      "born again",
-      "sanctification",
-      "glorify",
-      "glory",
-      "prophet",
-      "prophecy",
-      "disciple",
-      "apostle",
-      "parable",
-      "psalm",
-      "proverb",
-      "genesis",
-      "exodus",
-      "romans",
-      "corinthians",
-      "galatians",
-      "ephesians",
-      "philippians",
-      "colossians",
-      "hebrews",
-      "revelation",
-      "isaiah",
-      "jeremiah",
-      "matthew",
-      "mark",
-      "luke",
-      "john",
-      "acts ",
-      "peter",
-      "paul",
-      "moses",
-      "abraham",
-      "david",
-      "solomon",
-      "elijah",
-      "elisha",
-      "daniel",
-      "nehemiah",
-      "ezekiel",
-      "zechariah",
-      "malachi",
-      "obedience",
-      "obey",
-      "commandment",
-      "law of moses",
-      "law of the lord",
-      "cross",
-      "crucified",
-      "risen",
-      "ascension",
-      "pentecost",
-      "trinity",
-      "father ",
-      "son ",
-      "comforter",
-      "advocate",
-      "shepherd",
-      "lamb of god",
-      "bread of life",
-      "light of the world",
-      "alpha and omega",
-      "immanuel",
-      "emmanuel",
-      "father",
-      "son of god",
-      "only begotten",
-      // Yoruba keywords (common gospel terms)
-      "jésù",
-      "jésu",
-      "olúwa",
-      "oluwa",
-      "ọlọrun",
-      "olorun",
-      "ìwòrìpò",
-      "iworipo",
-      "àdúrà",
-      "adura",
-      "ìgbàgbọ",
-      "igbagbo",
-      // Hausa keywords
-      "yesu",
-      "ubangiji",
-      "allah",
-      "addu'a",
-      "ibada",
-      // Igbo keywords
-      "jisos",
-      "chiukwu",
-      "ekpere",
-      "abụ",
-      // Common transliterations and variations
-      "yehovah",
-      "yahweh",
-      "messiah",
-    ];
-
-    const textToCheck = `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`.toLowerCase();
-
-    const hasInappropriate =
-      inappropriateSubstrings.some((keyword) => textToCheck.includes(keyword)) ||
-      strongProfanityPattern.test(textToCheck);
-
-    // Check for gospel content
-    const hasGospel = gospelKeywords.some(keyword =>
-      textToCheck.includes(keyword)
-    );
-
-    if (hasInappropriate) {
+    if (strongProfanityPattern.test(text) || severeThemes.test(text)) {
       return {
         isApproved: false,
-        confidence: 0.7,
-        reason: "Inappropriate keywords detected",
-        flags: ["inappropriate_keywords"],
+        confidence: 0.85,
+        reason: "Severe policy terms detected (offline moderation)",
+        flags: ["inappropriate_content"],
         requiresReview: false,
       };
     }
 
-    if (hasGospel) {
+    // Word-boundary gospel signals (never substring "god" inside "Godwin" alone as approval)
+    const gospelPhrasePattern =
+      /\b(?:jesus|christ|gospel|bible|scripture|worship|hallelujah|hosanna|sermon|pastor|holy\s+spirit|kingdom\s+of\s+god|word\s+of\s+god|oluwa|chukwu|chineke|yesu|jesu)\b/i;
+
+    if (gospelPhrasePattern.test(text)) {
       return {
-        isApproved: true,
-        confidence: 0.6,
-        reason: "Gospel keywords detected",
-        flags: [],
-        requiresReview: false,
+        isApproved: false,
+        confidence: 0.4,
+        reason:
+          "Possible Christian content detected offline — queued for manual review (AI unavailable)",
+        flags: ["possible_gospel", "requires_human_review"],
+        requiresReview: true,
       };
     }
 
-    // If neither, require review
     return {
       isApproved: false,
-      confidence: 0.4,
-      reason: "Unable to determine content type - requires review",
-      flags: ["unclear_content"],
+      confidence: 0.2,
+      reason: "Insufficient offline evidence — queued for manual review",
+      flags: ["insufficient_evidence", "requires_human_review"],
       requiresReview: true,
     };
   }
@@ -541,7 +622,4 @@ Now analyze the content and provide your response in the exact JSON format above
   }
 }
 
-// Export singleton instance
 export const contentModerationService = new ContentModerationService();
-
-

@@ -6,6 +6,7 @@ import { AuditService } from "../audit.service";
 import { NotificationService } from "../notification.service";
 import { getBookmarkCount } from "./bookmark.query";
 import { normalizeContentType } from "../../modules/engagement/shared/contentType.resolver";
+import { setFeedUserBookmarkFlag } from "../media/feedUserFlags";
 
 export interface BookmarkResult {
   contentId: string;
@@ -13,7 +14,18 @@ export interface BookmarkResult {
   isBookmarked: boolean;
   bookmarkCount: number;
   saves: number;
+  bookmarkId?: string;
 }
+
+const FLOOR_BOOKMARK = [
+  {
+    $set: {
+      bookmarkCount: {
+        $max: [0, { $subtract: [{ $ifNull: ["$bookmarkCount", 0] }, 1] }],
+      },
+    },
+  },
+];
 
 /** Map feed / FE aliases to the collection bookmark supports */
 export function mapBookmarkContentType(raw?: string): string {
@@ -28,7 +40,7 @@ export function mapBookmarkContentType(raw?: string): string {
     "live",
     "sermon",
     "sermons",
-    "devotional", // feed devotionals that live on Media (not Devotional collection)
+    "devotional",
     "ebook",
     "e-books",
     "ebooks",
@@ -47,7 +59,6 @@ export function mapBookmarkContentType(raw?: string): string {
 
 export async function verifyMediaExists(mediaId: string): Promise<boolean> {
   try {
-    // Existence check outside the transaction — avoids session/replica false-negatives
     const media = await Media.findById(mediaId).select("_id").lean();
     return !!media;
   } catch (error: any) {
@@ -95,6 +106,7 @@ export async function toggleBookmark(
   const session: ClientSession = await Bookmark.startSession();
   try {
     let bookmarked = false;
+    let bookmarkId: string | undefined;
 
     await session.withTransaction(async () => {
       const existingBookmark = await Bookmark.findOne({
@@ -104,14 +116,10 @@ export async function toggleBookmark(
 
       if (existingBookmark) {
         await Bookmark.findByIdAndDelete(existingBookmark._id, { session });
-        await Media.findByIdAndUpdate(
-          mediaId,
-          { $inc: { bookmarkCount: -1 } },
-          { session }
-        );
+        await Media.findByIdAndUpdate(mediaId, FLOOR_BOOKMARK, { session });
         bookmarked = false;
       } else {
-        await Bookmark.create(
+        const created = await Bookmark.create(
           [
             {
               user: new Types.ObjectId(userId),
@@ -120,6 +128,7 @@ export async function toggleBookmark(
           ],
           { session }
         );
+        bookmarkId = created[0]._id.toString();
         await Media.findByIdAndUpdate(
           mediaId,
           { $inc: { bookmarkCount: 1 } },
@@ -130,13 +139,16 @@ export async function toggleBookmark(
     });
 
     const bookmarkCount = Math.max(0, await getBookmarkCount(mediaId));
+    // No feed-cache invalidation: saved flags are overlaid fresh per request.
+    void setFeedUserBookmarkFlag(userId, mediaId, bookmarked);
 
     if (bookmarked) {
       try {
         await NotificationService.notifyContentBookmark(
           userId,
           mediaId,
-          "media"
+          "media",
+          bookmarkId
         );
       } catch (notificationError: any) {
         logger.warn("Failed to send bookmark notification", {
@@ -176,9 +188,9 @@ export async function toggleBookmark(
       isBookmarked: bookmarked,
       bookmarkCount,
       saves: bookmarkCount,
+      bookmarkId,
     };
   } catch (error: any) {
-    // Standalone Mongo (no replica set): fall back to non-transactional toggle
     if (
       error.message?.includes("Transaction numbers are only allowed") ||
       error.message?.includes("replica set")
@@ -213,21 +225,22 @@ async function toggleBookmarkWithoutTransaction(
   });
 
   let bookmarked = false;
+  let bookmarkId: string | undefined;
   if (existingBookmark) {
     await Bookmark.findByIdAndDelete(existingBookmark._id);
-    await Media.findByIdAndUpdate(mediaId, { $inc: { bookmarkCount: -1 } });
+    await Media.findByIdAndUpdate(mediaId, FLOOR_BOOKMARK);
     bookmarked = false;
   } else {
     try {
-      await Bookmark.create({
+      const created = await Bookmark.create({
         user: new Types.ObjectId(userId),
         media: new Types.ObjectId(mediaId),
       });
+      bookmarkId = created._id.toString();
       await Media.findByIdAndUpdate(mediaId, { $inc: { bookmarkCount: 1 } });
       bookmarked = true;
     } catch (err: any) {
       if (err?.code === 11000) {
-        // Race: already bookmarked
         bookmarked = true;
       } else {
         throw err;
@@ -236,11 +249,14 @@ async function toggleBookmarkWithoutTransaction(
   }
 
   const bookmarkCount = Math.max(0, await getBookmarkCount(mediaId));
+  void setFeedUserBookmarkFlag(userId, mediaId, bookmarked);
+
   return {
     contentId: mediaId,
     bookmarked,
     isBookmarked: bookmarked,
     bookmarkCount,
     saves: bookmarkCount,
+    bookmarkId,
   };
 }

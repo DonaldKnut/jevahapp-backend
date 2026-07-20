@@ -5,6 +5,18 @@ import emailService from "../email.service";
 import fileUploadService from "../fileUpload.service";
 import { setVerificationFlags } from "./shared";
 
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: number }).code === 11000
+  );
+}
+
 export async function registerUser(
   email: string,
   password: string,
@@ -13,7 +25,9 @@ export async function registerUser(
   avatarBuffer?: Buffer,
   avatarMimeType?: string
 ) {
-  const existingUser = await User.findOne({ email });
+  const normalizedEmail = normalizeEmail(email);
+
+  const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     throw new Error("Email address is already registered");
   }
@@ -44,37 +58,42 @@ export async function registerUser(
     avatarUrl = uploadResult.secure_url;
   }
 
+  let newUser;
   try {
-    await emailService.sendVerificationEmail(
-      email,
+    newUser = await User.create({
+      email: normalizedEmail,
       firstName,
-      verificationCode
-    );
-  } catch (emailError) {
-    console.error("Failed to send verification email:", emailError);
-    throw new Error(
-      "Unable to send verification email. Please try again later."
-    );
+      lastName,
+      avatar: avatarUrl,
+      provider: "email",
+      password: hashedPassword,
+      verificationCode,
+      verificationCodeExpires,
+      isEmailVerified: false,
+      isProfileComplete: false,
+      age: 0,
+      isKid: false,
+      section: "adults",
+      role,
+      hasConsentedToPrivacyPolicy: false,
+      ...verificationFlags,
+    });
+  } catch (error) {
+    // Concurrent registration with the same email can slip past the
+    // existence check above; the unique index catches it here.
+    if (isDuplicateKeyError(error)) {
+      throw new Error("Email address is already registered");
+    }
+    throw error;
   }
 
-  const newUser = await User.create({
-    email,
-    firstName,
-    lastName,
-    avatar: avatarUrl,
-    provider: "email",
-    password: hashedPassword,
-    verificationCode,
-    verificationCodeExpires,
-    isEmailVerified: false,
-    isProfileComplete: false,
-    age: 0,
-    isKid: false,
-    section: "adults",
-    role,
-    hasConsentedToPrivacyPolicy: false,
-    ...verificationFlags,
-  });
+  // Fire-and-forget: registration must not fail because the email provider is
+  // down. The user can use /resend-verification-email if this doesn't arrive.
+  emailService
+    .sendVerificationEmail(normalizedEmail, firstName, verificationCode)
+    .catch(emailError => {
+      console.error("Failed to send verification email:", emailError);
+    });
 
   return {
     id: newUser._id,
@@ -106,7 +125,9 @@ export async function registerArtist(
   avatarBuffer?: Buffer,
   avatarMimeType?: string
 ) {
-  const existingUser = await User.findOne({ email });
+  const normalizedEmail = normalizeEmail(email);
+
+  const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     throw new Error("Email address is already registered");
   }
@@ -162,38 +183,45 @@ export async function registerArtist(
     avatarUrl = uploadResult.secure_url;
   }
 
+  let newArtist;
   try {
-    await emailService.sendWelcomeEmail(email, firstName || "Artist");
-  } catch (emailError) {
-    console.error("Failed to send welcome email:", emailError);
-    throw new Error("Unable to send welcome email. Please try again later.");
+    newArtist = await User.create({
+      email: normalizedEmail,
+      firstName,
+      lastName,
+      avatar: avatarUrl,
+      provider: "email",
+      password: hashedPassword,
+      isEmailVerified: false,
+      isProfileComplete: false,
+      age: 0,
+      isKid: false,
+      section: "adults",
+      role: "artist",
+      hasConsentedToPrivacyPolicy: false,
+      isVerifiedArtist: false,
+      artistProfile: {
+        artistName: artistName.trim(),
+        genre: genre.map(g => g.toLowerCase()),
+        bio: bio?.trim(),
+        socialMedia,
+        recordLabel: recordLabel?.trim(),
+        yearsActive,
+        verificationDocuments: [],
+      },
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new Error("Email address is already registered");
+    }
+    throw error;
   }
 
-  const newArtist = await User.create({
-    email,
-    firstName,
-    lastName,
-    avatar: avatarUrl,
-    provider: "email",
-    password: hashedPassword,
-    isEmailVerified: false,
-    isProfileComplete: false,
-    age: 0,
-    isKid: false,
-    section: "adults",
-    role: "artist",
-    hasConsentedToPrivacyPolicy: false,
-    isVerifiedArtist: false,
-    artistProfile: {
-      artistName: artistName.trim(),
-      genre: genre.map(g => g.toLowerCase()),
-      bio: bio?.trim(),
-      socialMedia,
-      recordLabel: recordLabel?.trim(),
-      yearsActive,
-      verificationDocuments: [],
-    },
-  });
+  emailService
+    .sendWelcomeEmail(normalizedEmail, firstName || "Artist")
+    .catch(emailError => {
+      console.error("Failed to send welcome email:", emailError);
+    });
 
   return {
     id: newArtist._id,
@@ -295,7 +323,10 @@ export async function updateArtistProfile(
 }
 
 export async function verifyEmail(email: string, code: string) {
-  const user = await User.findOne({ email, verificationCode: code });
+  const user = await User.findOne({
+    email: normalizeEmail(email),
+    verificationCode: code,
+  });
   if (!user) {
     throw new Error("Invalid email or code");
   }
@@ -312,13 +343,22 @@ export async function verifyEmail(email: string, code: string) {
   user.verificationCodeExpires = undefined;
   await user.save();
 
-  await emailService.sendWelcomeEmail(user.email, user.firstName || "User");
+  // Non-blocking: verification already succeeded; a failed welcome email
+  // must not turn this into an error response.
+  emailService
+    .sendWelcomeEmail(user.email, user.firstName || "User")
+    .catch(emailError => {
+      console.error("Failed to send welcome email:", emailError);
+    });
 
   return user;
 }
 
 export async function resendVerificationEmail(email: string) {
-  const user = await User.findOne({ email, provider: "email" });
+  const user = await User.findOne({
+    email: normalizeEmail(email),
+    provider: "email",
+  });
   if (!user) {
     throw new Error("User not found");
   }

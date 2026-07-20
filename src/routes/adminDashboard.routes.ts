@@ -26,6 +26,17 @@ import {
   adminDeleteMedia,
 } from "../controllers/adminVerification.controller";
 import {
+  getModerationMediaDetail,
+  getModerationCase,
+  updateAdminMediaMetadata,
+  listAdminChurches,
+} from "../controllers/adminModeration.controller";
+import {
+  createChurch,
+  updateChurch,
+  deleteChurch,
+} from "../controllers/churches.admin.controller";
+import {
   getUsersPresence,
   sendAdminEmail,
   getRecentUploads,
@@ -112,12 +123,52 @@ router.patch(
   updateChurchVerification
 );
 
+router.get(
+  "/churches",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminChurches
+);
+
+router.post(
+  "/churches",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  createChurch
+);
+
+router.patch(
+  "/churches/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  updateChurch
+);
+
+router.delete(
+  "/churches/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  deleteChurch
+);
+
 router.delete(
   "/media/:id",
   verifyToken,
   requireAdmin,
   apiRateLimiter,
   adminDeleteMedia
+);
+
+router.patch(
+  "/media/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  updateAdminMediaMetadata
 );
 
 router.get(
@@ -197,6 +248,22 @@ router.get(
   requireAdmin,
   apiRateLimiter,
   getModerationQueue
+);
+
+router.get(
+  "/moderation/:id/case",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getModerationCase
+);
+
+router.get(
+  "/moderation/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getModerationMediaDetail
 );
 
 router.patch(

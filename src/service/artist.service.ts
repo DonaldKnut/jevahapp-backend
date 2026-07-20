@@ -129,14 +129,14 @@ export class ArtistService {
 
         await User.findByIdAndUpdate(
           followerId,
-          { $push: { following: new Types.ObjectId(artistId) } },
+          { $addToSet: { following: new Types.ObjectId(artistId) } },
           { session }
         );
 
         await User.findByIdAndUpdate(
           artistId,
           {
-            $push: { followers: new Types.ObjectId(followerId) },
+            $addToSet: { followers: new Types.ObjectId(followerId) },
             $inc: { "artistProfile.followerCount": 1 },
           },
           { session }

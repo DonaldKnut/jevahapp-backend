@@ -4,6 +4,7 @@ import { CopyrightFreeSong, ICopyrightFreeSong } from "../models/copyrightFreeSo
 import { Interaction, IInteraction } from "../models/interaction.model";
 import { CopyrightFreeSongInteractionService } from "./copyrightFreeSongInteraction.service";
 import { UnifiedBookmarkService } from "./unifiedBookmark.service";
+import { PUBLIC_MEDIA_FILTER } from "../lib/publicMediaVisibility";
 import logger from "../utils/logger";
 
 export interface UnifiedSearchOptions {
@@ -96,7 +97,7 @@ export class UnifiedSearchService {
         { description: searchRegex },
         { speaker: searchRegex },
       ],
-      isHidden: { $ne: true }, // Exclude hidden content
+      ...PUBLIC_MEDIA_FILTER,
     };
 
     // Filter by media contentType if specified
@@ -333,30 +334,50 @@ export class UnifiedSearchService {
     results: UnifiedSearchItem[],
     userId: string
   ): Promise<UnifiedSearchItem[]> {
-    const enriched = await Promise.all(
+    if (!results.length || !Types.ObjectId.isValid(userId)) {
+      return results.map((item) => ({ ...item, isLiked: false, isInLibrary: false }));
+    }
+
+    const mediaIds = results
+      .filter((r) => r.type !== "copyright-free" && Types.ObjectId.isValid(r.id))
+      .map((r) => new Types.ObjectId(r.id));
+    const allIds = results
+      .filter((r) => Types.ObjectId.isValid(r.id))
+      .map((r) => new Types.ObjectId(r.id));
+
+    const [mediaLikes, bookmarks] = await Promise.all([
+      mediaIds.length
+        ? Interaction.find({
+            user: new Types.ObjectId(userId),
+            media: { $in: mediaIds },
+            interactionType: "like",
+            isRemoved: { $ne: true },
+          })
+            .select("media")
+            .lean()
+        : Promise.resolve([] as any[]),
+      allIds.length
+        ? (await import("../models/bookmark.model")).Bookmark.find({
+            user: new Types.ObjectId(userId),
+            media: { $in: allIds },
+          })
+            .select("media")
+            .lean()
+        : Promise.resolve([] as any[]),
+    ]);
+
+    const likedSet = new Set(mediaLikes.map((l: any) => l.media.toString()));
+    const bookmarkSet = new Set(bookmarks.map((b: any) => b.media.toString()));
+
+    return Promise.all(
       results.map(async (item) => {
         let isLiked = false;
-        let isInLibrary = false;
-
         try {
           if (item.type === "copyright-free") {
-            // Check like status for copyright-free songs
             isLiked = await this.interactionService.isLiked(userId, item.id);
           } else {
-            // For media, check if liked using Interaction
-            if (Types.ObjectId.isValid(item.id) && Types.ObjectId.isValid(userId)) {
-              const mediaLike = await Interaction.findOne({
-                user: new Types.ObjectId(userId),
-                media: new Types.ObjectId(item.id),
-                interactionType: "like",
-                isRemoved: { $ne: true },
-              });
-              isLiked = !!mediaLike;
-            }
+            isLiked = likedSet.has(item.id);
           }
-
-          // Check bookmark status for all content types
-          isInLibrary = await UnifiedBookmarkService.isBookmarked(userId, item.id);
         } catch (error: any) {
           logger.warn("Error enriching user data", {
             error: error?.message,
@@ -364,16 +385,13 @@ export class UnifiedSearchService {
             itemId: item.id,
           });
         }
-
         return {
           ...item,
           isLiked,
-          isInLibrary,
+          isInLibrary: bookmarkSet.has(item.id),
         };
       })
     );
-
-    return enriched;
   }
 
   /**
@@ -395,7 +413,7 @@ export class UnifiedSearchService {
           { title: searchRegex },
           { speaker: searchRegex },
         ],
-        isHidden: { $ne: true },
+        ...PUBLIC_MEDIA_FILTER,
       })
         .select("title speaker")
         .limit(limit * 2)
@@ -449,7 +467,7 @@ export class UnifiedSearchService {
     try {
       // Get most viewed media and songs as trending
       const [trendingMedia, trendingSongs] = await Promise.all([
-        Media.find({ isHidden: { $ne: true } })
+        Media.find({ ...PUBLIC_MEDIA_FILTER })
           .sort({ viewCount: -1, listenCount: -1, readCount: -1 })
           .limit(limit)
           .select("title viewCount category")

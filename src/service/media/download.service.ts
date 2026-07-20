@@ -1,6 +1,8 @@
 import { Media } from "../../models/media.model";
 import { Types } from "mongoose";
 import { mediaEngagementService } from "./engagement.service";
+import { isPubliclyVisibleMedia } from "../../lib/publicMediaVisibility";
+import { User } from "../../models/user.model";
 
 export class MediaDownloadService {
   async downloadMedia(data: {
@@ -16,6 +18,26 @@ export class MediaDownloadService {
         throw new Error("Media not found");
       }
 
+      const ownerId = media.uploadedBy?.toString?.() || String(media.uploadedBy);
+      let isAdmin = false;
+      if (Types.ObjectId.isValid(userId)) {
+        const user = await User.findById(userId).select("role").lean();
+        isAdmin = (user as any)?.role === "admin";
+      }
+      const isOwner = ownerId === userId;
+      if (!isPubliclyVisibleMedia(media) && !isOwner && !isAdmin) {
+        throw new Error("Media is not available for download");
+      }
+      if (
+        String(media.fileUrl || "").startsWith("staging://") ||
+        (media as any).publicationState === "staged" ||
+        (media as any).publicationState === "publishing"
+      ) {
+        if (!isOwner && !isAdmin) {
+          throw new Error("Media is still processing");
+        }
+      }
+
       // Check if media is available for download
       if (!media.fileUrl) {
         throw new Error("Media file not available for download");
@@ -26,8 +48,10 @@ export class MediaDownloadService {
         "../fileUpload.service"
       );
 
-      // Extract object key from fileUrl
-      const objectKey = this.extractObjectKeyFromUrl(media.fileUrl);
+      // Prefer persisted R2 object key; fall back to parsing public URL
+      const objectKey =
+        (media as any).fileObjectKey ||
+        this.extractObjectKeyFromUrl(media.fileUrl);
       if (!objectKey) {
         // If we can't extract object key, use public URL as fallback
         console.log("[Download Service] Could not extract object key, using public URL as fallback");
@@ -606,7 +630,7 @@ export class MediaDownloadService {
   }
 
   /**
-   * Download media file directly (for UI components)
+   * Download media file — prefer CDN/R2 redirect; proxy only when Range resume needs streaming.
    */
   async downloadMediaFile(data: { mediaId: string; userId: string; range?: string }) {
     try {
@@ -617,17 +641,12 @@ export class MediaDownloadService {
         throw new Error("Media not found");
       }
 
-      // Check if media is available for download
       if (!media.fileUrl) {
         throw new Error("Media file not available for download");
       }
 
-      // NOTE: Do not buffer large media into memory. Stream it through the API when needed.
-      // Also forward Range requests so clients can resume downloads and stream efficiently.
       const rangeHeader = data.range;
-      // If the client is resuming via Range requests, avoid duplicate DB writes on every chunk.
       if (!rangeHeader) {
-        // Record download interaction
         await mediaEngagementService.recordInteraction({
           userIdentifier: userId,
           mediaIdentifier: mediaId,
@@ -635,6 +654,40 @@ export class MediaDownloadService {
           duration: 0,
         });
       }
+
+      const objectKey =
+        (media as any).fileObjectKey ||
+        this.extractObjectKeyFromUrl(media.fileUrl);
+
+      // Prefer short-lived CDN URL (no Node proxy bandwidth) when client is not ranging
+      if (!rangeHeader && objectKey) {
+        try {
+          const { default: fileUploadService } = await import(
+            "../fileUpload.service"
+          );
+          const redirectUrl = await fileUploadService.getPresignedGetUrl(
+            objectKey,
+            3600
+          );
+          await this.addToOfflineDownloads(userId, mediaId, {
+            fileName: media.title || "Untitled",
+            fileSize: media.fileSize || 0,
+            contentType: media.contentType,
+            downloadUrl: redirectUrl,
+          });
+          return {
+            success: true,
+            redirectUrl,
+            fileName: media.title || "Untitled",
+            fileSize: media.fileSize || 0,
+            contentType: (media.mimeType as any) || "application/octet-stream",
+            message: "Redirect to CDN",
+          };
+        } catch {
+          // fall through to stream proxy
+        }
+      }
+
       const fileResponse = await fetch(media.fileUrl, {
         headers: rangeHeader ? { Range: rangeHeader } : undefined,
       });
@@ -651,8 +704,6 @@ export class MediaDownloadService {
         ? parseInt(contentLengthHeader, 10)
         : undefined;
 
-      // Add to user's offline downloads only for the initial request
-      // (Range resume requests should not create/refresh records repeatedly).
       if (!rangeHeader) {
         await this.addToOfflineDownloads(userId, mediaId, {
           fileName: media.title || "Untitled",
@@ -664,8 +715,6 @@ export class MediaDownloadService {
 
       return {
         success: true,
-        // Stream instead of buffering.
-        // Express response will pipe this to the client.
         stream: fileResponse.body,
         fileName: media.title || "Untitled",
         fileSize: media.fileSize || contentLength || 0,

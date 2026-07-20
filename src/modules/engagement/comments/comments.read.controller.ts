@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import commentService from "./comment.service";
+import { getCommentsVersion } from "./comment.version";
 import logger from "../../../utils/logger";
 import { resolveCommentContentType } from "../shared/contentType.resolver";
 
@@ -25,6 +26,22 @@ export const getContentComments = async (req: Request, res: Response): Promise<v
     }
 
     const sort = sortBy === "oldest" || sortBy === "top" ? sortBy : "newest";
+
+    // Content-aware ETag: includes a Redis version bumped on every comment
+    // mutation. Checked BEFORE the DB fetch so a 304 costs no Mongo queries.
+    // When Redis is unavailable (version null), skip ETag/304 entirely rather
+    // than risk serving stale 304s.
+    const version = await getCommentsVersion(contentId);
+    const etag =
+      version !== null ? `"${contentId}-${page}-${limit}-${sort}-v${version}"` : null;
+    if (etag) {
+      res.setHeader("ETag", etag);
+      if (req.headers["if-none-match"] === etag) {
+        res.status(304).end();
+        return;
+      }
+    }
+
     const result = await commentService.getContentComments(
       contentId,
       resolveCommentContentType(contentType),
@@ -33,13 +50,6 @@ export const getContentComments = async (req: Request, res: Response): Promise<v
       sort,
       userId
     );
-
-    const etag = `"${contentId}-${page}-${limit}-${sort}"`;
-    res.setHeader("ETag", etag);
-    if (req.headers["if-none-match"] === etag) {
-      res.status(304).end();
-      return;
-    }
 
     res.setHeader(
       "Cache-Control",

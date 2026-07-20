@@ -1,11 +1,18 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { mediaService } from "../../service/media.service";
-import cacheService from "../../service/cache.service";
-import { redisSafe } from "../../lib/redis";
+import cacheService, { CACHE_TTL } from "../../service/cache.service";
+import {
+  feedCacheHash,
+  feedGlobalKey,
+  feedUserKey,
+} from "../../lib/cacheKeys";
+import { getFeedGeneration } from "../../lib/invalidateFeedCaches";
 import logger from "../../utils/logger";
 import { SearchQueryParameters } from "./shared";
 import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlags";
+import { attachFreshEngagementCounts } from "../../service/media/feedCountOverlay";
+import { invalidateFeedCaches } from "../../lib/invalidateFeedCaches";
 
 export const getAllMedia = async (
   request: Request,
@@ -94,15 +101,14 @@ export const getAllContentForAllTab = async (
     const userIdentifier = request.userId;
 
     /**
-     * Redis-first feed caching strategy:
-     * - Key: feed:user:{userId}:{cacheKeyHash}
-     * - TTL: 10 minutes (600s) - longer for stability
-     * - Stores: Full feed response (media array + pagination)
-     *
-     * On hit: Return immediately WITHOUT touching DB
-     * On miss: Generate feed, cache full response, return
+     * Feed caching (IG/TikTok pattern):
+     * - Shared list under feed:global:v2:{generation}:{sha256}
+     * - Generation bump on structural changes (no stale resurrection)
+     * - SWR + single-flight on miss; empty feeds are valid hits
+     * - Counts overlaid from Redis counters (cold-seeded on miss)
+     * - Per-user liked/saved flags from Redis tri-state cache
      */
-    const cacheKeyHash = JSON.stringify({
+    const hash = feedCacheHash({
       page: options.page,
       limit: options.limit,
       contentType: options.contentType,
@@ -116,111 +122,96 @@ export const getAllContentForAllTab = async (
       order: options.order,
     });
 
-    const feedKey = userIdentifier
-      ? `feed:user:${userIdentifier}:${Buffer.from(cacheKeyHash).toString('base64').slice(0, 32)}`
-      : `feed:global:${Buffer.from(cacheKeyHash).toString('base64').slice(0, 32)}`;
+    const generation = await getFeedGeneration();
+    let media: any[];
+    let pagination: any;
+    let cacheStatus: "HIT" | "STALE" | "MISS" | "BYPASS" = "BYPASS";
+    let fromMongoMiss = false;
 
-    // Redis-first: Try to get full cached feed
-    const cachedFeed = await redisSafe<any | null>(
-      "feedGet",
-      async (r) => {
-        const cached = await r.get<string>(feedKey);
-        if (!cached) return null;
-        try {
-          return JSON.parse(cached);
-        } catch {
-          return null;
-        }
-      },
-      null
-    );
-
-    if (cachedFeed && cachedFeed.media && Array.isArray(cachedFeed.media) && cachedFeed.media.length > 0) {
-      // Cache HIT: Return immediately without DB access for the list itself.
-      // Overlay per-user like/save flags (not cached — always fresh for this JWT).
-      const mediaWithFlags = await attachFeedUserInteractionFlags(
-        cachedFeed.media,
-        userIdentifier
-      );
-
-      response.status(200).json({
-        success: true,
-        data: {
-          media: mediaWithFlags,
-          pagination: cachedFeed.pagination,
+    if (generation === null) {
+      // Redis unavailable — bypass cache entirely
+      const result = await mediaService.getAllContentForAllTab(options);
+      media = result.media;
+      pagination = result.pagination;
+      fromMongoMiss = true;
+      cacheStatus = "BYPASS";
+    } else {
+      const listKey = feedGlobalKey(hash, generation);
+      const loaded = await cacheService.getOrSetSwr(
+        listKey,
+        async () => {
+          const result = await mediaService.getAllContentForAllTab(options);
+          return { media: result.media, pagination: result.pagination };
         },
-        ...(cachedFeed.recommendations && { recommendations: cachedFeed.recommendations }),
-      });
-      return;
+        {
+          freshTtlSeconds: CACHE_TTL.feed,
+          staleTtlSeconds: CACHE_TTL.feedStale,
+        }
+      );
+      media = loaded.value.media;
+      pagination = loaded.value.pagination;
+      cacheStatus = loaded.status;
+      fromMongoMiss = loaded.status === "MISS" || loaded.status === "BYPASS";
     }
 
-    // Cache MISS: Generate feed from DB (only when cache miss)
-    const result = await mediaService.getAllContentForAllTab(options);
-
-    // Optional personalization: include recommendations when user is authenticated
-    // Non-blocking: Don't wait for recommendations if they're slow
+    // Personalized recommendations: SWR per user, 500ms budget
     let recommendations: any = undefined;
     if (userIdentifier) {
+      const mood = (request.query?.mood as string) || "default";
+      const recKey = feedUserKey(userIdentifier, feedCacheHash({ mood, kind: "rec" }));
       try {
-        recommendations = await Promise.race([
-          mediaService.getRecommendationsForAllContent(
-            userIdentifier,
-            {
-              limitPerSection: 12,
-              mood: (request.query?.mood as string) || undefined,
-            }
-          ),
-          new Promise((resolve) => setTimeout(() => resolve(undefined), 500)), // 500ms timeout
-        ]) as any;
-      } catch (err) {
-        // Non-blocking failure; proceed without recommendations
+        const recLoaded = await cacheService.getOrSetSwr(
+          recKey,
+          async () => {
+            const raced = await Promise.race([
+              mediaService.getRecommendationsForAllContent(userIdentifier, {
+                limitPerSection: 12,
+                mood: mood === "default" ? undefined : mood,
+              }),
+              new Promise(resolve => setTimeout(() => resolve(null), 500)),
+            ]);
+            return raced ?? null;
+          },
+          {
+            freshTtlSeconds: CACHE_TTL.recommendations,
+            staleTtlSeconds: 60,
+          }
+        );
+        recommendations = recLoaded.value || undefined;
+      } catch {
         recommendations = undefined;
       }
     }
 
-    // Cache full feed response in Redis (async, non-blocking) — WITHOUT per-user flags
+    const mediaWithFreshCounts = await attachFreshEngagementCounts(media, {
+      fromMongoMiss,
+    });
     const mediaWithFlags = await attachFeedUserInteractionFlags(
-      result.media,
+      mediaWithFreshCounts,
       userIdentifier
     );
 
-    const responseData = {
-      success: true,
-      data: {
-        media: mediaWithFlags,
-        pagination: result.pagination,
-      },
-      ...(recommendations && { recommendations }),
-    };
+    response.setHeader("X-Cache", cacheStatus);
 
-    // Cache the full response for future requests (10 minutes TTL)
-    redisSafe(
-      "feedSet",
-      async (r) => {
-        await r.set(feedKey, JSON.stringify({
-          media: result.media, // store without user flags so one cache serves everyone
-          pagination: result.pagination,
-          recommendations,
-        }), { ex: 600 }); // 10 minutes TTL
-        return true;
-      },
-      false
-    ).catch(() => { }); // Never block on cache write
-
-    // Log performance metrics (lightweight, only for slow requests)
     const duration = Date.now() - startTime;
-
     if (duration > 500) {
       logger.warn("Slow feed query", {
         duration,
         page,
         limit,
         contentType,
-        cached: false,
+        cached: cacheStatus,
       });
     }
 
-    response.status(200).json(responseData);
+    response.status(200).json({
+      success: true,
+      data: {
+        media: mediaWithFlags,
+        pagination,
+      },
+      ...(recommendations && { recommendations }),
+    });
   } catch (error: any) {
     const duration = Date.now() - startTime;
     logger.error("Fetch all content error", {
@@ -407,6 +398,8 @@ export const deleteMedia = async (
     await cacheService.del(`media:${id}`);
     await cacheService.delPattern("media:public:*");
     await cacheService.delPattern("media:all:*");
+    // Structural feed change — drop shared feed list caches
+    await invalidateFeedCaches(id, "");
 
     response.status(200).json({
       success: true,

@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { Media } from "../../models/media.model";
 import { mediaService } from "../../service/media.service";
 import cacheService from "../../service/cache.service";
+import { invalidateFeedCaches } from "../../lib/invalidateFeedCaches";
 import { enqueueAnalyticsEvent, enqueueMediaPostUpload } from "../../queues/enqueue";
 import { User } from "../../models/user.model";
 import { optimizedVerificationService } from "../../service/optimizedVerification.service";
@@ -14,6 +15,14 @@ import { transcriptionService } from "../../service/transcription.service";
 import logger from "../../utils/logger";
 import { UPLOAD_LIMITS, AI_DESCRIPTION_LIMITS } from "./constants";
 import { UploadMediaRequestBody } from "./shared";
+import {
+  findReusableModerationDecision,
+  sha256Buffer,
+} from "../../service/moderation/contentHashDedup";
+import { persistModerationDecision } from "../../service/moderation/persistDecision";
+import {
+  reserveUserUploadForModeration,
+} from "../../service/moderation/aiBudget.service";
 
 export const uploadMedia = async (
   request: Request,
@@ -246,23 +255,43 @@ export const uploadMedia = async (
       // Register upload session for progress tracking
       uploadProgressService.registerUploadSession(uploadId, userId);
 
+      const contentHash = sha256Buffer(file.buffer);
+
       try {
-        // Use optimized verification service with progress updates
-        // Include thumbnail moderation (CRITICAL - first thing users see)
-        verificationResult = await optimizedVerificationService.verifyContentWithProgress(
-          file.buffer,
-          file.mimetype,
-          contentType,
-          title,
-          description,
-          uploadId,
-          (progress) => {
-            // Send progress update via Socket.IO
-            uploadProgressService.sendProgress(progress, userId);
-          },
-          thumbnail.buffer, // Include thumbnail for moderation
-          thumbnail.mimetype
-        );
+        const reused = await findReusableModerationDecision(contentHash);
+        if (reused) {
+          verificationResult = {
+            isApproved: reused.isApproved && !reused.requiresReview,
+            moderationResult: reused,
+            transcript: undefined,
+            videoFrames: undefined,
+          };
+          (verificationResult as any).contentHash = contentHash;
+        } else {
+          if (!(await reserveUserUploadForModeration(userId))) {
+            response.status(429).json({
+              success: false,
+              message:
+                "Daily upload moderation allowance exceeded. Try again tomorrow.",
+              code: "MODERATION_UPLOAD_BUDGET",
+            });
+            return;
+          }
+          verificationResult = await optimizedVerificationService.verifyContentWithProgress(
+            file.buffer,
+            file.mimetype,
+            contentType,
+            title,
+            description,
+            uploadId,
+            (progress) => {
+              uploadProgressService.sendProgress(progress, userId);
+            },
+            thumbnail.buffer,
+            thumbnail.mimetype
+          );
+          (verificationResult as any).contentHash = contentHash;
+        }
       } catch (error: any) {
         logger.error("Pre-upload verification error:", error);
 
@@ -291,20 +320,19 @@ export const uploadMedia = async (
         return;
       }
 
-      // Check if content is approved
-      if (!verificationResult.isApproved) {
-        const status = verificationResult.moderationResult.requiresReview
-          ? "under_review"
-          : "rejected";
-
+      // Hard reject only. Under-review continues to create a private media record
+      // so admins have a reviewable ID in the moderation queue.
+      if (
+        !verificationResult.isApproved &&
+        !verificationResult.moderationResult.requiresReview
+      ) {
         logger.warn("Content rejected during pre-upload verification", {
-          status,
+          status: "rejected",
           reason: verificationResult.moderationResult.reason,
           flags: verificationResult.moderationResult.flags,
           uploadId,
         });
 
-        // Send rejection progress
         uploadProgressService.sendProgress(
           {
             uploadId,
@@ -315,49 +343,13 @@ export const uploadMedia = async (
           },
           userId
         );
-
-        // Cleanup session
         uploadProgressService.clearUploadSession(uploadId);
 
-        // When content requires review, notify admins (fire-and-forget so response isn't delayed)
-        const moderationResultForEmail = verificationResult.moderationResult;
-        if (moderationResultForEmail.requiresReview) {
-          const notifyAdmins = async () => {
-            try {
-              const [admins, uploader] = await Promise.all([
-                User.find({ role: "admin" }).select("email").lean(),
-                User.findById(userId).select("email firstName lastName").lean(),
-              ]);
-              const adminEmails = (admins as any[]).map(a => a.email).filter(Boolean);
-              const uploadedByLabel = uploader
-                ? `${(uploader as any).firstName || ""} ${(uploader as any).lastName || ""}`.trim() || (uploader as any).email || userId
-                : userId;
-              if (adminEmails.length > 0) {
-                await resendEmailService.sendAdminModerationAlert(
-                  adminEmails,
-                  title || "Untitled",
-                  contentType,
-                  uploadedByLabel,
-                  moderationResultForEmail,
-                  0
-                );
-                logger.info("Admin notified: content under review (upload blocked)", { uploadId, title });
-              }
-            } catch (err: any) {
-              logger.error("Failed to send under-review alert to admins", { uploadId, error: err?.message });
-            }
-          };
-          notifyAdmins();
-        }
-
-        // Return appropriate error response
         response.status(403).json({
           success: false,
-          message: verificationResult.moderationResult.requiresReview
-            ? "Content requires manual review before it can be uploaded. Please contact support."
-            : "Content does not meet our community guidelines and cannot be uploaded.",
+          message: "Content does not meet our community guidelines and cannot be uploaded.",
           moderationResult: {
-            status,
+            status: "rejected",
             reason: verificationResult.moderationResult.reason,
             flags: verificationResult.moderationResult.flags,
             confidence: verificationResult.moderationResult.confidence,
@@ -367,20 +359,29 @@ export const uploadMedia = async (
         return;
       }
 
-      // Content is approved - send completion progress
+      const needsReview =
+        !!verificationResult.moderationResult.requiresReview ||
+        !verificationResult.isApproved;
+
       uploadProgressService.sendProgress(
         {
           uploadId,
           progress: 100,
-          stage: "complete",
-          message: "Content verified and approved!",
+          stage: needsReview ? "under_review" : "complete",
+          message: needsReview
+            ? "Content queued for manual review"
+            : "Content verified and approved!",
           timestamp: new Date().toISOString(),
         },
         userId
       );
 
-      // Content is approved - proceed with upload
-      logger.info("Content approved, proceeding with upload to storage", { uploadId });
+      logger.info(
+        needsReview
+          ? "Content requires review — creating private media record"
+          : "Content approved, proceeding with upload to storage",
+        { uploadId }
+      );
     } else {
       logger.info("Skipping verification for live content type");
     }
@@ -402,30 +403,75 @@ export const uploadMedia = async (
 
     // Update media with pre-upload verification result (if verification was performed)
     if (verificationResult) {
-      // Logic for moderation status:
-      // 1. If AI approves AND doesn't require review -> approved (visible)
-      // 2. If AI approves BUT requires review -> under_review (hidden)
-      const requiresReview = verificationResult.moderationResult.requiresReview;
+      const requiresReview =
+        !!verificationResult.moderationResult.requiresReview ||
+        !verificationResult.isApproved;
       const status = requiresReview ? "under_review" : "approved";
       const isHidden = requiresReview;
 
       const updateData: any = {
         moderationStatus: status,
+        contentHash: (verificationResult as any).contentHash,
         moderationResult: {
           ...verificationResult.moderationResult,
           moderatedAt: new Date(),
         },
-        isHidden: isHidden,
+        isHidden,
+        processing: {
+          status: requiresReview ? "queued" : "queued",
+          jobType: contentType === "videos" || contentType === "sermon" ? "transcode" : "process",
+          updatedAt: new Date(),
+          progress: 0,
+        },
       };
 
       await Media.findByIdAndUpdate(media._id, updateData);
-
-      // Update media object for response
+      await persistModerationDecision({
+        mediaId: String(media._id),
+        contentHash: (verificationResult as any).contentHash,
+        result: verificationResult.moderationResult,
+        title,
+        description,
+        transcript: verificationResult.transcript,
+        frameCount: verificationResult.videoFrames?.length || 0,
+        hasThumbnail: true,
+      });
       media.moderationStatus = status;
       media.moderationResult = updateData.moderationResult;
       media.isHidden = isHidden;
+
+      if (requiresReview) {
+        void (async () => {
+          try {
+            const [admins, uploader] = await Promise.all([
+              User.find({ role: "admin" }).select("email").lean(),
+              User.findById(userId).select("email firstName lastName").lean(),
+            ]);
+            const adminEmails = (admins as any[]).map(a => a.email).filter(Boolean);
+            const uploadedByLabel = uploader
+              ? `${(uploader as any).firstName || ""} ${(uploader as any).lastName || ""}`.trim() ||
+                (uploader as any).email ||
+                userId
+              : userId;
+            if (adminEmails.length > 0) {
+              await resendEmailService.sendAdminModerationAlert(
+                adminEmails,
+                title || "Untitled",
+                contentType,
+                uploadedByLabel,
+                verificationResult.moderationResult,
+                0
+              );
+            }
+          } catch (err: any) {
+            logger.error("Failed to send under-review alert to admins", {
+              mediaId: String(media._id),
+              error: err?.message,
+            });
+          }
+        })();
+      }
     } else {
-      // For live content, set to pending (will be moderated separately if needed)
       const updateData: any = {
         moderationStatus: "pending",
         isHidden: false,
@@ -434,13 +480,16 @@ export const uploadMedia = async (
       media.moderationStatus = "pending";
     }
 
-    // Invalidate cache for public all-content endpoint (all query variants)
-    await cacheService.delPattern("media:public:all-content*");
-    // Also invalidate other media caches if they exist
-    await cacheService.delPattern("media:all:*");
-
-    // Enqueue non-blocking post-upload processing + analytics event
     const mediaIdString = String((media as any)._id);
+    const isPubliclyVisible =
+      media.moderationStatus === "approved" && media.isHidden !== true;
+
+    // Only invalidate public feeds when content is actually visible
+    if (isPubliclyVisible) {
+      await cacheService.delPattern("media:public:all-content*");
+      await cacheService.delPattern("media:all:*");
+      await invalidateFeedCaches(mediaIdString, userId);
+    }
 
     enqueueMediaPostUpload({
       mediaId: mediaIdString,
@@ -460,17 +509,18 @@ export const uploadMedia = async (
       requestId: (request as any).requestId,
     });
 
-    // Cleanup upload session
     if (contentType !== "live") {
       uploadProgressService.clearUploadSession(uploadId);
     }
 
-    // Return success response
-    response.status(201).json({
+    const underReview = media.moderationStatus === "under_review";
+    response.status(underReview ? 202 : 201).json({
       success: true,
-      message: verificationResult
-        ? "Media uploaded successfully. Content has been verified and approved."
-        : "Media uploaded successfully.",
+      message: underReview
+        ? "Media uploaded and queued for manual review. It is hidden until an admin approves it."
+        : verificationResult
+          ? "Media uploaded successfully. Content has been verified and approved."
+          : "Media uploaded successfully.",
       media: {
         ...media.toObject(),
         fileUrl: media.fileUrl,
@@ -478,8 +528,9 @@ export const uploadMedia = async (
         moderationStatus: media.moderationStatus || "pending",
         moderationResult: media.moderationResult,
       },
-      uploadId: contentType !== "live" ? uploadId : undefined, // Include uploadId for tracking
+      uploadId: contentType !== "live" ? uploadId : undefined,
     });
+    return;
   } catch (error: any) {
     logger.error("Upload media error", { error: error?.message });
 

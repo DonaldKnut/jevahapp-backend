@@ -37,7 +37,8 @@ router.get(
 router.get(
   "/public/all-content",
   apiRateLimiter,
-  cacheMiddleware(30),
+  // Shared feed list is cached inside the controller (generation + SWR).
+  // Do not wrap with cacheMiddleware — that would freeze count overlays.
   getPublicAllContent
 );
 

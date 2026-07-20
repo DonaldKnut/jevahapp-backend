@@ -16,6 +16,8 @@ import {
   apiRateLimiter,
   mediaInteractionRateLimiter,
 } from "../../middleware/rateLimiter";
+import { idempotencyMiddleware } from "../../middleware/idempotency.middleware";
+import { bookmarkRateLimiter } from "../../middleware/bookmarkRateLimiter.middleware";
 import { cacheMiddleware } from "../../middleware/cache.middleware";
 
 const router = Router();
@@ -39,7 +41,8 @@ router.get(
 router.post(
   "/interactions/:id/save",
   verifyToken,
-  mediaInteractionRateLimiter,
+  idempotencyMiddleware(),
+  bookmarkRateLimiter,
   deprecatedEndpoint("POST /api/bookmark/:contentId/toggle"),
   async (req, res) => {
     req.params.mediaId = req.params.id;

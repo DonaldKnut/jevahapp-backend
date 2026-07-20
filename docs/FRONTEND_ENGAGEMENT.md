@@ -639,3 +639,23 @@ Copyright-free methods are not yet first-class in the SDK — call `/api/audio/c
 | Share | POST | `/api/audio/copyright-free/:songId/share` |
 | View | POST | `/api/audio/copyright-free/:songId/view` |
 | Get song + counts | GET | `/api/audio/copyright-free/:songId` |
+
+---
+
+## Staged media upload (preferred)
+
+Prefer direct-to-storage uploads so large Nigerian mobile videos are not buffered in the API process.
+
+```text
+1. Client computes SHA-256 of the file bytes
+2. POST /api/media/upload/intent  (body includes checksumSha256) → mediaId, stagingKey, uploadUrl
+3. PUT object to storage (private staging key)
+4. POST /api/media/upload/:mediaId/finalize → HTTP 202, job queued
+5. Worker: verify hash → reuse prior decision OR sample evidence across full timeline → moderate → transcode
+6. Poll GET /api/media/upload/:mediaId/status  (or listen to socket progress)
+7. When status ready + moderationStatus approved → appear in feed/search
+```
+
+Legacy `POST /api/media/upload` (multipart) remains for older clients but has a lower buffered-video ceiling. Content under review is **private** (not a hard 403 without a reviewable ID).
+
+Public surfaces require `moderationStatus === "approved"` and `isHidden !== true`.

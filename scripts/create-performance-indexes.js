@@ -34,6 +34,22 @@ async function createPerformanceIndexes() {
         // Filtering indexes
         { key: { category: 1, contentType: 1, isActive: 1 }, name: "filter_active" },
         { key: { topics: 1, contentType: 1 }, name: "topics_content" },
+        { key: { contentHash: 1 }, sparse: true },
+        {
+          key: { "uploadIntent.intentId": 1 },
+          unique: true,
+          sparse: true,
+          name: "upload_intent_id_unique",
+        },
+        {
+          key: { "uploadIntent.stagingKey": 1, "processing.status": 1, createdAt: 1 },
+          name: "staging_cleanup",
+        },
+        {
+          key: { "processing.status": 1, "processing.updatedAt": 1 },
+          name: "processing_sweeper",
+        },
+        { key: { publicationState: 1, createdAt: -1 }, name: "publication_state" },
         
         // Live stream indexes
         { key: { isLive: 1, liveStreamStatus: 1, createdAt: -1 }, name: "live_streams" },
@@ -96,10 +112,16 @@ async function createPerformanceIndexes() {
     }
 
     // Engagement collection indexes
+    // NOTE: Do NOT recreate obsolete unique {contentId, userId} — that blocks
+    // cross-content-type likes. Canonical unique is {userId, contentType, contentId}.
     console.log("❤️  Creating engagement indexes...");
     try {
       await db.collection("likes").createIndexes([
-        { key: { contentId: 1, userId: 1 }, unique: true, name: "content_user_unique" },
+        {
+          key: { userId: 1, contentType: 1, contentId: 1 },
+          unique: true,
+          name: "user_type_content_unique",
+        },
         { key: { contentType: 1, contentId: 1 }, name: "type_content" },
         { key: { userId: 1, createdAt: -1 }, name: "user_recent" },
       ]);
@@ -127,6 +149,41 @@ async function createPerformanceIndexes() {
       console.log("   ✅ Engagement indexes created");
     } catch (error) {
       console.log(`   ⚠️  Engagement index error: ${error.message}`);
+    }
+
+    console.log("📱 Creating push device indexes...");
+    try {
+      await db.collection("pushdevices").createIndexes([
+        { key: { expoToken: 1 }, unique: true, name: "expo_token_unique" },
+        { key: { userId: 1, status: 1 }, name: "user_device_status" },
+      ]);
+      await db.collection("notificationoutboxes").createIndexes([
+        { key: { notificationId: 1 }, unique: true, name: "outbox_notification_unique" },
+        { key: { status: 1, createdAt: 1 }, name: "outbox_pending" },
+      ]);
+      console.log("   ✅ Push indexes created");
+    } catch (error) {
+      console.log(`   ⚠️  Push index error: ${error.message}`);
+    }
+
+    console.log("🛡️  Creating moderation decision-reuse indexes...");
+    try {
+      await db.collection("moderationcases").createIndexes([
+        { key: { mediaId: 1, createdAt: -1 } },
+        {
+          key: {
+            contentHash: 1,
+            policyVersion: 1,
+            promptVersion: 1,
+            modelId: 1,
+            createdAt: -1,
+          },
+          sparse: true,
+        },
+      ]);
+      console.log("   ✅ Moderation indexes created");
+    } catch (error) {
+      console.log(`   ⚠️  Moderation index error: ${error.message}`);
     }
 
     // Clamp negative like counts (repair stale analytics / Redis drift)
@@ -157,6 +214,7 @@ async function createPerformanceIndexes() {
       "shareevents",
       "copyrightfreesonginteractions",
       "bookmarks",
+      "moderationcases",
     ];
     for (const collectionName of collections) {
       try {

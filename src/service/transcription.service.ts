@@ -30,7 +30,7 @@ export class TranscriptionService {
       // you might want to use Google Cloud Speech-to-Text API
       // For now, we'll use Gemini's audio capabilities
       this.model = this.genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
+        model: process.env.GEMINI_TRANSCRIPTION_MODEL || process.env.GEMINI_DEFAULT_MODEL || "gemini-2.5-flash",
       });
     }
   }

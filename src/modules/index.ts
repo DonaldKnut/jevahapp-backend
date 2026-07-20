@@ -26,6 +26,7 @@ import * as ebooks from "./ebooks";
 import * as playlists from "./playlists";
 import * as audio from "./audio";
 import * as search from "./search";
+import * as feed from "./feed";
 import * as health from "./health";
 import * as metrics from "./metrics";
 
@@ -66,6 +67,7 @@ export function registerModules(app: Application): void {
     playlists,
     audio,
     search,
+    feed,
     health,
     metrics,
   ];

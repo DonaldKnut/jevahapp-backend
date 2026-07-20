@@ -6,6 +6,7 @@ import logger from "../utils/logger";
 import { redisRateLimit } from "../lib/redisRateLimit";
 import likeService from "../modules/engagement/like/like.service";
 import { incrPostCounter } from "../lib/redisCounters";
+import { addCommunityComment } from "../modules/engagement/comments/communityComment.command";
 
 /**
  * Helper function to get comment nesting depth
@@ -346,50 +347,50 @@ export const commentOnForumPost = async (req: Request, res: Response): Promise<v
       }
     }
 
-    // Create comment
-    const comment = await Interaction.create({
-      user: userId,
-      media: new Types.ObjectId(postId),
-      interactionType: "comment",
-      content: content.trim(),
-      parentCommentId: parentCommentId ? new Types.ObjectId(parentCommentId) : undefined,
-      lastInteraction: new Date(),
-      count: 1,
-      isRemoved: false,
+    const { doc: comment } = await addCommunityComment({
+      userId: userId!,
+      contentId: postId,
+      contentKind: "forum",
+      content,
+      parentCommentId,
+      bumpCount: async () => {
+        post.commentsCount = (post.commentsCount || 0) + 1;
+        await post.save();
+        incrPostCounter({ postId, field: "comments", delta: 1 }).catch(() => {});
+        return post.commentsCount;
+      },
     });
 
-    // Update post commentsCount
-    post.commentsCount = (post.commentsCount || 0) + 1;
-    await post.save();
-    incrPostCounter({ postId, field: "comments", delta: 1 }).catch(() => { });
-
-    // Populate user info
-    await comment.populate("user", "firstName lastName username avatar");
-
-    logger.info("Forum post comment created", { postId, userId, commentId: comment._id });
-
-    // Format response to match spec
     const responseData = {
       _id: String(comment._id),
-      id: String(comment._id), // ✅ Include id field as per spec
+      id: String(comment._id),
       postId: String(comment.media),
       userId: comment.user?._id ? String(comment.user._id) : String(comment.user),
       content: comment.content,
       parentCommentId: comment.parentCommentId ? String(comment.parentCommentId) : null,
-      createdAt: comment.createdAt ? (comment.createdAt instanceof Date ? comment.createdAt.toISOString() : comment.createdAt) : new Date().toISOString(),
-      updatedAt: comment.updatedAt ? (comment.updatedAt instanceof Date ? comment.updatedAt.toISOString() : comment.updatedAt) : new Date().toISOString(),
+      createdAt: comment.createdAt
+        ? comment.createdAt instanceof Date
+          ? comment.createdAt.toISOString()
+          : comment.createdAt
+        : new Date().toISOString(),
+      updatedAt: comment.updatedAt
+        ? comment.updatedAt instanceof Date
+          ? comment.updatedAt.toISOString()
+          : comment.updatedAt
+        : new Date().toISOString(),
       likesCount: 0,
       userLiked: false,
-      author: comment.user && typeof comment.user === "object" && comment.user._id
-        ? {
-          _id: String(comment.user._id),
-          username: comment.user.username,
-          firstName: comment.user.firstName || "", // ✅ Include firstName
-          lastName: comment.user.lastName || "", // ✅ Include lastName
-          avatarUrl: comment.user.avatar,
-        }
-        : null,
-      replies: [], // ✅ Empty replies array as per spec
+      author:
+        comment.user && typeof comment.user === "object" && comment.user._id
+          ? {
+              _id: String(comment.user._id),
+              username: comment.user.username,
+              firstName: comment.user.firstName || "",
+              lastName: comment.user.lastName || "",
+              avatarUrl: comment.user.avatar,
+            }
+          : null,
+      replies: [],
     };
 
     res.status(201).json({

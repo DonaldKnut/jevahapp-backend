@@ -75,6 +75,9 @@ export const updateUserVerification = async (
     }
     await user.save();
 
+    const { invalidateAuthUserCache } = await import("../lib/invalidateAuthUserCache");
+    await invalidateAuthUserCache(id);
+
     await AuditService.logAdminAction(adminId, "update_verification", id, {
       updates,
       previous,
