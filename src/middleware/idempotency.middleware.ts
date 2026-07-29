@@ -62,7 +62,7 @@ function shouldPersistStatus(statusCode: number): boolean {
  * - Key: idem:{userId}:{key} (path/body in fingerprint)
  * - Same key + fingerprint → replay stored response
  * - Same key + different fingerprint → 409 IDEMPOTENCY_CONFLICT
- * - Redis down with key present → 503 IDEMPOTENCY_UNAVAILABLE (not fail-open)
+ * - Redis down with key present → fail **open** (process mutation, log warning)
  * - Missing header → no-op
  */
 export function idempotencyMiddleware() {
@@ -157,15 +157,19 @@ export function idempotencyMiddleware() {
         IN_PROGRESS_TTL_SECONDS
       );
 
-      // null = Redis unavailable — keyed requests must not fail open on toggles
+      // null = Redis unavailable — fail open so likes still work locally / during outages
       if (reserved === null) {
-        res.status(503).json({
-          success: false,
-          code: "IDEMPOTENCY_UNAVAILABLE",
-          message:
-            "Idempotency store unavailable. Retry without Idempotency-Key or try again shortly.",
-          data: {},
+        logger.warn("Idempotency store unavailable; failing open (processing without idempotency)", {
+          userId,
+          idempotencyKey: key,
+          path: `${req.baseUrl || ""}${req.path || ""}`,
         });
+        logEngagementMetric("idempotency_fail_open", {
+          userId,
+          idempotencyKey: key,
+        });
+        delete (req as any).idempotencyRedisKey;
+        next();
         return;
       }
 
@@ -243,13 +247,13 @@ export function idempotencyMiddleware() {
 
       next();
     } catch (error: any) {
-      logger.warn("Idempotency middleware error", { error: error?.message });
-      res.status(503).json({
-        success: false,
-        code: "IDEMPOTENCY_UNAVAILABLE",
-        message: "Idempotency store unavailable. Please retry shortly.",
-        data: {},
+      logger.warn("Idempotency middleware error; failing open", {
+        error: error?.message,
+        userId,
+        idempotencyKey: key,
       });
+      delete (req as any).idempotencyRedisKey;
+      next();
     }
   };
 }

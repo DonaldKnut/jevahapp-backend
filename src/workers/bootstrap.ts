@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import logger from "../utils/logger";
 import { mongooseConfig } from "../config/database.config";
+import { ensureMongoDnsServers } from "../config/mongoDns";
 
 let isConnected = false;
 
@@ -15,6 +16,7 @@ export async function connectWorkerMongo(): Promise<void> {
   // Match server config (avoid buffering + reduce surprise memory usage)
   mongoose.set("bufferCommands", false);
 
+  ensureMongoDnsServers(uri);
   await mongoose.connect(uri, mongooseConfig as any);
   isConnected = true;
 

@@ -557,4 +557,112 @@ export class AuditService {
 
     return result.modifiedCount;
   }
+
+  /** Admin actions whose resourceId targets a given user (bans, role, verify, …) */
+  static async getAdminActionsForTarget(
+    targetUserId: string,
+    limit: number = 30
+  ): Promise<
+    Array<{
+      at: Date;
+      actorId: string;
+      actorEmail: string;
+      action: string;
+      meta: Record<string, unknown>;
+    }>
+  > {
+    const admins = await User.find({ role: "admin" })
+      .select("email userActivities")
+      .lean();
+
+    const rows: Array<{
+      at: Date;
+      actorId: string;
+      actorEmail: string;
+      action: string;
+      meta: Record<string, unknown>;
+    }> = [];
+
+    for (const admin of admins as any[]) {
+      for (const a of admin.userActivities || []) {
+        if (a.action !== "admin_action") continue;
+        if (String(a.resourceId || "") !== String(targetUserId)) continue;
+        rows.push({
+          at: a.timestamp,
+          actorId: admin._id.toString(),
+          actorEmail: admin.email,
+          action: a.metadata?.adminAction || "admin_action",
+          meta: a.metadata || {},
+        });
+      }
+    }
+
+    rows.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return rows.slice(0, limit);
+  }
+
+  /** Org-wide admin activity (master console). Flattened from all admin users. */
+  static async getOrgAdminActivityLog(options: {
+    page?: number;
+    limit?: number;
+    actorId?: string;
+    action?: string;
+    from?: Date | null;
+    to?: Date | null;
+  }): Promise<{
+    activities: any[];
+    total: number;
+    page: number;
+    pages: number;
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }> {
+    const page = options.page || 1;
+    const limit = Math.min(options.limit || 50, 100);
+    const filter: Record<string, unknown> = { role: "admin" };
+    if (options.actorId && Types.ObjectId.isValid(options.actorId)) {
+      filter._id = new Types.ObjectId(options.actorId);
+    }
+
+    const admins = await User.find(filter)
+      .select("email firstName lastName userActivities")
+      .lean();
+
+    let activities: any[] = [];
+    for (const admin of admins as any[]) {
+      for (const a of admin.userActivities || []) {
+        if (a.action !== "admin_action") continue;
+        const adminAction = a.metadata?.adminAction || "";
+        if (options.action && adminAction !== options.action) continue;
+        const ts = new Date(a.timestamp);
+        if (options.from && ts < options.from) continue;
+        if (options.to && ts > options.to) continue;
+        activities.push({
+          ...a,
+          actorId: admin._id.toString(),
+          actorEmail: admin.email,
+          actorName:
+            `${admin.firstName || ""} ${admin.lastName || ""}`.trim() ||
+            admin.email,
+        });
+      }
+    }
+
+    activities.sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    const total = activities.length;
+    const skip = (page - 1) * limit;
+    const slice = activities.slice(skip, skip + limit);
+    const pages = Math.ceil(total / limit) || 1;
+
+    return {
+      activities: slice,
+      total,
+      page,
+      pages,
+      pagination: { page, limit, total, pages },
+    };
+  }
 }

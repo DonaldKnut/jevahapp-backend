@@ -15,6 +15,15 @@ export interface IInteraction extends Document {
   lastInteraction: Date;
   count: number;
   content?: string; // For comments
+  /** Optional CDN URL for image-only or image+text comments */
+  imageUrl?: string;
+  /** Structured @mentions from the client (persisted; used for notifications) */
+  mentions?: Array<{
+    userId: mongoose.Types.ObjectId;
+    displayName?: string;
+  }>;
+  /** Set when the author edits the comment (TikTok-style "Edited" badge) */
+  editedAt?: Date;
   parentCommentId?: mongoose.Types.ObjectId; // For nested comments
   reactions?: {
     [reactionType: string]: mongoose.Types.ObjectId[]; // Per-user reactions for toggling
@@ -73,11 +82,34 @@ const interactionSchema = new Schema<IInteraction>(
     },
     content: {
       type: String,
-      required: function () {
-        return this.interactionType === "comment";
+      default: "",
+      // Text required for comments unless an image is attached
+      required: function (this: IInteraction) {
+        return this.interactionType === "comment" && !this.imageUrl;
       },
       maxlength: 1000,
     },
+    imageUrl: {
+      type: String,
+      maxlength: 2048,
+    },
+    editedAt: {
+      type: Date,
+    },
+    mentions: [
+      {
+        userId: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        displayName: {
+          type: String,
+          maxlength: 120,
+        },
+        _id: false,
+      },
+    ],
     parentCommentId: {
       type: Schema.Types.ObjectId,
       ref: "Interaction",

@@ -18,6 +18,7 @@ export type NotificationType =
   | "content_report" // Admin: content reported by a user
   | "content_moderation" // Uploader: content removed / moderated
   | "moderation_alert" // Admin: AI / auto moderation alert
+  | "admin_warning" // Trust & safety warning from admin
   | "message" // Direct message
   | "reengagement"; // AI re-engagement nudge
 
@@ -89,6 +90,7 @@ const notificationSchema = new Schema<INotification>(
         "content_report",
         "content_moderation",
         "moderation_alert",
+        "admin_warning",
         "message",
         "reengagement",
       ],

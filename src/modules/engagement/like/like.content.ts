@@ -18,6 +18,7 @@ import { toLikeContentType, verifyContentExists } from "../shared/contentType.re
 import { getLikeCountFromDB } from "./like.counts";
 import { emitLikeSocket, fireLikeNotifications } from "./like.sideEffects";
 import { LikeOperationError } from "./like.errors";
+import { invalidateContentMetadataCache } from "../metadata/metadata.cache";
 
 const CONTENT_TYPES = ["media", "artist", "merch"] as const;
 type ContentType = (typeof CONTENT_TYPES)[number];
@@ -59,6 +60,7 @@ async function refreshLikeCaches(params: {
     contentType === "media"
       ? setFeedUserLikeFlag(userId, contentId, liked)
       : Promise.resolve(),
+    invalidateContentMetadataCache(contentId, contentType, userId),
   ]);
 }
 

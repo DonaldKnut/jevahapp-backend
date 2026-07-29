@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { User } from "../../models/user.model";
 import emailService from "../email.service";
 import fileUploadService from "../fileUpload.service";
-import { setVerificationFlags } from "./shared";
+import { normalizeAuthCode, setVerificationFlags } from "./shared";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -323,9 +323,14 @@ export async function updateArtistProfile(
 }
 
 export async function verifyEmail(email: string, code: string) {
+  const normalizedCode = normalizeAuthCode(code);
+  if (!normalizedCode) {
+    throw new Error("Invalid email or code");
+  }
+
   const user = await User.findOne({
     email: normalizeEmail(email),
-    verificationCode: code,
+    verificationCode: normalizedCode,
   });
   if (!user) {
     throw new Error("Invalid email or code");

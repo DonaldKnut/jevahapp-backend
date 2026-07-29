@@ -5,9 +5,13 @@ import logger from "../../../utils/logger";
 import { publishEngagementEvent } from "../../../lib/engagementEvents";
 import { ReportReason } from "../../../models/mediaReport.model";
 import { notifyAdminsOfCommentReport } from "./comment.reportNotify";
-import { resolveCommentContentType } from "../shared/contentType.resolver";
-
-const COMMENT_CONTENT_TYPES = ["media", "devotional", "ebook", "podcast"] as const;
+import { assertCommentableContentType } from "../shared/contentType.resolver";
+import { parseMentionsInput } from "./comment.mentions";
+import {
+  uploadCommentImageBuffer,
+  ensureJevahCommentImageUrl,
+} from "./comment.upload";
+import { isCommentError } from "./comment.errors";
 
 function requireUser(req: Request, res: Response): string | null {
   if (!req.userId) {
@@ -17,44 +21,80 @@ function requireUser(req: Request, res: Response): string | null {
   return req.userId;
 }
 
+function sendCommentError(res: Response, error: unknown): boolean {
+  if (!isCommentError(error)) return false;
+  res.status(error.status).json({
+    success: false,
+    message: error.message,
+    code: error.code,
+  });
+  return true;
+}
+
 export const addContentComment = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = requireUser(req, res);
     if (!userId) return;
 
     const { contentId, contentType } = req.params;
-    const { content, parentCommentId } = req.body;
+    const body = req.body || {};
+    const content = typeof body.content === "string" ? body.content : body.content ?? "";
+    const parentCommentId = body.parentCommentId;
+    const mentions = parseMentionsInput(body.mentions);
+    let imageUrl =
+      typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (file) {
+      imageUrl = await uploadCommentImageBuffer(file);
+    } else if (imageUrl) {
+      imageUrl = ensureJevahCommentImageUrl(imageUrl);
+    }
 
     if (!contentId || !Types.ObjectId.isValid(contentId)) {
       res.status(400).json({ success: false, message: "Invalid content ID" });
       return;
     }
-    if (!contentType || !COMMENT_CONTENT_TYPES.includes(contentType as any)) {
-      res.status(400).json({ success: false, message: "Comments not supported for this content type" });
+    let resolved: string;
+    try {
+      resolved = assertCommentableContentType(contentType);
+    } catch (err: any) {
+      res.status(400).json({
+        success: false,
+        message: err?.message || "Comments not supported for this content type",
+      });
       return;
     }
-    if (!content?.trim()) {
-      res.status(400).json({ success: false, message: "Comment content is required" });
+
+    const text = typeof content === "string" ? content : String(content || "");
+    if (!text.trim() && !imageUrl) {
+      res.status(400).json({
+        success: false,
+        message: "Comment content is required (or attach an image)",
+      });
       return;
     }
+
+    const parent =
+      parentCommentId && Types.ObjectId.isValid(String(parentCommentId))
+        ? String(parentCommentId)
+        : undefined;
 
     const comment = await commentService.addComment(
       userId,
       contentId,
-      resolveCommentContentType(contentType),
-      content,
-      parentCommentId
+      resolved,
+      text,
+      parent,
+      { imageUrl: imageUrl || undefined, mentions }
     );
 
     res.status(201).json({ success: true, message: "Comment added successfully", data: comment });
   } catch (error: any) {
-    logger.error("Add content comment error", { error: error.message });
+    logger.error("Add content comment error", { error: error.message, code: error.code });
+    if (sendCommentError(res, error)) return;
     if (error.message.includes("not found")) {
       res.status(404).json({ success: false, message: error.message });
-      return;
-    }
-    if (error.message.includes("not supported") || error.message.includes("required")) {
-      res.status(400).json({ success: false, message: error.message });
       return;
     }
     res.status(500).json({ success: false, message: "Failed to add comment" });
@@ -75,11 +115,8 @@ export const removeContentComment = async (req: Request, res: Response): Promise
     await commentService.removeContentComment(commentId, userId);
     res.status(200).json({ success: true, message: "Comment removed successfully" });
   } catch (error: any) {
-    logger.error("Remove content comment error", { error: error.message });
-    if (error.message.includes("not found") || error.message.includes("permission")) {
-      res.status(404).json({ success: false, message: error.message });
-      return;
-    }
+    logger.error("Remove content comment error", { error: error.message, code: error.code });
+    if (sendCommentError(res, error)) return;
     res.status(500).json({ success: false, message: "Failed to remove comment" });
   }
 };
@@ -93,21 +130,63 @@ export const editContentComment = async (req: Request, res: Response): Promise<v
     if (!userId) return;
 
     const { commentId } = req.params;
-    const { content } = req.body;
+    const body = req.body || {};
 
     if (!commentId || !Types.ObjectId.isValid(commentId)) {
       res.status(400).json({ success: false, message: "Invalid comment ID" });
       return;
     }
-    if (!content?.trim()) {
-      res.status(400).json({ success: false, message: "Comment content is required" });
+
+    let imageUrl =
+      typeof body.imageUrl === "string" ? body.imageUrl.trim() : undefined;
+    const clearImage =
+      body.clearImage === true ||
+      String(body.clearImage || "").toLowerCase() === "true";
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (file) {
+      imageUrl = await uploadCommentImageBuffer(file);
+    }
+
+    const contentProvided = Object.prototype.hasOwnProperty.call(body, "content");
+    const mentionsProvided = Object.prototype.hasOwnProperty.call(body, "mentions");
+    const options: {
+      content?: string;
+      imageUrl?: string;
+      clearImage?: boolean;
+      mentions?: ReturnType<typeof parseMentionsInput>;
+    } = {};
+    if (contentProvided) {
+      options.content = typeof body.content === "string" ? body.content : "";
+    }
+    if (clearImage) options.clearImage = true;
+    else if (imageUrl !== undefined) options.imageUrl = imageUrl;
+    if (mentionsProvided) {
+      options.mentions = parseMentionsInput(body.mentions);
+    }
+
+    if (
+      !contentProvided &&
+      !clearImage &&
+      imageUrl === undefined &&
+      !mentionsProvided
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Provide content, image, imageUrl, mentions, and/or clearImage",
+      });
       return;
     }
 
-    const updated = await commentService.editContentComment(commentId, userId, content);
+    const updated = await commentService.editContentComment(
+      commentId,
+      userId,
+      options
+    );
     res.status(200).json({ success: true, message: "Comment updated", data: updated });
   } catch (error: any) {
-    logger.error("Edit comment error", { error: error.message });
+    logger.error("Edit comment error", { error: error.message, code: error.code });
+    if (sendCommentError(res, error)) return;
     res.status(500).json({ success: false, message: "Failed to edit comment" });
   }
 };
@@ -131,11 +210,8 @@ export const toggleCommentReaction = async (req: Request, res: Response): Promis
       data: { liked: result.liked, totalLikes: result.totalLikes },
     });
   } catch (error: any) {
-    logger.error("Toggle comment reaction error", { error: error.message });
-    if (error.message.includes("not found")) {
-      res.status(404).json({ success: false, message: error.message });
-      return;
-    }
+    logger.error("Toggle comment reaction error", { error: error.message, code: error.code });
+    if (sendCommentError(res, error)) return;
     res.status(500).json({ success: false, message: "Failed to toggle comment reaction" });
   }
 };
@@ -197,19 +273,8 @@ export const reportContentComment = async (req: Request, res: Response): Promise
       data: { reportCount: result.reportCount, commentId },
     });
   } catch (error: any) {
-    logger.error("Report comment error", { error: error.message });
-    if (error.message === "You cannot report your own comment") {
-      res.status(400).json({ success: false, message: error.message });
-      return;
-    }
-    if (error.message === "You have already reported this comment") {
-      res.status(400).json({ success: false, message: error.message });
-      return;
-    }
-    if (error.message === "Comment not found" || error.message === "Invalid comment ID") {
-      res.status(404).json({ success: false, message: "Comment not found" });
-      return;
-    }
+    logger.error("Report comment error", { error: error.message, code: error.code });
+    if (sendCommentError(res, error)) return;
     res.status(500).json({ success: false, message: "Failed to report comment" });
   }
 };

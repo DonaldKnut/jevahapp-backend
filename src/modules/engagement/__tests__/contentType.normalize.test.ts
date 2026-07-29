@@ -1,6 +1,8 @@
 import {
   normalizeContentType,
   isUniversalLikeContentType,
+  isCommentableContentType,
+  assertCommentableContentType,
 } from "../shared/contentType.resolver";
 
 describe("normalizeContentType — feed aliases", () => {
@@ -32,5 +34,31 @@ describe("normalizeContentType — feed aliases", () => {
     expect(isUniversalLikeContentType("sermon")).toBe(true);
     expect(isUniversalLikeContentType("teachings")).toBe(true);
     expect(isUniversalLikeContentType("junk")).toBe(false);
+  });
+});
+
+describe("isCommentableContentType / assertCommentableContentType", () => {
+  it.each(["media", "video", "audio", "sermon", "ebook", "podcast", "devotional"])(
+    "accepts %s",
+    (t) => {
+      expect(isCommentableContentType(t)).toBe(true);
+    }
+  );
+
+  it("rejects unsupported types", () => {
+    expect(isCommentableContentType("artist")).toBe(false);
+    expect(isCommentableContentType("merch")).toBe(false);
+    expect(isCommentableContentType("junk")).toBe(false);
+    expect(isCommentableContentType(undefined)).toBe(false);
+  });
+
+  it("assert returns media | devotional", () => {
+    expect(assertCommentableContentType("video")).toBe("media");
+    expect(assertCommentableContentType("sermon")).toBe("media");
+    expect(assertCommentableContentType("devotional")).toBe("devotional");
+  });
+
+  it("assert throws on unsupported", () => {
+    expect(() => assertCommentableContentType("artist")).toThrow(/not supported/i);
   });
 });

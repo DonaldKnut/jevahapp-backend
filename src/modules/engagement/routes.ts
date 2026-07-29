@@ -4,7 +4,6 @@ import { rateLimiter, apiRateLimiter } from "../../middleware/rateLimiter";
 import { verifyTokenOptional } from "../../middleware/optionalAuth.middleware";
 import { likeRateLimiter } from "../../middleware/likeRateLimiter.middleware";
 import { bookmarkRateLimiter } from "../../middleware/bookmarkRateLimiter.middleware";
-import { commentRateLimiter as redisCommentRateLimiter } from "../../middleware/commentRateLimiter.middleware";
 import { shareRateLimiter } from "../../middleware/shareRateLimiter.middleware";
 import { idempotencyMiddleware } from "../../middleware/idempotency.middleware";
 import {
@@ -16,25 +15,12 @@ import {
   getContentLikers,
 } from "./interactions.controller";
 import {
-  addContentComment,
-  removeContentComment,
-  getContentComments,
-  getCommentReplies,
-  editContentComment,
-  reportContentComment,
-  hideContentComment,
-} from "./comments/comments.controller";
-import {
   toggleBookmark,
   getBookmarkStatus,
   getUserBookmarks,
   getBookmarkStats,
   bulkBookmark,
 } from "../../controllers/unifiedBookmark.controller";
-import {
-  removeComment,
-  addCommentReaction,
-} from "./comments/comments.controller";
 import { getShareUrls, getShareStats } from "./share/share.controller";
 import {
   sendMessage,
@@ -42,17 +28,23 @@ import {
   getUserConversations,
   deleteMessage,
 } from "./messaging/messaging.controller";
+import {
+  bindContentComments,
+  bindInteractionsCommentAliases,
+} from "./shared/routeAdapters";
 
 const interactionRateLimiter = rateLimiter(10, 60000);
 const messageRateLimiter = rateLimiter(20, 60000);
 
-// ─── Content interactions (like, share, view, metadata) ─────────────────────
+// ─── Content interactions (like, share, view, metadata, comments) ───────────
 const contentRouter = express.Router();
+
+// Static paths first — before /:contentType/:contentId/*
+contentRouter.post("/batch-metadata", verifyTokenOptional, getBatchContentMetadata);
 
 contentRouter.post(
   "/:contentType/:contentId/like",
   verifyToken,
-  // Idempotency first: replays never consume rate-limit window
   idempotencyMiddleware(),
   likeRateLimiter,
   toggleContentLike
@@ -75,31 +67,13 @@ contentRouter.get(
   verifyTokenOptional,
   getContentMetadata
 );
-contentRouter.post("/batch-metadata", verifyTokenOptional, getBatchContentMetadata);
 contentRouter.get("/:contentType/:contentId/likers", getContentLikers);
 
-// Comments (content module — separate from icon toggles)
-contentRouter.post(
-  "/:contentType/:contentId/comment",
-  verifyToken,
-  idempotencyMiddleware(),
-  redisCommentRateLimiter,
-  addContentComment
-);
-contentRouter.delete("/comments/:commentId", verifyToken, removeContentComment);
-contentRouter.get(
-  "/:contentType/:contentId/comments",
-  verifyTokenOptional,
-  getContentComments
-);
-contentRouter.get("/comments/:commentId/replies", getCommentReplies);
-contentRouter.patch("/comments/:commentId", verifyToken, editContentComment);
-contentRouter.post("/comments/:commentId/report", verifyToken, reportContentComment);
-contentRouter.post("/comments/:commentId/hide", verifyToken, hideContentComment);
+// Comments — single binder (canonical + type-omitted + reaction)
+bindContentComments(contentRouter);
 
 // ─── Save / Bookmark ─────────────────────────────────────────────────────────
 const saveRouter = express.Router();
-// Single pattern — controller reads mediaId OR contentId from params
 saveRouter.post(
   "/:mediaId/toggle",
   verifyToken,
@@ -112,15 +86,9 @@ saveRouter.get("/user", verifyToken, getUserBookmarks);
 saveRouter.get("/:mediaId/stats", getBookmarkStats);
 saveRouter.post("/bulk", verifyToken, apiRateLimiter, bulkBookmark);
 
-// ─── Legacy interaction routes (share URLs, comment reactions, messaging) ────
+// ─── Legacy interaction routes (comment aliases, share URLs, messaging) ─────
 const legacyRouter = express.Router();
-legacyRouter.delete("/comments/:commentId", verifyToken, removeComment);
-legacyRouter.post(
-  "/comments/:commentId/reaction",
-  verifyToken,
-  interactionRateLimiter,
-  addCommentReaction
-);
+bindInteractionsCommentAliases(legacyRouter);
 legacyRouter.get("/media/:mediaId/share-urls", getShareUrls);
 legacyRouter.get("/media/:mediaId/share-stats", getShareStats);
 legacyRouter.post("/messages/:recipientId", verifyToken, messageRateLimiter, sendMessage);

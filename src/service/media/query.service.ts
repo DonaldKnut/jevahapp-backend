@@ -7,6 +7,7 @@ import { recommendationEngineService } from "../recommendationEngine.service";
 import logger from "../../utils/logger";
 import { DurationRangeKey, LeanUserViewedMedia } from "./types";
 import { buildMediaVisibilityQuery } from "./query/visibility";
+import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
 
 export class MediaQueryService {
   async getAllMedia(filters: any = {}, options: { enforceModeration?: boolean; actingUserId?: string } = { enforceModeration: true }) {
@@ -128,12 +129,10 @@ export class MediaQueryService {
       const limit = Math.min(Math.max(rawLimit, 10), 100);
       const skip = (page - 1) * limit;
 
-      // Build match query for filtering
-      // Global feed: all content on the platform (everyone's uploads). No filter by uploader.
-      // STRICT FILTERING: Only show approved content that hasn't been hidden.
+      // Global feed: same public visibility rules as like/view/metadata.
+      // (Previously omitted publicationState → staged/draft items could appear then 404 on like.)
       const matchQuery: Record<string, any> = {
-        isHidden: { $ne: true },
-        moderationStatus: "approved",
+        ...PUBLIC_MEDIA_FILTER,
       };
 
       // Content type filter

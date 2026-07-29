@@ -5,9 +5,11 @@ import {
   getUserDetails,
   banUser,
   unbanUser,
+  warnUser,
   updateUserRole,
   getModerationQueue,
   updateModerationStatus,
+  bulkUpdateModerationStatus,
   getAdminActivityLog,
 } from "../controllers/adminDashboard.controller";
 import {
@@ -15,7 +17,9 @@ import {
   getAdminMediaReportDetail,
   reviewAdminMediaReport,
   deleteAdminReportedMedia,
+  bulkReviewAdminMediaReports,
   listAdminCommentReports,
+  getAdminCommentReportDetail,
   hideAdminComment,
   unhideAdminComment,
   dismissAdminCommentReports,
@@ -30,6 +34,7 @@ import {
   getModerationCase,
   updateAdminMediaMetadata,
   listAdminChurches,
+  refreshAdminMediaPreview,
 } from "../controllers/adminModeration.controller";
 import {
   createChurch,
@@ -42,6 +47,13 @@ import {
   getRecentUploads,
   getDashboardFeed,
 } from "../controllers/adminOps.controller";
+import {
+  getAdminConfig,
+  patchAdminConfig,
+  searchAdminMedia,
+  getDashboardTimeseries,
+  getAdminSystemHealth,
+} from "../controllers/adminPlatform.controller";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
@@ -62,6 +74,38 @@ router.get(
   requireAdmin,
   apiRateLimiter,
   getDashboardFeed
+);
+
+router.get(
+  "/dashboard/timeseries",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getDashboardTimeseries
+);
+
+router.get(
+  "/config",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getAdminConfig
+);
+
+router.patch(
+  "/config",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  patchAdminConfig
+);
+
+router.get(
+  "/system/health",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getAdminSystemHealth
 );
 
 router.get("/users", verifyToken, requireAdmin, apiRateLimiter, getUsers);
@@ -97,6 +141,14 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   unbanUser
+);
+
+router.post(
+  "/users/:id/warn",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  warnUser
 );
 
 router.patch(
@@ -171,6 +223,23 @@ router.patch(
   updateAdminMediaMetadata
 );
 
+/** Re-sign private/staged preview URLs for admin player (~3600s TTL) */
+router.post(
+  "/media/:id/preview-refresh",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  refreshAdminMediaPreview
+);
+
+router.get(
+  "/media/search",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  searchAdminMedia
+);
+
 router.get(
   "/media/recent",
   verifyToken,
@@ -188,6 +257,13 @@ router.post(
 );
 
 router.get("/reports", verifyToken, requireAdmin, apiRateLimiter, listAdminReports);
+router.post(
+  "/reports/media/bulk-review",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  bulkReviewAdminMediaReports
+);
 router.get(
   "/reports/media/:reportId",
   verifyToken,
@@ -220,6 +296,13 @@ router.get(
   apiRateLimiter,
   listAdminCommentReports
 );
+router.get(
+  "/reports/comments/:commentId",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getAdminCommentReportDetail
+);
 router.post(
   "/reports/comments/:commentId/hide",
   verifyToken,
@@ -248,6 +331,14 @@ router.get(
   requireAdmin,
   apiRateLimiter,
   getModerationQueue
+);
+
+router.post(
+  "/moderation/bulk",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  bulkUpdateModerationStatus
 );
 
 router.get(

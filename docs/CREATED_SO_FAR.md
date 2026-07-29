@@ -14,6 +14,11 @@ Inventory of work shipped on this branch toward production launch (July 2026). U
 | [SUPER_ADMIN.md](./SUPER_ADMIN.md) | Master admin seed + role/ban protections |
 | [ENGAGEMENT.md](./ENGAGEMENT.md) | Feed vs copyright-free engagement contracts |
 | [FRONTEND_ENGAGEMENT.md](./FRONTEND_ENGAGEMENT.md) | Optimistic likes/views/shares/comments for mobile/web |
+| [FRONTEND_LIKES.md](./FRONTEND_LIKES.md) | IG / TikTok-style like & unlike (heart, double-tap, sockets) |
+| [FRONTEND_COMMENTS.md](./FRONTEND_COMMENTS.md) | Comment sheet — badge vs list corroboration + FE mistakes |
+| [FRONTEND_COMMENT_EDIT_HANDOFF.md](./FRONTEND_COMMENT_EDIT_HANDOFF.md) | Edit / delete / Edited badge / image replace / mentions on edit |
+| [FRONTEND_FEED_ENGAGEMENT_HANDOFF.md](./FRONTEND_FEED_ENGAGEMENT_HANDOFF.md) | Feed card icons — same-paint as video (no batch gate) |
+| [FRONTEND_VIEW_HANDOFF.md](./FRONTEND_VIEW_HANDOFF.md) | Views — BE sign-off + FE threshold align |
 | [API.md](./API.md) | Full REST reference (incl. staged upload + admin) |
 | [SETUP.md](./SETUP.md) | Env vars, Redis, workers, R2, Gemini, Expo |
 | [PERFORMANCE.md](./PERFORMANCE.md) | Shareholder performance brief — latency, CPU/RAM, upload & verification |
@@ -220,7 +225,7 @@ See [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md).
 ## How to navigate
 
 1. **Ops / deploy** → [SETUP.md](./SETUP.md) → [CONTABO_SMOKE.md](./CONTABO_SMOKE.md) → [REDIS_OPS.md](./REDIS_OPS.md) → [PERFORMANCE.md](./PERFORMANCE.md)
-2. **Mobile engagement** → [FRONTEND_ENGAGEMENT.md](./FRONTEND_ENGAGEMENT.md)
+2. **Mobile engagement** → [FRONTEND_ENGAGEMENT.md](./FRONTEND_ENGAGEMENT.md) · **Likes (IG/TikTok)** → [FRONTEND_LIKES.md](./FRONTEND_LIKES.md) · **Comments** → [FRONTEND_COMMENTS.md](./FRONTEND_COMMENTS.md) · **Edit/delete** → [FRONTEND_COMMENT_EDIT_HANDOFF.md](./FRONTEND_COMMENT_EDIT_HANDOFF.md) · **Feed icons** → [FRONTEND_FEED_ENGAGEMENT_HANDOFF.md](./FRONTEND_FEED_ENGAGEMENT_HANDOFF.md) · **Views** → [FRONTEND_VIEW_HANDOFF.md](./FRONTEND_VIEW_HANDOFF.md)
 3. **Admin web** → [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) → [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)
 4. **Upload pipeline** → [API.md](./API.md) (upload intent / finalize / status) + workers above
 5. **Push** → [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md)

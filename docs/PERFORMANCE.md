@@ -102,7 +102,7 @@ POST /api/content/:contentType/:contentId/like
 | Full HTTP like toggle | **100–400 ms** happy path (Atlas + localhost Redis) |
 | Idempotent **replay** | Often **&lt; 50–100 ms** (no second write) |
 | Rate-limited rejection | Fast **429** + `Retry-After` (no mutation) |
-| Redis down + client sent `Idempotency-Key` | **503** `IDEMPOTENCY_UNAVAILABLE` (fail-closed — do not silently double-like) |
+| Redis down + client sent `Idempotency-Key` | **Fail open** — process like without idempotency (log warning); Mongo remains source of truth |
 
 ### Two stacks (do not mix)
 

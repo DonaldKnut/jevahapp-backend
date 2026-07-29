@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import authService from "../../service/auth.service";
+import { AccountBannedError } from "../../service/auth/shared";
 
 export async function loginUser(
   request: Request,
@@ -56,6 +57,14 @@ export async function loginUser(
       rememberMe: rememberMe,
     });
   } catch (error) {
+    if (error instanceof AccountBannedError) {
+      return response.status(403).json({
+        success: false,
+        message: error.message,
+        banReason: error.banReason,
+        banUntil: error.banUntil,
+      });
+    }
     if (error instanceof Error) {
       if (error.message === "Invalid email or password") {
         return response.status(400).json({

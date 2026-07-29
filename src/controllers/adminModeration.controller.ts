@@ -75,6 +75,51 @@ export const getModerationMediaDetail = async (
 };
 
 /**
+ * POST /api/admin/media/:id/preview-refresh
+ * Re-issue signed preview URLs (TTL ~3600s) for the admin player.
+ * Returns `{ preview }` plus full `media` AdminMediaCard for convenience.
+ */
+export const refreshAdminMediaPreview = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid media ID" });
+      return;
+    }
+
+    const media = await Media.findById(id)
+      .select(MEDIA_SELECT)
+      .populate("uploadedBy", "firstName lastName email username")
+      .lean();
+
+    if (!media) {
+      res.status(404).json({ success: false, message: "Media not found" });
+      return;
+    }
+
+    const preview = await resolveAdminMediaPreview(media as any);
+    const card = shapeAdminMediaCard(media, preview);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        preview: card.preview,
+        media: card,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Refresh admin media preview error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to refresh media preview",
+    });
+  }
+};
+
+/**
  * GET /api/admin/moderation/:id/case
  * Full AI ModerationCase history for a media item (newest first).
  */

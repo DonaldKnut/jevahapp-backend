@@ -3,13 +3,13 @@ import { Types } from "mongoose";
 import commentService from "./comment.service";
 import { getCommentsVersion } from "./comment.version";
 import logger from "../../../utils/logger";
-import { resolveCommentContentType } from "../shared/contentType.resolver";
+import { assertCommentableContentType } from "../shared/contentType.resolver";
 
 export const getContentComments = async (req: Request, res: Response): Promise<void> => {
   try {
     const { contentId, contentType } = req.params;
     const page = parseInt(String(req.query.page || 1), 10) || 1;
-    const limit = parseInt(String(req.query.limit || 20), 10) || 20;
+    const limit = Math.min(parseInt(String(req.query.limit || 20), 10) || 20, 50);
     const sortBy = String(req.query.sortBy || "newest");
     const userId = req.userId;
 
@@ -20,8 +20,15 @@ export const getContentComments = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    if (!contentType || !["media", "devotional", "ebook", "podcast"].includes(contentType)) {
-      res.status(400).json({ success: false, message: "Comments not supported for this content type" });
+
+    let resolved: string;
+    try {
+      resolved = assertCommentableContentType(contentType || "media");
+    } catch (err: any) {
+      res.status(400).json({
+        success: false,
+        message: err?.message || "Comments not supported for this content type",
+      });
       return;
     }
 
@@ -44,24 +51,30 @@ export const getContentComments = async (req: Request, res: Response): Promise<v
 
     const result = await commentService.getContentComments(
       contentId,
-      resolveCommentContentType(contentType),
+      resolved,
       page,
       limit,
-      sort,
+      sort as "newest" | "oldest" | "top",
       userId
     );
 
     res.setHeader(
       "Cache-Control",
-      userId ? "private, max-age=10, stale-while-revalidate=30" : "public, max-age=15, stale-while-revalidate=60"
+      userId
+        ? "private, max-age=10, stale-while-revalidate=30"
+        : "public, max-age=15, stale-while-revalidate=60"
     );
     if (userId) res.setHeader("Vary", "Authorization");
 
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    logger.error("Get content comments error", { error: error.message });
-    if (error.message.includes("not found")) {
-      res.status(404).json({ success: false, message: error.message });
+    logger.error("Get content comments error", { error: error.message, code: error.code });
+    if (error?.code === "CONTENT_NOT_FOUND" || error.message?.includes("not found") || error.message === "Content not found") {
+      res.status(404).json({ success: false, message: "Content not found", code: "CONTENT_NOT_FOUND" });
+      return;
+    }
+    if (error.message?.includes("not supported") || error?.code === "COMMENT_NOT_SUPPORTED") {
+      res.status(400).json({ success: false, message: error.message, code: error.code });
       return;
     }
     res.status(500).json({ success: false, message: "Failed to get comments" });

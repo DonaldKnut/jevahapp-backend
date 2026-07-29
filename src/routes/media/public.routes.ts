@@ -8,6 +8,7 @@ import {
   getOnboardingContent,
 } from "../../controllers/media.controller";
 import { verifyToken } from "../../middleware/auth.middleware";
+import { verifyTokenOptional } from "../../middleware/optionalAuth.middleware";
 import { apiRateLimiter } from "../../middleware/rateLimiter";
 import { cacheMiddleware } from "../../middleware/cache.middleware";
 
@@ -30,13 +31,14 @@ router.get(
 /**
  * @route   GET /api/media/public/all-content
  * @desc    Global feed: ALL content on the platform (everyone's uploads), same as /api/media/all-content. Recency-ordered; new uploads appear when approved/live. No filter by uploader.
- * @access  Public (No authentication required)
+ * @access  Public (optional Bearer — when present, overlays hasLiked / hasBookmarked)
  * @query   { page?, limit?, contentType?, category?, minViews?, minLikes?, dateFrom?, dateTo?, search?, sort? (default: "createdAt"), order? (default: "desc"), mood? }
  * @returns { success: boolean, data: { media: object[], pagination }, recommendations?: object }
  */
 router.get(
   "/public/all-content",
   apiRateLimiter,
+  verifyTokenOptional,
   // Shared feed list is cached inside the controller (generation + SWR).
   // Do not wrap with cacheMiddleware — that would freeze count overlays.
   getPublicAllContent

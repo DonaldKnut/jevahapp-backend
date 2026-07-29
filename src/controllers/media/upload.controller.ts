@@ -310,6 +310,24 @@ export const uploadMedia = async (
         // Cleanup session
         uploadProgressService.clearUploadSession(uploadId);
 
+        if (
+          error?.code === "FFMPEG_REQUIRED" ||
+          error?.name === "MediaToolsError" ||
+          /ffmpeg is required|not recognized as an internal/i.test(
+            String(error?.message || "")
+          )
+        ) {
+          response.status(503).json({
+            success: false,
+            message:
+              "FFmpeg is required for video/audio upload verification. Install FFmpeg (ffmpeg + ffprobe on PATH), restart the API, and retry.",
+            code: "FFMPEG_REQUIRED",
+            error: error.message,
+            uploadId,
+          });
+          return;
+        }
+
         // If verification fails, reject the upload for safety
         response.status(400).json({
           success: false,

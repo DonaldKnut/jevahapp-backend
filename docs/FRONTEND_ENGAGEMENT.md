@@ -3,7 +3,7 @@
 How to wire **likes, views, shares, and comments** into the Jevah UI.  
 This doc is written for mobile/web clients integrating with the backend.
 
-**Related:** [ENGAGEMENT.md](./ENGAGEMENT.md) (API reference) · [WEBSOCKETS.md](./WEBSOCKETS.md) (realtime)
+**Related:** [ENGAGEMENT.md](./ENGAGEMENT.md) (API reference) · [FRONTEND_LIKES.md](./FRONTEND_LIKES.md) (IG/TikTok like/unlike setup) · [FRONTEND_COMMENTS.md](./FRONTEND_COMMENTS.md) (comment sheet + badge/list) · [FRONTEND_FEED_ENGAGEMENT_HANDOFF.md](./FRONTEND_FEED_ENGAGEMENT_HANDOFF.md) (feed icons same-paint) · [WEBSOCKETS.md](./WEBSOCKETS.md) (realtime)
 
 ---
 
@@ -85,12 +85,50 @@ type EngagementState = {
 
 | Screen | How to load initial state |
 |--------|---------------------------|
-| **Feed list** (many items) | `POST /api/content/batch-metadata` with `items: [{ contentType, contentId }, …]` |
+| **Feed list (media cards)** | **Paint from the feed payload itself** — do **not** wait on batch-metadata |
+| **Mixed / non-feed surfaces** | `POST /api/content/batch-metadata` (background only) |
 | **Single feed detail** | `GET /api/content/:contentType/:contentId/metadata` |
 | **Copyright-free song** | `GET /api/audio/copyright-free/:songId` (counts on song object) |
-| **After login** | Re-fetch metadata or batch-metadata so `userInteraction` populates |
+| **After login** | Refetch feed (or batch-metadata) so `userInteractions` fills |
 
-Batch metadata body (canonical):
+#### Feed cards — instant engagement row (critical)
+
+The video/thumbnail box and the icons under it (views, likes, comments, share, bookmark) must paint **in the same render**. The backend already embeds everything on the feed response:
+
+```http
+GET /api/media/all-content?page=1&limit=20
+Authorization: Bearer <token>
+```
+
+(or `GET /api/media/public/all-content` with the same Bearer — optional auth overlays flags)
+
+Each media item includes:
+
+```ts
+likeCount, commentCount, viewCount, shareCount,
+hasLiked, hasBookmarked,
+userInteractions: { liked, saved }
+```
+
+```ts
+// On feed response — paint immediately, no second request
+function engagementFromFeedItem(item: any) {
+  return {
+    likeCount: item.likeCount ?? 0,
+    commentCount: item.commentCount ?? 0,
+    viewCount: item.viewCount ?? 0,
+    shareCount: item.shareCount ?? 0,
+    liked: item.hasLiked ?? item.userInteractions?.liked ?? false,
+    saved: item.hasBookmarked ?? item.userInteractions?.saved ?? false,
+  };
+}
+```
+
+**Do not** hide the icon row until `batch-metadata` returns. That second round-trip (often 150–800 ms) is what makes hearts/comments feel “super late” after the video box.
+
+`batch-metadata` is optional background reconcile only — never a gate for first paint.
+
+Batch metadata body (canonical, when you still need it):
 
 ```json
 {
@@ -101,7 +139,31 @@ Batch metadata body (canonical):
 }
 ```
 
-Batch response item shape:
+Batch response (`data` is an object keyed by contentId; `items` / `dataById` also provided):
+
+```json
+{
+  "success": true,
+  "data": {
+    "507f1f77bcf86cd799439011": {
+      "id": "507f1f77bcf86cd799439011",
+      "likes": 10,
+      "saves": 2,
+      "shares": 1,
+      "views": 42,
+      "comments": 5,
+      "userInteractions": {
+        "liked": true,
+        "saved": false,
+        "shared": false,
+        "viewed": true
+      }
+    }
+  }
+}
+```
+
+Item fields (also available via `items[]` / `dataById`):
 
 ```json
 {
@@ -125,6 +187,8 @@ Use `ebook` / `podcast` in batch `contentType` when that is how the feed item is
 ---
 
 ## 3. Like / Unlike
+
+**Full IG / TikTok setup guide (double-tap, optimistic UI, sockets, QA):** [FRONTEND_LIKES.md](./FRONTEND_LIKES.md)
 
 ### 3a. Feed content (video, audio, ebook, podcast, merch)
 
@@ -392,9 +456,25 @@ Use `media` in the path for ebooks/podcasts even if the feed tags them as `ebook
 
 ### 6a. List comments
 
+**Full FE processing guide (badge vs list, mapping mistakes, Metro triage):** [FRONTEND_COMMENTS.md](./FRONTEND_COMMENTS.md)
+
 `GET /api/content/:contentType/:contentId/comments?page=1&limit=20&sortBy=newest`
 
+**Auth:** Optional (public read). Invalid/expired Bearer continues as guest (`isLiked: false`).
+
+**Content types:** `media`, `video`, `audio`, `sermon`, `ebook`, `podcast`, `devotional`, and other feed aliases that normalize to Media. Fallbacks also mounted:
+
+- `GET /api/content/:contentId/comments` (type omitted → media)
+- `GET /api/media/:mediaId/comments`
+- `GET /api/interactions/:contentType/:contentId/comments`
+
 `sortBy`: `newest` | `oldest` | `top`
+
+**Rules**
+
+- Empty thread → `200` + `comments: []` + `total: 0` (never 404 for “no comments”)
+- Missing media/devotional → `404` `CONTENT_NOT_FOUND`
+- `total` counts live Interaction comment docs (top-level + replies); denormalized `Media.commentCount` is healed toward `total` on list so badges match the sheet
 
 **Response:**
 
@@ -492,7 +572,11 @@ Legacy alias: `DELETE /api/interactions/comments/:commentId` (same handler).
 
 ### 6e. Like a comment
 
-`POST /api/interactions/comments/:commentId/reaction`  
+**Canonical:** `POST /api/content/comments/:commentId/reaction`  
+**Legacy alias:** `POST /api/interactions/comments/:commentId/reaction` (same handler)
+
+**Auth:** Required · Idempotency-Key supported · Redis comment rate limit
+
 **Body:** `{ "reactionType": "like" }` (default)
 
 **Response:**
@@ -534,13 +618,16 @@ HTTP add remains the write path for the current user's comments. Merge socket ev
 ### Feed card (list)
 
 ```
-Mount → batch-metadata for visible IDs
-Render → icons from EngagementState
+Mount → GET /api/media/all-content (auth) — counts + liked/saved already on each item
+Render → paint video AND engagement icons in the same frame from feed fields
+Optional → batch-metadata in background only if a field was missing (never gate UI)
 Tap like → POST .../like (optimistic)
 Tap share → native share → POST .../share
 Tap comment → navigate to detail / open sheet
 Player in card → POST .../view when threshold met (muted autoplay cards)
 ```
+
+**Anti-pattern:** show media box first, then wait for `batch-metadata` before rendering views/likes/comments/share/bookmark. That is why icons feel “super late.”
 
 ### Feed detail / fullscreen player
 
@@ -610,6 +697,8 @@ Copyright-free methods are not yet first-class in the SDK — call `/api/audio/c
 | Incrementing view count when `counted: false` | Check `data.counted` |
 | Using `contentIds` array in batch-metadata | Use `items: [{ contentType, contentId }]` |
 | Double-toggling like on fast tap | Debounce or `likePending` guard |
+| Hiding feed engagement icons until `batch-metadata` | Paint from feed `*Count` / `hasLiked` / `hasBookmarked` on first render |
+| Using public feed without Bearer then waiting for batch for hearts | Send Bearer on `public/all-content` or use `GET /api/media/all-content` |
 
 ---
 
@@ -629,7 +718,7 @@ Copyright-free methods are not yet first-class in the SDK — call `/api/audio/c
 | Edit comment | PATCH | `/api/content/comments/:commentId` |
 | Delete comment | DELETE | `/api/content/comments/:commentId` |
 | Report comment | POST | `/api/content/comments/:commentId/report` |
-| Comment like | POST | `/api/interactions/comments/:commentId/reaction` |
+| Comment like | POST | `/api/content/comments/:commentId/reaction` |
 
 ### Copyright-free
 

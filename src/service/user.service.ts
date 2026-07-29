@@ -2,7 +2,12 @@ import { User } from "../models/user.model";
 import { Media } from "../models/media.model";
 import { Types } from "mongoose";
 import logger from "../utils/logger";
-import fileUploadService from "./fileUpload.service";
+import fileUploadService, { ensurePublicR2Url } from "./fileUpload.service";
+
+function healAvatar(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return ensurePublicR2Url(url);
+}
 
 /**
  * Interface for user profile data
@@ -79,15 +84,15 @@ class UserService {
       }
 
       // Prefer avatar, fallback to avatarUpload if needed
-      const avatar = user.avatar || user.avatarUpload || null;
+      const avatar = healAvatar(user.avatar || user.avatarUpload);
 
       const userProfile: UserProfile = {
         id: user._id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        avatar,
-        avatarUpload: user.avatarUpload,
+        avatar: avatar || undefined,
+        avatarUpload: healAvatar(user.avatarUpload) || undefined,
         bio: user.bio || null,
         section: user.section,
         role: user.role,
@@ -185,8 +190,10 @@ class UserService {
         firstName: (user as any).firstName,
         lastName: (user as any).lastName,
         email: (user as any).email,
-        avatar: (user as any).avatar || (user as any).avatarUpload || null,
-        avatarUpload: (user as any).avatarUpload,
+        avatar:
+          healAvatar((user as any).avatar || (user as any).avatarUpload) ||
+          undefined,
+        avatarUpload: healAvatar((user as any).avatarUpload) || undefined,
         section: (user as any).section,
         role: (user as any).role,
         isProfileComplete: (user as any).isProfileComplete,
@@ -248,15 +255,15 @@ class UserService {
         throw new Error("User not found");
       }
 
-      const avatar = user.avatar || user.avatarUpload || null;
+      const avatar = healAvatar(user.avatar || user.avatarUpload);
 
       const userProfile: UserProfile = {
         id: user._id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        avatar,
-        avatarUpload: user.avatarUpload,
+        avatar: avatar || undefined,
+        avatarUpload: healAvatar(user.avatarUpload) || undefined,
         section: user.section,
         role: user.role,
         isProfileComplete: user.isProfileComplete,
@@ -318,15 +325,15 @@ class UserService {
         throw new Error("User not found");
       }
 
-      const avatar = user.avatar || user.avatarUpload || null;
+      const avatar = healAvatar(user.avatar || user.avatarUpload);
 
       const userProfile: UserProfile = {
         id: user._id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        avatar,
-        avatarUpload: user.avatarUpload,
+        avatar: avatar || undefined,
+        avatarUpload: healAvatar(user.avatarUpload) || undefined,
         bio: user.bio || null,
         section: user.section,
         role: user.role,

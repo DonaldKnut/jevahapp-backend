@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { User } from "../../models/user.model";
 import emailService from "../email.service";
 import { normalizeEmail } from "./register.service";
+import { normalizeAuthCode } from "./shared";
 
 export async function initiatePasswordReset(email: string) {
   const user = await User.findOne({ email: normalizeEmail(email) });
@@ -27,9 +28,10 @@ export async function initiatePasswordReset(email: string) {
 }
 
 export async function verifyResetCode(email: string, code: string) {
+  const normalizedCode = normalizeAuthCode(code);
   const user = await User.findOne({
     email: normalizeEmail(email),
-    resetPasswordToken: code,
+    resetPasswordToken: normalizedCode,
     resetPasswordExpires: { $gt: Date.now() },
   });
 
@@ -48,9 +50,10 @@ export async function resetPasswordWithCode(
   code: string,
   newPassword: string
 ) {
+  const normalizedCode = normalizeAuthCode(code);
   const user = await User.findOne({
     email: normalizeEmail(email),
-    resetPasswordToken: code,
+    resetPasswordToken: normalizedCode,
     resetPasswordExpires: { $gt: Date.now() },
   });
 
@@ -75,7 +78,7 @@ export async function resetPassword(
 ) {
   const user = await User.findOne({
     email: normalizeEmail(email),
-    resetPasswordToken: token,
+    resetPasswordToken: normalizeAuthCode(token),
     resetPasswordExpires: { $gt: Date.now() },
   });
 

@@ -186,7 +186,7 @@ export const shareContent = async (req: Request, res: Response): Promise<void> =
 
 export const recordContentView = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { contentId, contentType } = req.params;
+    const { contentId, contentType: rawContentType } = req.params;
     const userId = req.userId;
     const { durationMs, progressPct, isComplete, source, sessionId, deviceId } = req.body;
 
@@ -195,10 +195,17 @@ export const recordContentView = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    // Same alias map as like/metadata (video/audio/sermon/ebook → media)
+    const resolvedType = normalizeContentType(rawContentType || "media");
+    const serviceType =
+      (rawContentType || "").trim().toLowerCase() === "devotional"
+        ? "devotional"
+        : resolvedType;
+
     const result = await viewService.recordView({
       userId,
       contentId,
-      contentType: contentType as any,
+      contentType: serviceType as any,
       durationMs,
       progressPct,
       isComplete,
@@ -213,7 +220,7 @@ export const recordContentView = async (req: Request, res: Response): Promise<vo
       publishEngagementEvent("content.viewed", {
         userId,
         contentId,
-        contentType,
+        contentType: serviceType,
         viewCount: result.viewCount,
       });
     }
@@ -229,7 +236,12 @@ export const recordContentView = async (req: Request, res: Response): Promise<vo
   } catch (error: any) {
     logger.error("Record content view error", { error: error.message });
     if (error.message.includes("not found")) {
-      res.status(404).json({ success: false, message: error.message });
+      res.status(404).json({
+        success: false,
+        code: "CONTENT_NOT_FOUND",
+        message: error.message,
+        data: {},
+      });
       return;
     }
     res.status(500).json({ success: false, message: "Failed to record view" });
@@ -258,22 +270,30 @@ export const getContentMetadata = async (req: Request, res: Response): Promise<v
       viewed: metadata.userInteraction.hasViewed ?? false,
     };
 
+    const likes = metadata.stats.likes;
+    const saves = metadata.stats.saves;
+    const shares = metadata.stats.shares;
+    const views = metadata.stats.views;
+    const comments = metadata.stats.comments;
+
     res.status(200).json({
       success: true,
       data: {
         ...metadata,
         contentId: metadata.id,
         contentType: serviceType === "devotional" ? "devotional" : resolvedType,
-        stats: {
-          likes: metadata.stats.likes,
-          saves: metadata.stats.saves,
-          shares: metadata.stats.shares,
-          views: metadata.stats.views,
-          comments: metadata.stats.comments,
-        },
-        // Singular (legacy) + plural (frontend contract)
+        // Flat counts (frontend contract) + nested stats (legacy)
+        likes,
+        saves,
+        shares,
+        views,
+        comments,
+        likeCount: likes,
+        viewCount: views,
+        stats: { likes, saves, shares, views, comments },
         userInteraction,
         userInteractions: userInteraction,
+        hasLiked: userInteraction.liked,
       },
     });
   } catch (error: any) {
@@ -345,14 +365,20 @@ export const getBatchContentMetadata = async (req: Request, res: Response): Prom
       };
     };
 
-    const data = parsed
+    const items = parsed
       .map(({ contentId }) => resultById.get(contentId))
       .filter((item): item is BatchMetadataItem => item != null)
       .map(formatItem);
 
-    const dataById = Object.fromEntries(data.map(item => [item.id, item]));
+    // Canonical: object keyed by contentId (frontend contract). Keep array aliases.
+    const dataById = Object.fromEntries(items.map(item => [item.id, item]));
 
-    res.status(200).json({ success: true, data, dataById });
+    res.status(200).json({
+      success: true,
+      data: dataById,
+      dataById,
+      items,
+    });
   } catch (error: any) {
     logger.error("Batch metadata error", { error: error.message });
     res.status(500).json({ success: false, message: "Failed to get batch metadata" });

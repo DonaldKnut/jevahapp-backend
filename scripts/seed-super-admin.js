@@ -14,8 +14,34 @@
  *   --keep-password   If user already exists, do not rotate password
  */
 require("dotenv").config();
+const dns = require("dns");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
+
+/**
+ * Windows DNS stub often refuses mongodb+srv SRV lookups
+ * (`querySrv ECONNREFUSED`). Same fix as src/config/mongoDns.ts.
+ */
+function ensureMongoDnsServers(mongoUri) {
+  if (!String(mongoUri || "").startsWith("mongodb+srv://")) return;
+  const current = dns.getServers();
+  const onlyLoopback =
+    current.length > 0 &&
+    current.every((s) => s === "127.0.0.1" || s === "::1");
+  const fromEnv = (process.env.DNS_SERVERS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const servers =
+    fromEnv.length > 0
+      ? fromEnv
+      : onlyLoopback
+        ? ["8.8.8.8", "1.1.1.1"]
+        : null;
+  if (!servers) return;
+  dns.setServers(servers);
+  console.log("DNS servers set for mongodb+srv:", servers.join(", "));
+}
 
 const MASTER_EMAIL = (
   process.env.SUPER_ADMIN_EMAIL ||
@@ -32,13 +58,16 @@ async function main() {
   if (!password || String(password).length < 10) {
     console.error(
       "❌ Set SUPER_ADMIN_PASSWORD to a strong password (min 10 chars).\n" +
-        "   Example: SUPER_ADMIN_PASSWORD='…' npm run seed:super-admin"
+        "   Example (PowerShell):\n" +
+        "   $env:SUPER_ADMIN_PASSWORD='your-strong-password-here'\n" +
+        "   npm run seed:super-admin"
     );
     process.exit(1);
   }
 
   const uri =
     process.env.MONGODB_URI || "mongodb://localhost:27017/jevah-app";
+  ensureMongoDnsServers(uri);
   await mongoose.connect(uri);
   console.log("✅ Connected to MongoDB");
 

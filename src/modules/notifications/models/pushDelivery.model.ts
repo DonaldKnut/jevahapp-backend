@@ -31,7 +31,7 @@ const pushDeliverySchema = new Schema<IPushDelivery>(
     ticketId: {
       type: String,
       required: true,
-      index: true,
+      unique: true,
     },
     token: {
       type: String,
@@ -54,7 +54,6 @@ const pushDeliverySchema = new Schema<IPushDelivery>(
   { timestamps: true }
 );
 
-pushDeliverySchema.index({ ticketId: 1 }, { unique: true });
 pushDeliverySchema.index({ status: 1, receiptStatus: 1, createdAt: 1 });
 
 export const PushDelivery =

@@ -45,10 +45,36 @@ export function normalizeContentType(contentType: string): string {
   return t;
 }
 
-/** Comments only support media (incl. ebook/podcast) and devotional */
+export type CommentableContentType = "media" | "devotional";
+
+/** Comments only support media (incl. ebook/podcast aliases) and devotional */
 export function resolveCommentContentType(contentType: string): string {
-  if (contentType === "devotional") return "devotional";
+  const t = (contentType || "").trim().toLowerCase();
+  if (t === "devotional") return "devotional";
   return normalizeContentType(contentType);
+}
+
+/** True when the path/body type can host a comment thread */
+export function isCommentableContentType(contentType: string | undefined): boolean {
+  if (!contentType) return false;
+  const resolved = resolveCommentContentType(contentType);
+  return resolved === "devotional" || resolved === "media";
+}
+
+/**
+ * Normalize to a commentable collection key, or throw.
+ * Use in HTTP controllers and CommentService — single policy.
+ */
+export function assertCommentableContentType(
+  contentType: string | undefined
+): CommentableContentType {
+  if (!isCommentableContentType(contentType)) {
+    throw new Error(
+      `Comments not supported for content type: ${contentType || "(missing)"}`
+    );
+  }
+  const resolved = resolveCommentContentType(contentType!);
+  return resolved === "devotional" ? "devotional" : "media";
 }
 
 export function isValidLikeContentType(contentType: string): contentType is LikeContentType {

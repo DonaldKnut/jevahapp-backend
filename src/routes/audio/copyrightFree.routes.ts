@@ -24,6 +24,7 @@ import { verifyToken } from "../../middleware/auth.middleware";
 import { requireAdmin } from "../../middleware/role.middleware";
 import { apiRateLimiter } from "../../middleware/rateLimiter";
 import { cacheMiddleware } from "../../middleware/cache.middleware";
+import { deprecatedEndpoint } from "../../middleware/deprecation.middleware";
 
 const router = Router();
 
@@ -190,10 +191,11 @@ router.post(
  * @route   POST /api/audio/copyright-free/:songId/playback/track
  * @desc    Track playback and increment view count if threshold is met (Authenticated)
  * @access  Protected (Authenticated users only)
- * @deprecated Prefer POST /api/audio/copyright-free/:songId/view
+ * Prefer POST /api/audio/copyright-free/:songId/view
  */
 router.post(
   "/copyright-free/:songId/playback/track",
+  deprecatedEndpoint("POST /api/audio/copyright-free/:songId/view"),
   verifyToken,
   apiRateLimiter,
   trackCopyrightFreeSongPlayback

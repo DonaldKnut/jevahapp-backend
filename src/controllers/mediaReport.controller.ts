@@ -9,6 +9,13 @@ import logger from "../utils/logger";
 import { mediaService } from "../service/media.service";
 import cacheService from "../service/cache.service";
 import fileUploadService from "../service/fileUpload.service";
+import {
+  applyReportReview,
+  REPORT_REVIEW_STATUSES,
+  normalizeBulkIds,
+  type ReportReviewStatus,
+} from "../service/admin/moderationActions.service";
+import { AuditService } from "../service/audit.service";
 
 interface ReportMediaRequestBody {
   reason: ReportReason;
@@ -326,7 +333,7 @@ export const reviewReport = async (
       return;
     }
 
-    if (!["reviewed", "resolved", "dismissed"].includes(status)) {
+    if (!status || !REPORT_REVIEW_STATUSES.includes(status)) {
       response.status(400).json({
         success: false,
         message: "Invalid status. Must be 'reviewed', 'resolved', or 'dismissed'",
@@ -334,55 +341,27 @@ export const reviewReport = async (
       return;
     }
 
-    const report = await MediaReport.findById(reportId);
-    if (!report) {
-      response.status(404).json({
-        success: false,
-        message: "Report not found",
+    try {
+      await applyReportReview({
+        reportId,
+        status: status as ReportReviewStatus,
+        adminNotes,
+        adminId: userId!,
+        ip: request.ip,
+        userAgent: request.get("User-Agent") || undefined,
       });
-      return;
-    }
-
-    // Update report
-    report.status = status as any;
-    report.reviewedBy = new Types.ObjectId(userId!);
-    report.reviewedAt = new Date();
-    if (adminNotes) {
-      report.adminNotes = adminNotes.trim();
-    }
-    await report.save();
-
-    // If resolved, update media moderation status and notify uploader
-    if (status === "resolved") {
-      const media = await Media.findByIdAndUpdate(
-        report.mediaId,
-        {
-          moderationStatus: "rejected",
-          isHidden: true,
-        },
-        { new: true }
-      );
-
-      if (media?.uploadedBy) {
-        try {
-          await NotificationService.createNotification({
-            userId: media.uploadedBy.toString(),
-            type: "content_moderation",
-            title: "Content Removed",
-            message: `Your content "${media.title}" was removed after policy review.`,
-            metadata: {
-              mediaId: media._id.toString(),
-              contentType: media.contentType,
-              reason: adminNotes || "Report resolved",
-            },
-            priority: "high",
-            relatedId: media._id.toString(),
-          });
-        } catch (notifError) {
-          logger.error("Failed to notify uploader after report resolve:", notifError);
-        }
+    } catch (err: any) {
+      if (err?.code === "NOT_FOUND") {
+        response.status(404).json({
+          success: false,
+          message: "Report not found",
+        });
+        return;
       }
+      throw err;
     }
+
+    const report = await MediaReport.findById(reportId);
 
     response.status(200).json({
       success: true,
@@ -394,6 +373,95 @@ export const reviewReport = async (
     response.status(500).json({
       success: false,
       message: "Failed to review report",
+    });
+  }
+};
+
+/**
+ * POST /api/admin/reports/media/bulk-review
+ * Bulk dismiss / review / resolve. Max 50. Partial success.
+ * resolved → hide media + notify uploader (same as single).
+ */
+export const bulkReviewReports = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const userId = request.userId!;
+    const { reportIds, status, adminNotes } = request.body || {};
+    const ids = normalizeBulkIds(reportIds, 50);
+
+    if (ids.length === 0) {
+      response.status(400).json({
+        success: false,
+        message: "reportIds must be a non-empty array (max 50)",
+      });
+      return;
+    }
+
+    if (!status || !REPORT_REVIEW_STATUSES.includes(status)) {
+      response.status(400).json({
+        success: false,
+        message: "Invalid status. Must be 'reviewed', 'resolved', or 'dismissed'",
+      });
+      return;
+    }
+
+    const updated: string[] = [];
+    const failed: Array<{ id: string; message: string }> = [];
+
+    for (const id of ids) {
+      try {
+        await applyReportReview({
+          reportId: id,
+          status: status as ReportReviewStatus,
+          adminNotes,
+          adminId: userId,
+          ip: request.ip,
+          userAgent: request.get("User-Agent") || undefined,
+          skipAudit: true,
+        });
+        updated.push(id);
+      } catch (err: any) {
+        failed.push({
+          id,
+          message: err?.message || "Failed to review",
+        });
+      }
+    }
+
+    await AuditService.logAdminAction(
+      userId,
+      "bulk_review_media_reports",
+      undefined,
+      {
+        status,
+        adminNotes,
+        updatedCount: updated.length,
+        failedCount: failed.length,
+        updated,
+        failed,
+      },
+      request.ip,
+      request.get("User-Agent")
+    );
+
+    logger.info("Bulk report review", {
+      adminId: userId,
+      status,
+      updated: updated.length,
+      failed: failed.length,
+    });
+
+    response.status(200).json({
+      success: true,
+      data: { updated, failed },
+    });
+  } catch (error: any) {
+    logger.error("Bulk review reports error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to bulk review reports",
     });
   }
 };
@@ -526,6 +594,28 @@ export const deleteReportedMedia = async (
       reportCount: reports.length,
       uploaderId: media.uploadedBy?.toString(),
     });
+
+    try {
+      const { AuditService } = await import("../service/audit.service");
+      await AuditService.logAdminAction(
+        userId,
+        "delete_reported_media",
+        id,
+        {
+          mediaTitle: media.title,
+          contentType: media.contentType,
+          reportsResolved: reports.length,
+          uploaderId: media.uploadedBy?.toString(),
+        },
+        request.ip,
+        request.get("User-Agent")
+      );
+    } catch (auditError) {
+      logger.warn("Failed to audit reported media delete", {
+        mediaId: id,
+        error: (auditError as Error)?.message,
+      });
+    }
 
     response.status(200).json({
       success: true,

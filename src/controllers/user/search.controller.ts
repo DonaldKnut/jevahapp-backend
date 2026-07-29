@@ -1,6 +1,70 @@
 import { Request, Response, NextFunction } from "express";
+import { User } from "../../models/user.model";
 import userService from "../../service/user.service";
+import { ensurePublicR2Url } from "../../service/fileUpload.service";
 import logger from "../../utils/logger";
+
+/**
+ * GET /api/users/search?q=&limit=
+ * Mention directory for the comment composer (phase 2).
+ */
+export const searchUsers = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const qRaw = request.query.q ?? request.query.query;
+    const q = typeof qRaw === "string" ? qRaw.trim() : "";
+    if (!q) {
+      response.status(400).json({
+        success: false,
+        message: "Search query q is required",
+      });
+      return;
+    }
+
+    const limit = Math.min(
+      Math.max(parseInt(String(request.query.limit || "10"), 10) || 10, 1),
+      25
+    );
+
+    const escape = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(escape, "i");
+
+    const users = await User.find({
+      isBanned: { $ne: true },
+      $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
+    })
+      .select("_id firstName lastName avatar avatarUpload email")
+      .limit(limit)
+      .lean();
+
+    response.status(200).json({
+      success: true,
+      data: {
+        users: users.map((u: any) => {
+          const raw = u.avatar || u.avatarUpload || "";
+          const avatar = raw ? ensurePublicR2Url(raw) : "";
+          return {
+            _id: u._id.toString(),
+            id: u._id.toString(),
+            firstName: u.firstName || "",
+            lastName: u.lastName || "",
+            avatar,
+            username: (u.email || "").split("@")[0] || "",
+          };
+        }),
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error searching users", {
+      error: error.message,
+      requestedBy: request.userId,
+    });
+    next(error);
+  }
+};
 
 /**
  * @swagger

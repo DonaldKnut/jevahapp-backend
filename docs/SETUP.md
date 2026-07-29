@@ -5,9 +5,23 @@
 | Service | Env var | Purpose |
 |---------|---------|---------|
 | MongoDB Atlas | `MONGODB_URI` | Primary database |
-| Redis | `REDIS_URL` | Fast-path likes/views, sessions, BullMQ |
+| Redis | `REDIS_URL` | Fast-path likes/views, sessions (`connect-redis@8` + ioredis), BullMQ |
 | API process | — | `npm run start` or `npm run dev` |
 | Worker process | — | `npm run worker:start` (required for analytics/Kafka) |
+| FFmpeg + ffprobe | PATH | Video/audio pre-upload verification + workers |
+
+### Local Windows: FFmpeg
+
+Video uploads call `ffmpeg` during pre-upload moderation. If missing, the API returns **503** `FFMPEG_REQUIRED`.
+
+```powershell
+winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
+# Restart the terminal (and API process) so PATH updates
+ffmpeg -version
+ffprobe -version
+```
+
+Docker / Contabo images already install `ffmpeg` via the Dockerfile.
 
 ## Environment variables
 

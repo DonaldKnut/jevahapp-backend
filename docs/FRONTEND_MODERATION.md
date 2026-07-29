@@ -104,7 +104,22 @@ type AdminMediaCard = {
 };
 ```
 
-**UI rule:** Always play/display from `preview.mediaUrl` / `preview.thumbnailUrl`. If `preview.signed === true`, re-fetch detail before expiry (default ~3600s) or on player error.
+**UI rule:** Always play/display from `preview.mediaUrl` / `preview.thumbnailUrl`. If `preview.signed === true`, call `POST /api/admin/media/:id/preview-refresh` before expiry (default ~3600s) or on player error (re-`GET` detail also works).
+
+```http
+POST /api/admin/media/:id/preview-refresh
+Authorization: Bearer <adminToken>
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "preview": { "mediaUrl": "…", "thumbnailUrl": "…", "signed": true, "expiresInSeconds": 3600 },
+    "media": { /* full AdminMediaCard */ }
+  }
+}
+```
 
 ---
 
@@ -344,10 +359,36 @@ Hide body (optional): `{ "reason": "harassment" }`.
 
 ```http
 POST /api/admin/users/:uploaderId/ban
-{ "reason": "Repeated policy violations", "duration": 7 }
+{
+  "reason": "Repeated policy violations",
+  "duration": 7,
+  "revokeSessions": true
+}
 ```
 
-`duration` = days (omit for permanent per your ban handler).
+`duration` = days (omit for permanent). `revokeSessions` defaults to **true** (kills refresh tokens + Socket.IO; next API call gets `403` Account is banned).
+
+### 5.6b Bulk actions
+
+```http
+POST /api/admin/moderation/bulk
+{
+  "mediaIds": ["…"],
+  "status": "approved" | "rejected" | "under_review",
+  "adminNotes": "optional"
+}
+```
+
+```http
+POST /api/admin/reports/media/bulk-review
+{
+  "reportIds": ["…"],
+  "status": "dismissed" | "reviewed" | "resolved",
+  "adminNotes": "…"
+}
+```
+
+Both return `{ success, data: { updated: string[], failed: [{ id, message }] } }` (max 50). Same side effects as single-item actions.
 
 ### 5.7 Emails & notifications (backend — no UI work)
 

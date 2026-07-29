@@ -144,14 +144,14 @@ export class MetadataSingleService {
         interactionType: "comment",
         isRemoved: { $ne: true },
         isHidden: { $ne: true },
-        parentCommentId: { $exists: false },
+        $or: [{ parentCommentId: { $exists: false } }, { parentCommentId: null }],
       }),
       Interaction.countDocuments({
         media: contentObjId,
         interactionType: "comment",
         isRemoved: { $ne: true },
         isHidden: { $ne: true },
-        parentCommentId: { $exists: true },
+        parentCommentId: { $exists: true, $ne: null },
       }),
     ]);
     return topLevel + replies;

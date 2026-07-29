@@ -14,6 +14,11 @@ Gospel media platform API — feed, copyright-free audio, live streaming, commun
 | [docs/API.md](docs/API.md) | Full endpoint reference |
 | [docs/ENGAGEMENT.md](docs/ENGAGEMENT.md) | Likes, views, shares, saves, comments (feed + copyright-free) |
 | [docs/FRONTEND_ENGAGEMENT.md](docs/FRONTEND_ENGAGEMENT.md) | Frontend UI integration — optimistic updates, player wiring, screen recipes |
+| [docs/FRONTEND_LIKES.md](docs/FRONTEND_LIKES.md) | Instagram / TikTok-style like & unlike (heart, double-tap, sockets) |
+| [docs/FRONTEND_COMMENTS.md](docs/FRONTEND_COMMENTS.md) | Comment sheet — badge vs list, type mapping, FE mistakes |
+| [docs/FRONTEND_COMMENT_EDIT_HANDOFF.md](docs/FRONTEND_COMMENT_EDIT_HANDOFF.md) | Edit / delete / Edited badge / image replace |
+| [docs/FRONTEND_FEED_ENGAGEMENT_HANDOFF.md](docs/FRONTEND_FEED_ENGAGEMENT_HANDOFF.md) | Feed card icons — paint with media (no batch-metadata gate) |
+| [docs/FRONTEND_VIEW_HANDOFF.md](docs/FRONTEND_VIEW_HANDOFF.md) | Views — BE thresholds + FE align (audio/ebook) |
 | [docs/ADMIN.md](docs/ADMIN.md) | Admin dashboard API — reports, moderation, verification, bans |
 | [docs/FRONTEND_ADMIN.md](docs/FRONTEND_ADMIN.md) | Admin UI — screen recipes, reports inbox, action maps |
 | [docs/FRONTEND_MODERATION.md](docs/FRONTEND_MODERATION.md) | Moderation + reports handoff for web admin (preview cards, P1 actions) |

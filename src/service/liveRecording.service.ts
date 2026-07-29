@@ -6,6 +6,7 @@ import logger from "../utils/logger";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
+import { toPublicR2Url } from "./fileUpload.service";
 
 // Configure S3 client for Cloudflare R2
 const s3Client = new S3Client({
@@ -336,19 +337,10 @@ class LiveRecordingService {
   }
 
   /**
-   * Generate public URL for R2 object
+   * Generate public URL for R2 object (delegates to shared CDN helper).
    */
   private generatePublicUrl(objectKey: string): string {
-    const customDomain = process.env.R2_CUSTOM_DOMAIN;
-
-    if (customDomain) {
-      return `https://${customDomain}/${objectKey}`;
-    }
-
-    // Use the same format as seeded content: pub-xxx.r2.dev/jevah/...
-    const publicDevUrl = process.env.R2_PUBLIC_DEV_URL || "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
-    
-    return `${publicDevUrl}/jevah/${objectKey}`;
+    return toPublicR2Url(objectKey);
   }
 
   /**

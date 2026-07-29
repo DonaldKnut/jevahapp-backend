@@ -3,18 +3,23 @@ import { Types } from "mongoose";
 import { User } from "../models/user.model";
 import { Media } from "../models/media.model";
 import { MediaReport } from "../models/mediaReport.model";
+import { Interaction } from "../models/interaction.model";
 import { AuditService } from "../service/audit.service";
-import resendEmailService from "../service/resendEmail.service";
 import cacheService from "../service/cache.service";
-import fileUploadService from "../service/fileUpload.service";
-import { enqueueMediaPostUpload } from "../queues/enqueue";
 import {
   resolveAdminMediaPreview,
   shapeAdminMediaCard,
 } from "../service/admin/mediaPreview.service";
-import { recordReviewerOutcome } from "../service/admin/recordReviewerOutcome";
+import {
+  applyModerationStatus,
+  MODERATION_STATUSES,
+  normalizeBulkIds,
+  type ModerationStatus,
+} from "../service/admin/moderationActions.service";
 import { isMasterAdminUser } from "../config/superAdmin";
 import logger from "../utils/logger";
+import { NotificationService } from "../service/notification.service";
+import resendEmailService from "../service/resendEmail.service";
 
 /**
  * Get platform-wide analytics and statistics
@@ -253,7 +258,7 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 };
 
 /**
- * Get single user details
+ * Get single user details (admin trust & safety page)
  */
 export const getUserDetails = async (
   req: Request,
@@ -270,11 +275,11 @@ export const getUserDetails = async (
       return;
     }
 
-    const user = await User.findById(id).select(
-      "-password -verificationCode -resetPasswordToken"
-    );
+    const userDoc = await User.findById(id)
+      .select("-password -verificationCode -resetPasswordToken")
+      .lean();
 
-    if (!user) {
+    if (!userDoc) {
       res.status(404).json({
         success: false,
         message: "User not found",
@@ -282,24 +287,92 @@ export const getUserDetails = async (
       return;
     }
 
-    // Get user activity stats
-    const activityStats = await AuditService.getUserDashboardStats(id);
+    const uploaderMediaIds = await Media.find({ uploadedBy: id }).distinct("_id");
 
-    // Get user's media count
-    const mediaCount = await Media.countDocuments({ uploadedBy: id });
+    const [
+      activityStats,
+      uploads,
+      reportsFiled,
+      reportsAgainst,
+      comments,
+      recentMediaDocs,
+      recentReports,
+      moderationHistory,
+    ] = await Promise.all([
+      AuditService.getUserDashboardStats(id),
+      Media.countDocuments({ uploadedBy: id }),
+      MediaReport.countDocuments({ reportedBy: id }),
+      uploaderMediaIds.length === 0
+        ? Promise.resolve(0)
+        : MediaReport.countDocuments({ mediaId: { $in: uploaderMediaIds } }),
+      Interaction.countDocuments({
+        user: id,
+        interactionType: "comment",
+        isRemoved: { $ne: true },
+      }),
+      Media.find({ uploadedBy: id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select(
+          "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+        )
+        .populate("uploadedBy", "firstName lastName email username")
+        .lean(),
+      MediaReport.find({ reportedBy: id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select("reason status mediaId createdAt adminNotes")
+        .lean(),
+      AuditService.getAdminActionsForTarget(id, 30),
+    ]);
 
-    // Get user's reports count
-    const reportsCount = await MediaReport.countDocuments({ reportedBy: id });
+    let isOnline = false;
+    try {
+      const socketService = require("../app").socketService;
+      isOnline = Boolean(socketService?.isUserConnected?.(id));
+    } catch {
+      isOnline = false;
+    }
 
+    const recentMedia = await Promise.all(
+      recentMediaDocs.map(async (doc: any) => {
+        const preview = await resolveAdminMediaPreview(doc);
+        return shapeAdminMediaCard(doc, preview);
+      })
+    );
+
+    const u: any = userDoc;
     res.status(200).json({
       success: true,
       data: {
-        user,
+        user: {
+          ...u,
+          id: u._id?.toString?.() || id,
+          isMasterAdmin: isMasterAdminUser(u),
+        },
         stats: {
           ...activityStats,
-          mediaCount,
-          reportsCount,
+          uploads,
+          mediaCount: uploads,
+          reportsFiled,
+          reportsCount: reportsFiled,
+          reportsAgainst,
+          comments,
+          lastLoginAt: u.lastLoginAt || null,
+          lastSeenAt: u.lastSeenAt || null,
+          isOnline,
+          isBanned: !!u.isBanned,
         },
+        recentMedia,
+        recentReports: (recentReports || []).map((r: any) => ({
+          id: r._id.toString(),
+          reason: r.reason,
+          status: r.status,
+          mediaId: r.mediaId?.toString?.() || r.mediaId,
+          createdAt: r.createdAt,
+          adminNotes: r.adminNotes || null,
+        })),
+        moderationHistory,
       },
     });
   } catch (error: any) {
@@ -317,8 +390,10 @@ export const getUserDetails = async (
 export const banUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { reason, duration } = req.body;
+    const { reason, duration, revokeSessions } = req.body;
     const adminId = req.userId;
+    // Default true: kick sessions unless FE explicitly sends false
+    const shouldRevokeSessions = revokeSessions !== false && revokeSessions !== "false";
 
     if (!Types.ObjectId.isValid(id)) {
       res.status(400).json({
@@ -385,21 +460,70 @@ export const banUser = async (req: Request, res: Response): Promise<void> => {
     const { invalidateAuthUserCache } = await import("../lib/invalidateAuthUserCache");
     await invalidateAuthUserCache(id);
 
+    let sessionsRevoked = false;
+    if (shouldRevokeSessions) {
+      try {
+        const { revokeAllUserRefreshTokens } = await import(
+          "../service/auth/token.service"
+        );
+        await revokeAllUserRefreshTokens(id);
+        sessionsRevoked = true;
+      } catch (err: any) {
+        logger.warn("Ban: failed to revoke refresh tokens", {
+          userId: id,
+          error: err?.message,
+        });
+      }
+
+      try {
+        const { getIO } = await import("../socket/socketManager");
+        const io = getIO();
+        if (io) {
+          const sockets = await io.in(`user:${id}`).fetchSockets();
+          for (const sock of sockets) {
+            sock.emit("force-logout", {
+              reason: "banned",
+              banReason: reason || "Violation of community guidelines",
+              banUntil,
+            });
+            sock.disconnect(true);
+          }
+        }
+      } catch (err: any) {
+        logger.warn("Ban: failed to disconnect sockets", {
+          userId: id,
+          error: err?.message,
+        });
+      }
+    }
+
     // Log admin action
     await AuditService.logAdminAction(
       adminId!,
       "ban_user",
       id,
-      { reason, duration, banUntil },
+      { reason, duration, banUntil, revokeSessions: shouldRevokeSessions, sessionsRevoked },
       req.ip,
       req.get("User-Agent")
     );
 
-    logger.info("User banned", { userId: id, adminId, reason });
+    logger.info("User banned", {
+      userId: id,
+      adminId,
+      reason,
+      revokeSessions: shouldRevokeSessions,
+      sessionsRevoked,
+    });
 
     res.status(200).json({
       success: true,
       message: "User banned successfully",
+      data: {
+        userId: id,
+        banUntil,
+        revokeSessions: shouldRevokeSessions,
+        sessionsRevoked,
+      },
     });
   } catch (error: any) {
     logger.error("Ban user error:", error);
@@ -439,6 +563,19 @@ export const unbanUser = async (
       return;
     }
 
+    // Security: Only master admin may unban other admins
+    if (user.role === "admin") {
+      const actor = await User.findById(adminId).select("email role");
+      if (!isMasterAdminUser(actor)) {
+        res.status(403).json({
+          success: false,
+          message: "Only the master admin can unban other admin users",
+          code: "MASTER_ADMIN_REQUIRED",
+        });
+        return;
+      }
+    }
+
     await User.findByIdAndUpdate(id, {
       isBanned: false,
       banReason: undefined,
@@ -472,6 +609,99 @@ export const unbanUser = async (
       success: false,
       message: "Failed to unban user",
     });
+  }
+};
+
+/**
+ * POST /api/admin/users/:id/warn
+ * Soft warning — in-app notification + optional email. Audited as warn_user.
+ */
+export const warnUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId!;
+    const {
+      subject = "Community guidelines",
+      message,
+      sendEmail = true,
+    } = req.body || {};
+
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid user ID" });
+      return;
+    }
+    if (!message || typeof message !== "string" || !message.trim()) {
+      res.status(400).json({
+        success: false,
+        message: "message is required",
+      });
+      return;
+    }
+
+    const user = await User.findById(id).select(
+      "email firstName lastName role isBanned"
+    );
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+    if (isMasterAdminUser(user)) {
+      res.status(403).json({
+        success: false,
+        message: "Cannot warn the master admin account",
+        code: "MASTER_ADMIN_PROTECTED",
+      });
+      return;
+    }
+
+    const title = String(subject).trim().slice(0, 120) || "Community guidelines";
+    const body = message.trim().slice(0, 4000);
+
+    await NotificationService.createNotification({
+      userId: id,
+      type: "admin_warning",
+      title,
+      message: body,
+      metadata: { warnedBy: adminId },
+      priority: "high",
+      relatedId: id,
+    });
+
+    let emailSent = false;
+    if (sendEmail !== false && sendEmail !== "false" && user.email) {
+      try {
+        await resendEmailService.sendEmail({
+          to: user.email,
+          subject: `[Jevah] ${title}`,
+          html: `<div style="font-family:sans-serif;line-height:1.5">
+            <p>Hi ${user.firstName || "there"},</p>
+            <p>${body.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>
+            <hr/><p style="color:#888;font-size:12px">Jevah Trust &amp; Safety</p>
+          </div>`,
+        });
+        emailSent = true;
+      } catch (err: any) {
+        logger.warn("Warn user email failed", { userId: id, error: err?.message });
+      }
+    }
+
+    await AuditService.logAdminAction(
+      adminId,
+      "warn_user",
+      id,
+      { subject: title, message: body.slice(0, 500), emailSent },
+      req.ip,
+      req.get("User-Agent")
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "User warned",
+      data: { userId: id, emailSent },
+    });
+  } catch (error: any) {
+    logger.error("Warn user error:", error);
+    res.status(500).json({ success: false, message: "Failed to warn user" });
   }
 };
 
@@ -669,125 +899,29 @@ export const updateModerationStatus = async (
       return;
     }
 
-    const validStatuses = ["approved", "rejected", "under_review"];
-    if (!status || !validStatuses.includes(status)) {
+    if (!status || !MODERATION_STATUSES.includes(status)) {
       res.status(400).json({
         success: false,
-        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        message: `Invalid status. Must be one of: ${MODERATION_STATUSES.join(", ")}`,
       });
       return;
     }
 
-    const media = await Media.findById(id);
-
-    if (!media) {
-      res.status(404).json({
-        success: false,
-        message: "Media not found",
+    try {
+      await applyModerationStatus({
+        mediaId: id,
+        status: status as ModerationStatus,
+        adminNotes,
+        adminId: adminId!,
+        ip: req.ip,
+        userAgent: req.get("User-Agent") || undefined,
       });
-      return;
-    }
-
-    const needsProcessing =
-      status === "approved" &&
-      ((media.uploadIntent?.stagingKey?.startsWith("staging/") &&
-        media.processing?.status !== "ready" &&
-        media.processing?.status !== "completed") ||
-        !(media.playbackUrl || media.hlsUrl || media.fileUrl)?.startsWith?.(
-          "http"
-        ));
-
-    const updateData: any = {
-      moderationStatus: status,
-      isHidden: true,
-      publicationState:
-        status === "rejected"
-          ? "tombstoned"
-          : status === "under_review"
-            ? "staged"
-            : needsProcessing
-              ? "publishing"
-              : "live",
-    };
-    // Fully published assets → make visible immediately
-    if (status === "approved" && !needsProcessing) {
-      updateData.isHidden = false;
-      updateData.publicationState = "live";
-      updateData.publishedAt = new Date();
-    }
-
-    if (adminNotes) {
-      updateData.adminModerationNotes = adminNotes;
-    }
-
-    await Media.findByIdAndUpdate(id, updateData);
-
-    const reviewerStatus =
-      status === "approved"
-        ? "approved"
-        : status === "rejected"
-          ? "rejected"
-          : "pending";
-    await recordReviewerOutcome(
-      id,
-      adminId!,
-      reviewerStatus,
-      typeof adminNotes === "string" ? adminNotes : undefined
-    );
-
-    // Invalidate cache when content becomes publicly visible (approved + live)
-    if (status === "approved") {
-      const stagingKey = media.uploadIntent?.stagingKey;
-      if (needsProcessing && stagingKey?.startsWith("staging/")) {
-        const inputUrl = await fileUploadService.getPresignedGetUrl(
-          stagingKey!,
-          7200
-        );
-        enqueueMediaPostUpload({
-          mediaId: id,
-          userId: String(media.uploadedBy),
-          contentType: media.contentType,
-          fileUrl: inputUrl,
-          requestId: `admin-approval:${id}`,
-          jobIdSuffix: `approval-${Date.now()}`,
-          skipModeration: true,
-        });
-      } else if (!needsProcessing) {
-        const { invalidateFeedCaches } = await import(
-          "../lib/invalidateFeedCaches"
-        );
-        await invalidateFeedCaches(id, String(media.uploadedBy));
-        await cacheService.del(`media:public:${id}`);
+    } catch (err: any) {
+      if (err?.code === "NOT_FOUND") {
+        res.status(404).json({ success: false, message: "Media not found" });
+        return;
       }
-      await cacheService.delPattern("media:public:all-content*");
-    }
-
-    // Log admin action
-    await AuditService.logAdminAction(
-      adminId!,
-      "update_moderation_status",
-      id,
-      { status, adminNotes },
-      req.ip,
-      req.get("User-Agent")
-    );
-
-    // If rejected, notify user
-    if (status === "rejected" && media.uploadedBy) {
-      const uploader = await User.findById(media.uploadedBy);
-      if (uploader && uploader.email) {
-        try {
-          await resendEmailService.sendContentRemovedEmail(
-            uploader.email,
-            uploader.firstName || "User",
-            media.title,
-            adminNotes || media.moderationResult?.reason || "Content violates community guidelines",
-            media.moderationResult?.flags || []
-          );
-        } catch (emailError) {
-          logger.error("Failed to send content removed email:", emailError);
-        }
-      }
+      throw err;
     }
 
     logger.info("Moderation status updated", { mediaId: id, adminId, status });
@@ -806,7 +940,10 @@ export const updateModerationStatus = async (
     res.status(200).json({
       success: true,
       message: "Moderation status updated successfully",
-      data: refreshed && preview ? shapeAdminMediaCard(refreshed, preview) : { id, moderationStatus: status },
+      data:
+        refreshed && preview
+          ? shapeAdminMediaCard(refreshed, preview)
+          : { id, moderationStatus: status },
     });
   } catch (error: any) {
     logger.error("Update moderation status error:", error);
@@ -818,7 +955,97 @@ export const updateModerationStatus = async (
 };
 
 /**
+ * POST /api/admin/moderation/bulk
+ * Bulk approve / reject / hold. Max 50 IDs. Partial success.
+ */
+export const bulkUpdateModerationStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.userId!;
+    const { mediaIds, status, adminNotes } = req.body || {};
+    const ids = normalizeBulkIds(mediaIds, 50);
+
+    if (ids.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "mediaIds must be a non-empty array (max 50)",
+      });
+      return;
+    }
+
+    if (!status || !MODERATION_STATUSES.includes(status)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${MODERATION_STATUSES.join(", ")}`,
+      });
+      return;
+    }
+
+    const updated: string[] = [];
+    const failed: Array<{ id: string; message: string }> = [];
+
+    for (const id of ids) {
+      try {
+        await applyModerationStatus({
+          mediaId: id,
+          status: status as ModerationStatus,
+          adminNotes,
+          adminId,
+          ip: req.ip,
+          userAgent: req.get("User-Agent") || undefined,
+          skipAudit: true,
+        });
+        updated.push(id);
+      } catch (err: any) {
+        failed.push({
+          id,
+          message: err?.message || "Failed to update",
+        });
+      }
+    }
+
+    await AuditService.logAdminAction(
+      adminId,
+      "bulk_update_moderation_status",
+      undefined,
+      {
+        status,
+        adminNotes,
+        updatedCount: updated.length,
+        failedCount: failed.length,
+        updated,
+        failed,
+      },
+      req.ip,
+      req.get("User-Agent")
+    );
+
+    logger.info("Bulk moderation status updated", {
+      adminId,
+      status,
+      updated: updated.length,
+      failed: failed.length,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: { updated, failed },
+    });
+  } catch (error: any) {
+    logger.error("Bulk moderation error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to bulk update moderation",
+    });
+  }
+};
+
+/**
  * Get admin activity log
+ * Default: current admin's actions.
+ * ?scope=all — master only, org-wide feed (+ actorId, action, from, to filters)
  */
 export const getAdminActivityLog = async (
   req: Request,
@@ -826,16 +1053,39 @@ export const getAdminActivityLog = async (
 ): Promise<void> => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const adminId = req.query.adminId as string;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const scope = ((req.query.scope as string) || "self").toLowerCase();
+    const actorId = (req.query.actorId || req.query.adminId) as string | undefined;
+    const action = req.query.action as string | undefined;
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to)) : null;
 
-    const query: any = { action: "admin_action" };
-    if (adminId) {
-      query.userId = adminId;
+    if (scope === "all") {
+      const actor = await User.findById(req.userId).select("email role");
+      if (!isMasterAdminUser(actor)) {
+        res.status(403).json({
+          success: false,
+          message: "Only the master admin can view org-wide activity",
+          code: "MASTER_ADMIN_REQUIRED",
+        });
+        return;
+      }
+
+      const activityLog = await AuditService.getOrgAdminActivityLog({
+        page,
+        limit,
+        actorId,
+        action,
+        from: from && !Number.isNaN(from.getTime()) ? from : null,
+        to: to && !Number.isNaN(to.getTime()) ? to : null,
+      });
+
+      res.status(200).json({ success: true, data: activityLog });
+      return;
     }
 
     const activityLog = await AuditService.getUserActivityHistory(
-      adminId || req.userId!,
+      actorId && Types.ObjectId.isValid(actorId) ? actorId : req.userId!,
       page,
       limit,
       "admin_action"

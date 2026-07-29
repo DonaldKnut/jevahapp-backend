@@ -1,6 +1,10 @@
 import { BatchMetadataItem, ContentMetadata } from "../shared/engagement.types";
 import { MetadataSingleService } from "./metadata.single";
 import { MetadataBatchService } from "./metadata.batch";
+import {
+  getCachedBatchMetadata,
+  getCachedContentMetadata,
+} from "./metadata.cache";
 
 export class MetadataService {
   private readonly single = new MetadataSingleService();
@@ -11,15 +15,19 @@ export class MetadataService {
     contentId: string,
     contentType: string
   ): Promise<ContentMetadata> {
-    return this.single.getContentMetadata(userId, contentId, contentType);
+    return getCachedContentMetadata(userId, contentId, contentType, () =>
+      this.single.getContentMetadata(userId, contentId, contentType)
+    );
   }
 
   getBatchContentMetadata(
     userId: string | undefined,
     contentIds: string[],
-    contentType?: string
+    contentType: string = "media"
   ): Promise<BatchMetadataItem[]> {
-    return this.batch.getBatchContentMetadata(userId, contentIds, contentType);
+    return getCachedBatchMetadata(userId, contentIds, contentType, missing =>
+      this.batch.getBatchContentMetadata(userId, missing, contentType)
+    );
   }
 }
 

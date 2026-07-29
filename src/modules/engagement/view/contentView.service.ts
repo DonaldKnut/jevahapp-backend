@@ -4,6 +4,7 @@ import { Devotional } from "../../../models/devotional.model";
 import logger from "../../../utils/logger";
 import { ViewEvent } from "../../../models/viewEvent.model";
 import { setPostCounter } from "../../../lib/redisCounters";
+import { normalizeContentType } from "../shared/contentType.resolver";
 
 type ContentType =
   | "media"
@@ -16,7 +17,7 @@ type ContentType =
 interface RecordViewInput {
   userId?: string;
   contentId: string;
-  contentType: ContentType;
+  contentType: string;
   durationMs?: number;
   progressPct?: number;
   isComplete?: boolean;
@@ -140,7 +141,6 @@ const viewService = {
     const {
       userId,
       contentId,
-      contentType,
       durationMs = 0,
       progressPct,
       isComplete = false,
@@ -148,6 +148,11 @@ const viewService = {
       sessionId,
       deviceId,
     } = input;
+
+    const rawType = (input.contentType || "").trim().toLowerCase();
+    const contentType = (
+      rawType === "devotional" ? "devotional" : normalizeContentType(input.contentType || "media")
+    ) as ContentType;
 
     if (!Types.ObjectId.isValid(contentId)) throw new Error("Invalid content ID");
     if (!(await verifyContentExists(contentId, contentType))) throw new Error("Content not found");

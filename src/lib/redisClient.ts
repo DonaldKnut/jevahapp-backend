@@ -1,56 +1,54 @@
 // src/lib/redisClient.ts
-// Unified Redis client using ioredis
-// Can be imported anywhere in the backend
-// Supports both local Redis and cloud Redis (via REDIS_URL env var)
+// Unified Redis client using ioredis (REDIS_URL).
+// Supports local Redis and TLS cloud Redis (Upstash rediss://, Redis Cloud, etc.).
 
 import Redis, { RedisOptions } from "ioredis";
 import logger from "../utils/logger";
 
-/**
- * Redis Configuration
- * 
- * Environment Variable: REDIS_URL
- * - Local: redis://127.0.0.1:6379 (default)
- * - Cloud: redis://username:password@host:port
- * - Redis Cloud: redis://default:password@redis-12345.c1.us-east-1-1.ec2.cloud.redislabs.com:12345
- * - AWS ElastiCache: redis://your-cluster.cache.amazonaws.com:6379
- * 
- * To switch to cloud Redis, simply update REDIS_URL in your .env file
- */
-
-// Get Redis URL from environment (defaults to local)
 const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
-// Parse Redis URL to extract connection options
 function parseRedisUrl(url: string): RedisOptions {
   try {
     const parsed = new URL(url);
-    
-    return {
+    const useTls =
+      parsed.protocol === "rediss:" ||
+      /\.upstash\.io$/i.test(parsed.hostname);
+
+    const options: RedisOptions = {
       host: parsed.hostname,
-      port: parseInt(parsed.port || "6379", 10),
-      password: parsed.password || undefined,
-      username: parsed.username || undefined,
-      // Connection options
+      port: parseInt(parsed.port || (useTls ? "6379" : "6379"), 10),
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      // Prefer IPv4 — Upstash / cloud DNS often breaks on IPv6-first stacks
+      family: 4,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       lazyConnect: true,
-      retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      // Enable offline queue for better resilience
       enableOfflineQueue: true,
-      // Connection timeout
-      connectTimeout: 10000,
-      // Keep alive
+      connectTimeout: 15000,
       keepAlive: 30000,
+      retryStrategy: (times: number) => {
+        // Cap reconnect spam in logs; still retry indefinitely for resilience
+        if (times > 20) return 5000;
+        return Math.min(times * 100, 3000);
+      },
     };
+
+    // CRITICAL: constructing via host/port does NOT inherit rediss:// TLS.
+    // Upstash requires TLS — without this you get endless ECONNRESET.
+    if (useTls) {
+      options.tls = {};
+    }
+
+    return options;
   } catch (error) {
-    logger.error("Invalid REDIS_URL format, using defaults", { url, error });
+    logger.error("Invalid REDIS_URL format, using localhost defaults", {
+      error: (error as Error).message,
+    });
     return {
       host: "127.0.0.1",
       port: 6379,
+      family: 4,
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       lazyConnect: true,
@@ -58,20 +56,18 @@ function parseRedisUrl(url: string): RedisOptions {
   }
 }
 
-// Create Redis client instance
 const redisOptions = parseRedisUrl(REDIS_URL);
 export const redisClient = new Redis(redisOptions);
 
-// Connection status
 let isConnected = false;
 let connectionAttempts = 0;
 
-// Event handlers
 redisClient.on("connect", () => {
   connectionAttempts++;
   logger.info("🔄 Redis connecting...", {
     host: redisOptions.host,
     port: redisOptions.port,
+    tls: Boolean(redisOptions.tls),
     attempt: connectionAttempts,
   });
 });
@@ -81,53 +77,62 @@ redisClient.on("ready", () => {
   logger.info("✅ Redis connected and ready", {
     host: redisOptions.host,
     port: redisOptions.port,
-    url: REDIS_URL.replace(/:[^:@]+@/, ":****@"), // Hide password in logs
+    tls: Boolean(redisOptions.tls),
+    url: REDIS_URL.replace(/:[^:@]+@/, ":****@"),
   });
 });
 
 redisClient.on("error", (err) => {
   isConnected = false;
-  logger.error("❌ Redis connection error", {
-    error: err.message,
-    host: redisOptions.host,
-    port: redisOptions.port,
-  });
+  // Throttle identical connection errors — Upstash misconfig used to spam every 2s
+  if (connectionAttempts <= 3 || connectionAttempts % 25 === 0) {
+    logger.error("❌ Redis connection error", {
+      error: err.message,
+      host: redisOptions.host,
+      port: redisOptions.port,
+      tls: Boolean(redisOptions.tls),
+      hint: redisOptions.tls
+        ? undefined
+        : "If using Upstash, REDIS_URL must be rediss:// and tls must be enabled",
+    });
+  }
 });
 
 redisClient.on("close", () => {
   isConnected = false;
-  logger.warn("⚠️  Redis connection closed");
+  if (connectionAttempts <= 3 || connectionAttempts % 25 === 0) {
+    logger.warn("⚠️  Redis connection closed");
+  }
 });
 
 redisClient.on("reconnecting", (delay: number) => {
-  logger.info("🔄 Redis reconnecting...", { delay });
+  if (connectionAttempts <= 5 || connectionAttempts % 25 === 0) {
+    logger.info("🔄 Redis reconnecting...", { delay, attempt: connectionAttempts });
+  }
 });
 
-// Connect to Redis (lazy connection - happens automatically on first command)
-// But we can also explicitly connect
 export async function connectRedis(): Promise<void> {
   try {
-    if (!isConnected) {
+    if (!isConnected && redisClient.status !== "connecting") {
       await redisClient.connect();
     }
   } catch (error: any) {
     logger.warn("Redis connection attempt failed (will retry on use)", {
       error: error?.message,
+      host: redisOptions.host,
+      tls: Boolean(redisOptions.tls),
     });
   }
 }
 
-// Check if Redis is connected
 export function isRedisConnected(): boolean {
   return isConnected && redisClient.status === "ready";
 }
 
-// Get Redis client instance (for direct access if needed)
 export function getRedisClient(): Redis {
   return redisClient;
 }
 
-// Graceful shutdown
 export async function disconnectRedis(): Promise<void> {
   try {
     await redisClient.quit();
@@ -137,18 +142,15 @@ export async function disconnectRedis(): Promise<void> {
   }
 }
 
-// Safe Redis operation wrapper (never throws, returns fallback on error)
 export async function redisSafe<T>(
   opName: string,
   fn: (client: Redis) => Promise<T>,
   fallback: T
 ): Promise<T> {
   if (!isConnected) {
-    // Try to connect if not connected
     try {
       await connectRedis();
     } catch {
-      // If connection fails, return fallback
       return fallback;
     }
   }
@@ -164,6 +166,4 @@ export async function redisSafe<T>(
   }
 }
 
-// Export default
 export default redisClient;
-

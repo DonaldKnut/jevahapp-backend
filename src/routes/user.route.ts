@@ -3,6 +3,7 @@ import {
   getCurrentUser,
   getAllUsers,
   getUserById,
+  searchUsers,
   updateUserProfile,
   updateMyProfile,
   deleteUser,
@@ -14,6 +15,7 @@ import {
   getUserAnalytics,
 } from "../controllers/user.controller";
 import { verifyToken } from "../middleware/auth.middleware";
+import { verifyTokenOptional } from "../middleware/optionalAuth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { apiRateLimiter } from "../middleware/rateLimiter";
 import { cacheMiddleware } from "../middleware/cache.middleware";
@@ -180,6 +182,12 @@ router.get("/stats", verifyToken, requireAdmin, apiRateLimiter, getUserStats);
  *       500:
  *         description: Internal server error
  */
+/**
+ * Mention directory (comment composer phase 2).
+ * Must be registered before /:userId so "search" is not treated as an id.
+ */
+router.get("/search", verifyTokenOptional, apiRateLimiter, searchUsers);
+
 router.get(
   "/:userId",
   verifyToken,

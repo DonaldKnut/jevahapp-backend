@@ -8,6 +8,152 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+const DEFAULT_R2_PUBLIC_DEV_URL =
+  "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
+
+/**
+ * Public CDN path prefix.
+ * - Explicit `R2_PUBLIC_KEY_PREFIX=` (empty) → no prefix
+ * - Explicit `R2_PUBLIC_KEY_PREFIX=jevah` → always prefix
+ * - Unset + `R2_CUSTOM_DOMAIN` → no prefix (prod custom domains usually map bucket root)
+ * - Unset + r2.dev (local/dev) → `jevah` (matches public host layout)
+ */
+export function getR2PublicKeyPrefix(): string {
+  if (process.env.R2_PUBLIC_KEY_PREFIX !== undefined) {
+    return String(process.env.R2_PUBLIC_KEY_PREFIX).replace(/^\/+|\/+$/g, "");
+  }
+  if (process.env.R2_CUSTOM_DOMAIN) {
+    return "";
+  }
+  return "jevah";
+}
+
+export function r2PublicBaseUrl(): string {
+  const customDomain = process.env.R2_CUSTOM_DOMAIN;
+  if (customDomain) {
+    return `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "R2_CUSTOM_DOMAIN is required in production (hard-coded r2.dev URLs are not allowed)"
+    );
+  }
+  return (
+    process.env.R2_PUBLIC_DEV_URL || DEFAULT_R2_PUBLIC_DEV_URL
+  ).replace(/\/+$/, "");
+}
+
+/** Hostnames allowed for comment/avatar `imageUrl` (no arbitrary hotlinks). */
+export function getAllowedCdnHosts(): string[] {
+  const hosts = new Set<string>();
+  try {
+    hosts.add(new URL(r2PublicBaseUrl()).hostname.toLowerCase());
+  } catch {
+    /* ignore */
+  }
+  const custom = (process.env.R2_CUSTOM_DOMAIN || "")
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .trim()
+    .toLowerCase();
+  if (custom) hosts.add(custom);
+
+  for (const part of (process.env.R2_ALLOWED_CDN_HOSTS || "").split(",")) {
+    const h = part.trim().replace(/^https?:\/\//, "").split("/")[0].toLowerCase();
+    if (h) hosts.add(h);
+  }
+
+  const dev = (process.env.R2_PUBLIC_DEV_URL || DEFAULT_R2_PUBLIC_DEV_URL)
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .toLowerCase();
+  if (dev) hosts.add(dev);
+
+  return [...hosts];
+}
+
+/** True when URL is https(http) on our CDN / *.r2.dev (or R2_ALLOWED_CDN_HOSTS). */
+export function isAllowedCdnUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host.endsWith(".r2.dev")) return true;
+    return getAllowedCdnHosts().includes(host);
+  } catch {
+    return false;
+  }
+}
+
+/** Normalize object key then apply public prefix (no double-prefix). */
+export function withR2PublicKeyPrefix(objectKey: string): string {
+  const key = String(objectKey || "").replace(/^\/+/, "");
+  const prefix = getR2PublicKeyPrefix();
+  if (!prefix || !key) return key;
+  if (key === prefix || key.startsWith(`${prefix}/`)) return key;
+  return `${prefix}/${key}`;
+}
+
+/**
+ * Canonical public CDN URL for an R2 object key.
+ * Use everywhere instead of hand-rolling `…/comments/…` vs `…/jevah/comments/…`.
+ */
+export function toPublicR2Url(objectKey: string): string {
+  const publicKey = withR2PublicKeyPrefix(objectKey);
+  return `${r2PublicBaseUrl()}/${publicKey}`;
+}
+
+/**
+ * Heal a stored absolute URL that omitted the public prefix
+ * (`…/comments/x` → `…/jevah/comments/x`). No-op for unrelated hosts.
+ */
+export function ensurePublicR2Url(url: string): string {
+  if (!url || typeof url !== "string") return url;
+  try {
+    const u = new URL(url);
+    const prefix = getR2PublicKeyPrefix();
+    if (!prefix) return url;
+    if (u.pathname === `/${prefix}` || u.pathname.startsWith(`/${prefix}/`)) {
+      return url;
+    }
+
+    let knownHost = false;
+    try {
+      knownHost = u.hostname.toLowerCase() === new URL(r2PublicBaseUrl()).hostname.toLowerCase();
+    } catch {
+      knownHost = false;
+    }
+    if (!knownHost && !u.hostname.toLowerCase().endsWith(".r2.dev")) {
+      return url;
+    }
+
+    const path = u.pathname.startsWith("/") ? u.pathname : `/${u.pathname}`;
+    u.pathname = `/${prefix}${path}`;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Map a public CDN URL back to the bucket object key (strips public prefix).
+ */
+export function objectKeyFromPublicUrl(url: string): string | null {
+  if (!url || typeof url !== "string") return null;
+  try {
+    const u = new URL(url);
+    let path = u.pathname.replace(/^\/+/, "");
+    if (!path) return null;
+    const prefix = getR2PublicKeyPrefix();
+    if (prefix && (path === prefix || path.startsWith(`${prefix}/`))) {
+      path = path === prefix ? "" : path.slice(prefix.length + 1);
+    }
+    return path || null;
+  } catch {
+    return null;
+  }
+}
+
 // Configure S3 client for Cloudflare R2
 const s3Client = new S3Client({
   region: "auto",
@@ -253,28 +399,33 @@ class FileUploadService {
   }
 
   /**
+   * Public CDN path prefix. Bucket keys stay unprefixed (`comments/x.jpg`);
+   * public URLs are `…/jevah/comments/x.jpg`. Set `R2_PUBLIC_KEY_PREFIX=` (empty)
+   * to disable. Default: `jevah`.
+   */
+  getPublicKeyPrefix(): string {
+    return getR2PublicKeyPrefix();
+  }
+
+  /**
+   * Build a public CDN URL for an R2 object key (adds `jevah/` when configured).
+   * Prefer this over hand-rolling URLs in feature modules.
+   */
+  toPublicR2Url(objectKey: string): string {
+    return toPublicR2Url(objectKey);
+  }
+
+  /** Heal stored URLs that omit the public key prefix (legacy comment/avatar bugs). */
+  ensurePublicR2Url(url: string): string {
+    return ensurePublicR2Url(url);
+  }
+
+  /**
    * Generate permanent public URL for R2 object
    * Follows Cloudflare CDN URL structure for optimal caching
    */
   generatePublicUrl(objectKey: string): string {
-    const customDomain = process.env.R2_CUSTOM_DOMAIN;
-
-    if (customDomain) {
-      return `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/${objectKey}`;
-    }
-
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "R2_CUSTOM_DOMAIN is required in production (hard-coded r2.dev URLs are not allowed)"
-      );
-    }
-
-    const publicDevUrl =
-      process.env.R2_PUBLIC_DEV_URL ||
-      "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
-    // r2.dev and R2 custom domains are already bound to a bucket. Prefixing
-    // the bucket name creates a non-existent object path.
-    return `${publicDevUrl.replace(/\/+$/, "")}/${objectKey}`;
+    return toPublicR2Url(objectKey);
   }
 
   /** Presigned PUT for direct-to-R2 client uploads (single-object). */

@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import { server } from "./app";
 import logger from "./utils/logger";
 import { mongooseConfig } from "./config/database.config";
+import { ensureMongoDnsServers } from "./config/mongoDns";
 import { connectRedis } from "./lib/redisClient";
 
 // Validate required environment variables
@@ -48,6 +49,7 @@ connectRedis().catch(() => {
 });
 
 // Connect to MongoDB
+ensureMongoDnsServers(MONGODB_URI);
 mongoose
   .connect(MONGODB_URI, mongooseConfig)
   .then(() => {

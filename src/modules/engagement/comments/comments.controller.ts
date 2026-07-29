@@ -13,3 +13,9 @@ export {
   reportContentComment,
   hideContentComment,
 } from "./comments.write.controller";
+
+export {
+  uploadCommentImage,
+  parseCommentMultipartIfNeeded,
+  commentImageUploadMiddleware,
+} from "./comment.upload";

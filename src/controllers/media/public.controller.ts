@@ -6,6 +6,7 @@ import cacheService, { CACHE_TTL } from "../../service/cache.service";
 import { feedCacheHash, feedGlobalKey } from "../../lib/cacheKeys";
 import { getFeedGeneration } from "../../lib/invalidateFeedCaches";
 import { attachFreshEngagementCounts } from "../../service/media/feedCountOverlay";
+import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlags";
 import logger from "../../utils/logger";
 import { extractObjectKeyFromUrl, mapContentType } from "./shared";
 import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
@@ -166,12 +167,17 @@ export const getPublicAllContent = async (
     }
 
     const mediaWithCounts = await attachFreshEngagementCounts(media, { fromMongoMiss });
+    // Optional Bearer (verifyTokenOptional on the route) → same liked/saved overlay as auth feed
+    const mediaWithFlags = await attachFeedUserInteractionFlags(
+      mediaWithCounts,
+      request.userId
+    );
     response.setHeader("X-Cache", cacheStatus);
 
     const result = {
       success: true,
       data: {
-        media: mediaWithCounts,
+        media: mediaWithFlags,
         pagination,
       },
       ...(recommendations && { recommendations }),

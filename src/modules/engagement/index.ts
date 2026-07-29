@@ -1,6 +1,15 @@
 /**
- * Engagement module: likes, saves, shares, views, metadata
- * Single mount point for all interaction-icon APIs.
+ * Engagement module: likes, saves, shares, views, metadata, comments
+ *
+ * Mount ownership (single source of truth for interaction-icon APIs):
+ * - /api/content      → contentRouter  (canonical like/share/view/metadata/comments)
+ * - /api/bookmark(s)  → saveRouter
+ * - /api/interactions → legacyRouter  (comment reaction/delete aliases, DMs, share URLs)
+ * - /api/trending, /api/analytics — pulled in for historical mount grouping
+ *
+ * Media FE fallbacks (GET/POST comments) live under /api/media via
+ * routes/media/engagement.routes.ts → bindMediaCommentShims (same handlers).
+ * Community legacy /api/comments is separate and deprecated.
  */
 import { Router } from "express";
 import trendingRoutes from "../../routes/trending.routes";

@@ -14,6 +14,7 @@ import {
   mediaUploadRateLimiter,
   aiDescriptionRateLimiter,
 } from "../../middleware/rateLimiter";
+import { requireUploadsEnabled } from "../../middleware/platformGate.middleware";
 import { logRequest, upload, handleUploadMulterError } from "./shared";
 
 const router = Router();
@@ -21,6 +22,7 @@ const router = Router();
 router.post(
   "/generate-description",
   verifyToken,
+  requireUploadsEnabled,
   aiDescriptionRateLimiter,
   upload.fields([
     { name: "file", maxCount: 1 },
@@ -34,6 +36,7 @@ router.post(
 router.post(
   "/upload",
   verifyToken,
+  requireUploadsEnabled,
   mediaUploadRateLimiter,
   logRequest,
   upload.fields([
@@ -53,6 +56,7 @@ router.post(
 router.post(
   "/upload/intent",
   verifyToken,
+  requireUploadsEnabled,
   mediaUploadRateLimiter,
   createStagedUploadIntent
 );
@@ -60,6 +64,7 @@ router.post(
 router.post(
   "/upload/:mediaId/finalize",
   verifyToken,
+  requireUploadsEnabled,
   mediaUploadRateLimiter,
   upload.fields([{ name: "thumbnail", maxCount: 1 }]),
   handleUploadMulterError,

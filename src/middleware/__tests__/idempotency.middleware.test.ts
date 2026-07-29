@@ -197,14 +197,13 @@ describe("idempotencyMiddleware", () => {
     expect((res2.body as any).code).toBe("IDEMPOTENCY_IN_PROGRESS");
   });
 
-  it("returns 503 IDEMPOTENCY_UNAVAILABLE when Redis is down", async () => {
+  it("fails open (calls next) when Redis is down", async () => {
     redisDown = true;
     const res = mockRes();
     const next = jest.fn();
     await idempotencyMiddleware()(makeReq({ key: VALID_KEY }), res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(503);
-    expect((res.body as any).code).toBe("IDEMPOTENCY_UNAVAILABLE");
+    expect(next).toHaveBeenCalled();
+    expect((res.body as any)?.code).not.toBe("IDEMPOTENCY_UNAVAILABLE");
   });
 
   it("does not persist 429 and releases reservation", async () => {

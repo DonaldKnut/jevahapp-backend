@@ -3,6 +3,7 @@ import { Interaction } from "../../../models/interaction.model";
 import { sanitizeCommentContent, formatComment } from "./comment.formatter";
 import { emitCommentRoomEvents } from "./comment.realtime";
 import { publishEngagementEvent } from "../../../lib/engagementEvents";
+import { CommentErrors } from "./comment.errors";
 import logger from "../../../utils/logger";
 
 export type CommunityContentKind = "prayer" | "forum";
@@ -23,13 +24,14 @@ export interface AddCommunityCommentInput {
  * Domain-specific post models stay outside this helper.
  */
 export async function addCommunityComment(input: AddCommunityCommentInput) {
-  const { userId, contentId, contentKind, content, parentCommentId, bumpCount } = input;
+  const { userId, contentId, contentKind, content, parentCommentId, bumpCount } =
+    input;
 
   if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(contentId)) {
-    throw new Error("Invalid user or content ID");
+    throw CommentErrors.invalidIds();
   }
   if (!content?.trim()) {
-    throw new Error("Comment content is required");
+    throw CommentErrors.contentRequired();
   }
 
   const { text } = sanitizeCommentContent(content);

@@ -41,7 +41,12 @@ flowchart TD
 |--------|------|-------------|
 | GET | `/api/admin/dashboard/analytics` | Platform stats (users, content, moderation, reports, verification) |
 | GET | `/api/admin/dashboard/feed` | Combined feed: uploads, review, reports, admin actions + onlineCount |
-| GET | `/api/admin/activity` | Current admin’s activity log |
+| GET | `/api/admin/dashboard/timeseries` | Chart points `metric=signups\|uploads\|reports\|activeUsers` + `range=7d\|30d` |
+| GET | `/api/admin/config` | Platform feature flags / maintenance |
+| PATCH | `/api/admin/config` | Update flags (kill switches) |
+| GET | `/api/admin/system/health` | Ops health: mongo / redis / queues / version |
+| GET | `/api/app/config` | **Public** (no auth) — mobile reads same shape |
+| GET | `/api/admin/activity` | Admin activity (`scope=all` master-only) |
 | GET | `/api/admin/media/recent` | Recent uploads (filter `moderationStatus`, `uploadedBy`) |
 | POST | `/api/admin/email` | Email users by `userIds` and/or `emails` (Resend) |
 
@@ -83,12 +88,13 @@ flowchart TD
 |--------|------|-------------|
 | GET | `/api/admin/users` | List/filter users (+ `isOnline`, `onlineCount`) |
 | GET | `/api/admin/users/presence` | Online/offline list (`status=online\|offline\|all`) |
-| GET | `/api/admin/users/:id` | User detail + stats |
-| POST | `/api/admin/users/:id/ban` | Ban (`reason?`, `duration?` days) |
-| POST | `/api/admin/users/:id/unban` | Unban |
+| GET | `/api/admin/users/:id` | User detail + stats + recent media/reports + moderation history |
+| POST | `/api/admin/users/:id/ban` | Ban (`reason?`, `duration?` days, `revokeSessions?` default **true**) |
+| POST | `/api/admin/users/:id/unban` | Unban (**master only** for other admins) |
+| POST | `/api/admin/users/:id/warn` | Soft warn (in-app + optional email) |
 | PATCH | `/api/admin/users/:id/role` | Change role (**master admin only**) |
 | PATCH | `/api/admin/users/:id/verification` | Set verification flags |
-| DELETE | `/api/users/:userId` | Hard-delete user (also admin; **cannot delete master**) |
+| DELETE | `/api/users/:userId` | Hard-delete user (also admin; **cannot delete master**; **master only** for other admins) |
 
 **Presence:** online = active Socket.IO JWT connection (mobile or web). Offline users include `lastSeenAt` / `lastLoginAt`.
 
@@ -130,8 +136,10 @@ At least one boolean required. Also updates `artistProfile.isVerifiedArtist` whe
 | GET | `/api/admin/reports` | Unified inbox (`type=media\|comment\|all`, `status`, `hidden`, page/limit) |
 | GET | `/api/admin/reports/media/:reportId` | Media report detail + uploader + sibling reports |
 | POST | `/api/admin/reports/media/:reportId/review` | `reviewed` \| `resolved` \| `dismissed` + `adminNotes?` |
+| POST | `/api/admin/reports/media/bulk-review` | Bulk review (max 50; same semantics; partial success) |
 | DELETE | `/api/admin/reports/media/:mediaId/content` | Permanently delete media + resolve reports |
 | GET | `/api/admin/reports/comments` | Reported comments inbox |
+| GET | `/api/admin/reports/comments/:commentId` | Comment card for report drawer |
 | POST | `/api/admin/reports/comments/:commentId/hide` | Hide comment (`reason?`) |
 | POST | `/api/admin/reports/comments/:commentId/unhide` | Unhide |
 | POST | `/api/admin/reports/comments/:commentId/dismiss` | Clear `reportCount` / `reportedBy` without hide |
@@ -175,11 +183,56 @@ Prefer `/api/admin/reports/*` for new UI:
 | GET | `/api/admin/moderation/:id` | Single media card + latest AI case summary |
 | GET | `/api/admin/moderation/:id/case` | Full ModerationCase history (AI evidence) |
 | PATCH | `/api/admin/moderation/:id/status` | `approved` \| `rejected` \| `under_review` + `adminNotes?` |
+| POST | `/api/admin/moderation/bulk` | Bulk status (max 50; partial success) |
 | PATCH | `/api/admin/media/:id` | Admin metadata edit (`title`, `description`, `adminModerationNotes`, `category`) |
+| POST | `/api/admin/media/:id/preview-refresh` | Re-issue signed `preview.*` (TTL ~3600s) |
+| GET | `/api/admin/media/search` | Paginated AdminMediaCard search (`q`, filters) |
 | DELETE | `/api/admin/media/:id` | Admin force-delete any media |
 | DELETE | `/api/media/:id` | Owner or admin delete |
 
-Queue/detail cards expose `preview.mediaUrl` / `preview.thumbnailUrl` (signed when content is still private/staged). See [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
+Queue/detail cards expose `preview.mediaUrl` / `preview.thumbnailUrl` (signed when content is still private/staged). When `preview.signed === true`, call `POST …/preview-refresh` (or re-`GET` detail) before expiry. See [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
+
+### Ban body
+
+```json
+{
+  "reason": "Spam",
+  "duration": 7,
+  "revokeSessions": true
+}
+```
+
+`duration` = days (omit = permanent). `revokeSessions` defaults to **true**: revokes all refresh tokens + disconnects Socket.IO (`force-logout` event). Access JWT is rejected on next `verifyToken` via `isBanned`.
+
+### Bulk moderation
+
+```http
+POST /api/admin/moderation/bulk
+{
+  "mediaIds": ["…", "…"],
+  "status": "approved" | "rejected" | "under_review",
+  "adminNotes": "optional"
+}
+```
+
+Max 50 IDs. Same side effects as single-item status update. Response:
+
+```json
+{ "success": true, "data": { "updated": ["…"], "failed": [{ "id": "…", "message": "…" }] } }
+```
+
+### Bulk report review
+
+```http
+POST /api/admin/reports/media/bulk-review
+{
+  "reportIds": ["…"],
+  "status": "dismissed" | "reviewed" | "resolved",
+  "adminNotes": "…"
+}
+```
+
+`resolved` hides media + notifies uploader (same as single).
 
 ---
 
@@ -269,5 +322,50 @@ No Socket.IO event for new reports — dashboard should poll `GET /api/admin/rep
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/admin/activity` | Recent admin actions |
-| GET | `/api/logs/logs` | Full audit log viewer |
+| GET | `/api/admin/activity` | Current admin’s actions (default) |
+| GET | `/api/admin/activity?scope=all` | **Master only** — org-wide (`actorId`, `action`, `from`, `to`, page/limit) |
+| GET | `/api/logs/logs` | Legacy log viewer (prefer `/activity`) |
+
+### Platform config body
+
+```json
+{
+  "uploadsEnabled": true,
+  "registrationEnabled": true,
+  "liveStreamingEnabled": true,
+  "maintenanceMode": false,
+  "maintenanceMessage": "Back soon",
+  "minAppVersion": { "ios": "1.2.0", "android": "1.2.0" }
+}
+```
+
+Mobile / public clients: `GET /api/app/config` (same `data` shape, no auth).
+
+**Enforcement:** `registrationEnabled` / `maintenanceMode` gate `POST /api/auth/register*`. `uploadsEnabled` / `maintenanceMode` gate media upload + staging intent/finalize (`UPLOADS_DISABLED` / `MAINTENANCE_MODE`).
+
+### System health
+
+```http
+GET /api/admin/system/health
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "api": "ok",
+    "mongo": "ok",
+    "redis": "ok",
+    "storage": "ok",
+    "queues": {
+      "moderation": { "waiting": 0, "failed": 0 },
+      "email": { "waiting": 0, "failed": 0 }
+    },
+    "version": "gitsha",
+    "uptimeSeconds": 12345
+  }
+}
+```
+
+Media report detail also returns `sla: { createdAt, ageHours, slaHours, breached }` and `history[]` (default SLA window: `REPORT_SLA_HOURS=24`).

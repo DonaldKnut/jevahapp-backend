@@ -7,6 +7,11 @@ import {
   clipDurationsWithinBudget,
   getEvidenceProfile,
 } from "./moderation/evidenceProfile";
+import {
+  assertFfmpegForContentType,
+  hasFfmpeg,
+  MediaToolsError,
+} from "../utils/mediaTools";
 import { exec } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
@@ -77,6 +82,10 @@ export class OptimizedVerificationService {
     };
 
     reportProgress(10, "file_received", "File received, starting verification...");
+
+    // Fail fast with a clear code — path-based extract used to shell ffmpeg
+    // without a preflight and surface opaque Windows "not recognized" errors.
+    await assertFfmpegForContentType(contentType);
 
     let transcript = "";
     let videoFrames: string[] = [];
@@ -167,6 +176,8 @@ export class OptimizedVerificationService {
     uploadId: string,
     opts?: { mediaId?: string; contentHash?: string }
   ): Promise<OptimizedVerificationResult> {
+    await assertFfmpegForContentType(contentType);
+
     let transcript = "";
     let videoFrames: string[] = [];
     const reportProgress = (
@@ -246,6 +257,10 @@ export class OptimizedVerificationService {
     reportProgress: (progress: number, stage: string, message: string) => void,
     onComplete: (transcript: string, frames: string[]) => void
   ): Promise<void> {
+    if (!(await hasFfmpeg())) {
+      throw new MediaToolsError();
+    }
+
     const duration = await this.getVideoDurationFromPath(inputPath);
     logger.info("Video duration detected", { duration, uploadId });
     reportProgress(30, "analyzing", "Extracting audio and frames...");
@@ -328,6 +343,9 @@ export class OptimizedVerificationService {
     maxDuration: number,
     startOffset = 0
   ): Promise<{ audioBuffer: Buffer; duration?: number }> {
+    if (!(await hasFfmpeg())) {
+      throw new MediaToolsError();
+    }
     const tempId = `audio-sample-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const outputPath = path.join(this.tempDir, `${tempId}-output.mp3`);
     try {
@@ -338,6 +356,13 @@ export class OptimizedVerificationService {
       await execAsync(command, { timeout: 120_000 });
       const audioBuffer = fs.readFileSync(outputPath);
       return { audioBuffer, duration: maxDuration };
+    } catch (error: any) {
+      if (
+        /not recognized|ENOENT|not found/i.test(String(error?.message || ""))
+      ) {
+        throw new MediaToolsError();
+      }
+      throw error;
     } finally {
       this.cleanupFile(outputPath);
     }
@@ -372,6 +397,9 @@ export class OptimizedVerificationService {
     frameCount: number,
     duration: number
   ): Promise<{ frames: string[] }> {
+    if (!(await hasFfmpeg())) {
+      throw new MediaToolsError();
+    }
     const tempId = `frames-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     const framesDir = path.join(this.tempDir, tempId);
     if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir, { recursive: true });
@@ -400,25 +428,40 @@ export class OptimizedVerificationService {
                 `ffmpeg -ss ${ts} -i "${inputPath}" -frames:v 1 -q:v 4 -y "${out}"`,
                 { timeout: 60_000 }
               );
-              if (fs.existsSync(out)) {
-                const b64 = fs.readFileSync(out).toString("base64");
-                this.cleanupFile(out);
-                return `data:image/jpeg;base64,${b64}`;
+              if (!fs.existsSync(out)) return null;
+              const frameBuffer = fs.readFileSync(out);
+              return `data:image/jpeg;base64,${frameBuffer.toString("base64")}`;
+            } catch (error: any) {
+              if (
+                /not recognized|ENOENT|not found/i.test(
+                  String(error?.message || "")
+                )
+              ) {
+                throw new MediaToolsError();
               }
-            } catch {
+              logger.warn("Frame extract failed", {
+                error: error?.message,
+                ts,
+              });
+              return null;
+            } finally {
               this.cleanupFile(out);
             }
-            return null;
           })
         );
-        for (const f of batchFrames) if (f) frames.push(f);
+        frames.push(...batchFrames.filter((f): f is string => !!f));
       }
       return { frames };
     } finally {
-      try {
-        fs.rmSync(framesDir, { recursive: true, force: true });
-      } catch {
-        // ignore
+      if (fs.existsSync(framesDir)) {
+        try {
+          for (const file of fs.readdirSync(framesDir)) {
+            this.cleanupFile(path.join(framesDir, file));
+          }
+          fs.rmdirSync(framesDir);
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
@@ -903,15 +946,10 @@ export class OptimizedVerificationService {
   }
 
   /**
-   * Check if FFmpeg is available
+   * Check if FFmpeg is available (cached via shared mediaTools util).
    */
   private async checkFFmpegAvailable(): Promise<boolean> {
-    try {
-      await execAsync("ffmpeg -version");
-      return true;
-    } catch (error) {
-      return false;
-    }
+    return hasFfmpeg();
   }
 
   /**

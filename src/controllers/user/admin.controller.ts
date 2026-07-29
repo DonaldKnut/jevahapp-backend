@@ -263,6 +263,7 @@ export const deleteUser = async (
 ): Promise<void> => {
   try {
     const { userId } = request.params;
+    const actorId = request.userId;
 
     if (!userId) {
       response.status(400).json({
@@ -272,9 +273,26 @@ export const deleteUser = async (
       return;
     }
 
+    if (actorId && userId === actorId) {
+      response.status(400).json({
+        success: false,
+        message: "Cannot delete your own account via admin delete",
+      });
+      return;
+    }
+
     const { User } = await import("../../models/user.model");
     const { isMasterAdminUser } = await import("../../config/superAdmin");
+    const { AuditService } = await import("../../service/audit.service");
     const target = await User.findById(userId).select("email role");
+    if (!target) {
+      response.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
     if (isMasterAdminUser(target)) {
       response.status(403).json({
         success: false,
@@ -284,10 +302,34 @@ export const deleteUser = async (
       return;
     }
 
+    // Security: Only master admin may delete other admin users
+    if (target.role === "admin") {
+      const actor = await User.findById(actorId).select("email role");
+      if (!isMasterAdminUser(actor)) {
+        response.status(403).json({
+          success: false,
+          message: "Only the master admin can delete other admin users",
+          code: "MASTER_ADMIN_REQUIRED",
+        });
+        return;
+      }
+    }
+
     const result = await userService.deleteUser(userId);
 
+    if (actorId) {
+      await AuditService.logAdminAction(
+        actorId,
+        "delete_user",
+        userId,
+        { targetEmail: target.email, targetRole: target.role },
+        request.ip,
+        request.get("User-Agent")
+      );
+    }
+
     logger.info("User account deleted", {
-      requestedBy: request.userId,
+      requestedBy: actorId,
       targetUserId: userId,
     });
 

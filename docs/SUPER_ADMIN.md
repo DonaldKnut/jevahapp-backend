@@ -33,9 +33,11 @@ Then sign in at the web `/login` with that email + password.
 | `PATCH /api/admin/users/:id/role` | **Only** master admin |
 | Demote master | Blocked |
 | Ban master | Blocked |
-| Ban other admins | Master only |
+| Ban / unban other admins | Master only |
 | Delete master | Blocked |
-| Login / `GET /api/auth/me` | `user.isMasterAdmin: true` |
+| Delete other admins | Master only |
+| Banned account login | `403` `Account is banned` (+ `banReason` / `banUntil`) — same as `verifyToken` |
+| Login / `GET /api/auth/me` | `user.isMasterAdmin: true`; `/me` also returns `isBanned` |
 
 Config: `src/config/superAdmin.ts` · env `SUPER_ADMIN_EMAIL`.
 

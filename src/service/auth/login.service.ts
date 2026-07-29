@@ -9,7 +9,7 @@ import {
 import fileUploadService from "../fileUpload.service";
 import aiReengagementService from "../aiReengagement.service";
 import { TOKEN_EXPIRATION } from "../../config/tokenConfig";
-import { JWT_SECRET_ASSERTED } from "./shared";
+import { JWT_SECRET_ASSERTED, assertUserNotBanned } from "./shared";
 import { normalizeEmail } from "./register.service";
 import { isMasterAdminEmail } from "../../config/superAdmin";
 
@@ -173,6 +173,8 @@ export async function loginUser(
     throw new Error("Please verify your email before logging in");
   }
 
+  await assertUserNotBanned(user);
+
   const expiresIn = rememberMe
     ? TOKEN_EXPIRATION.REMEMBER_ME
     : TOKEN_EXPIRATION.STANDARD;
@@ -232,6 +234,8 @@ export async function loginUser(
       avatar: user.avatar,
       role: user.role,
       isProfileComplete: user.isProfileComplete,
+      isEmailVerified: user.isEmailVerified || false,
+      isBanned: false,
       isMasterAdmin: isMasterAdminEmail(user.email),
     },
   };
@@ -240,7 +244,7 @@ export async function loginUser(
 export async function getCurrentUser(userId: string) {
   const user = (await User.findById(userId)
     .select(
-      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified createdAt updatedAt"
+      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified isBanned banReason banUntil createdAt updatedAt"
     )
     .lean()) as any;
 
@@ -249,6 +253,7 @@ export async function getCurrentUser(userId: string) {
   }
 
   const avatar = user.avatar || user.avatarUpload || null;
+  const isBanned = !!user.isBanned;
 
   return {
     id: user._id.toString(),
@@ -262,6 +267,13 @@ export async function getCurrentUser(userId: string) {
     role: user.role,
     isProfileComplete: user.isProfileComplete || false,
     isEmailVerified: user.isEmailVerified || false,
+    isBanned,
+    ...(isBanned
+      ? {
+          banReason: user.banReason || "Violation of community guidelines",
+          banUntil: user.banUntil || null,
+        }
+      : {}),
     isMasterAdmin: isMasterAdminEmail(user.email),
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

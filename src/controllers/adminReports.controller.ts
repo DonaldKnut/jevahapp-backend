@@ -8,6 +8,7 @@ import commentService from "../modules/engagement/comments/comment.service";
 import {
   reviewReport,
   deleteReportedMedia,
+  bulkReviewReports,
 } from "./mediaReport.controller";
 import {
   resolveAdminMediaPreview,
@@ -239,10 +240,52 @@ export const getAdminMediaReportDetail = async (
     const siblingReports = await MediaReport.find({
       mediaId: siblingMediaId,
     })
-      .select("reason status description createdAt reportedBy adminNotes reviewedAt")
+      .select("reason status description createdAt reportedBy adminNotes reviewedAt reviewedBy")
       .populate("reportedBy", "firstName lastName username")
+      .populate("reviewedBy", "email firstName lastName")
       .sort({ createdAt: -1 })
       .lean();
+
+    const createdAt = (report as any).createdAt
+      ? new Date((report as any).createdAt)
+      : new Date();
+    const ageHours =
+      Math.round(
+        ((Date.now() - createdAt.getTime()) / (1000 * 60 * 60)) * 10
+      ) / 10;
+    const slaHours = Number(process.env.REPORT_SLA_HOURS || 24);
+    const breached =
+      (report as any).status === "pending" && ageHours > slaHours;
+
+    const history: Array<{
+      at: Date | string;
+      actorEmail: string | null;
+      action: string;
+    }> = [
+      {
+        at: createdAt,
+        actorEmail: (report as any).reportedBy?.email || null,
+        action: "created",
+      },
+    ];
+    if ((report as any).reviewedAt) {
+      history.push({
+        at: (report as any).reviewedAt,
+        actorEmail: (report as any).reviewedBy?.email || null,
+        action: (report as any).status || "reviewed",
+      });
+    }
+    for (const r of siblingReports as any[]) {
+      if (String(r._id) === reportId) continue;
+      history.push({
+        at: r.createdAt,
+        actorEmail: null,
+        action: `sibling_${r.status || "created"}`,
+      });
+    }
+    history.sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
+    );
 
     res.status(200).json({
       success: true,
@@ -294,6 +337,13 @@ export const getAdminMediaReportDetail = async (
               }
             : null,
         })),
+        sla: {
+          createdAt,
+          ageHours,
+          slaHours,
+          breached,
+        },
+        history,
         /** Actions the UI should offer for this report */
         actions: {
           review: ["reviewed", "resolved", "dismissed"],
@@ -310,6 +360,7 @@ export const getAdminMediaReportDetail = async (
 
 export const reviewAdminMediaReport = reviewReport;
 export const deleteAdminReportedMedia = deleteReportedMedia;
+export const bulkReviewAdminMediaReports = bulkReviewReports;
 
 /** GET /api/admin/reports/comments */
 export const listAdminCommentReports = async (
@@ -331,6 +382,84 @@ export const listAdminCommentReports = async (
   } catch (error: any) {
     logger.error("List comment reports error", { error: error.message });
     res.status(500).json({ success: false, message: "Failed to list comment reports" });
+  }
+};
+
+/**
+ * GET /api/admin/reports/comments/:commentId
+ * Shaped comment card for report drawer.
+ */
+export const getAdminCommentReportDetail = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { commentId } = req.params;
+    if (!commentId || !Types.ObjectId.isValid(commentId)) {
+      res.status(400).json({ success: false, message: "Invalid comment ID" });
+      return;
+    }
+
+    const comment = await Interaction.findById(commentId)
+      .populate("user", "firstName lastName username email avatar")
+      .populate("media", "title contentType thumbnailUrl uploadedBy")
+      .lean();
+
+    if (!comment || (comment as any).interactionType !== "comment") {
+      res.status(404).json({ success: false, message: "Comment not found" });
+      return;
+    }
+
+    const c: any = comment;
+    const body = String(c.content || "");
+    const preview =
+      body.length > 280 ? `${body.slice(0, 277)}…` : body;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        comment: {
+          id: c._id.toString(),
+          content: body,
+          bodyPreview: preview,
+          reportCount: c.reportCount || 0,
+          isHidden: !!c.isHidden,
+          hiddenReason: c.hiddenReason || null,
+          imageUrl: c.imageUrl || null,
+          author: c.user
+            ? {
+                id: c.user._id?.toString?.() || String(c.user),
+                firstName: c.user.firstName,
+                lastName: c.user.lastName,
+                username: c.user.username,
+                email: c.user.email,
+                avatar: c.user.avatar,
+              }
+            : null,
+          media: c.media
+            ? {
+                id: c.media._id?.toString?.() || String(c.media),
+                title: c.media.title,
+                contentType: c.media.contentType,
+                thumbnailUrl: c.media.thumbnailUrl,
+              }
+            : null,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+        },
+        actions: {
+          hide: true,
+          unhide: true,
+          dismiss: true,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("Get comment report detail error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to get comment report detail",
+    });
   }
 };
 

@@ -7,6 +7,15 @@ const COMMENT_FILTER = {
   isHidden: { $ne: true },
 };
 
+/** Top-level = missing OR null parent (clients often POST parentCommentId: null). */
+const TOP_LEVEL_PARENT = {
+  $or: [{ parentCommentId: { $exists: false } }, { parentCommentId: null }],
+};
+
+const REPLY_PARENT = {
+  parentCommentId: { $exists: true, $ne: null },
+};
+
 export const commentRepository = {
   async create(
     data: {
@@ -14,6 +23,8 @@ export const commentRepository = {
       media: Types.ObjectId;
       content: string;
       parentCommentId?: Types.ObjectId;
+      imageUrl?: string;
+      mentions?: Array<{ userId: Types.ObjectId; displayName?: string }>;
     },
     session: ClientSession
   ) {
@@ -44,7 +55,7 @@ export const commentRepository = {
     return Interaction.find({
       media: new Types.ObjectId(contentId),
       ...COMMENT_FILTER,
-      parentCommentId: { $exists: false },
+      ...TOP_LEVEL_PARENT,
     })
       .populate("user", "firstName lastName avatar")
       .sort(sort)
@@ -59,7 +70,7 @@ export const commentRepository = {
         $match: {
           media: new Types.ObjectId(contentId),
           ...COMMENT_FILTER,
-          parentCommentId: { $exists: false },
+          ...TOP_LEVEL_PARENT,
         },
       },
       {
@@ -148,12 +159,12 @@ export const commentRepository = {
       Interaction.countDocuments({
         media,
         ...COMMENT_FILTER,
-        parentCommentId: { $exists: false },
+        ...TOP_LEVEL_PARENT,
       }),
       Interaction.countDocuments({
         media,
         ...COMMENT_FILTER,
-        parentCommentId: { $exists: true },
+        ...REPLY_PARENT,
       }),
     ]);
   },
@@ -270,7 +281,23 @@ export const commentRepository = {
   },
 
   updateContent(id: string, content: string) {
-    return Interaction.findByIdAndUpdate(id, { content });
+    return Interaction.findByIdAndUpdate(id, {
+      content,
+      editedAt: new Date(),
+    });
+  },
+
+  updateCommentFields(
+    id: string,
+    fields: Record<string, unknown>,
+    options: { unsetImage?: boolean } = {}
+  ) {
+    const update: Record<string, unknown> = { $set: { ...fields } };
+    if (options.unsetImage) {
+      delete (update.$set as any).imageUrl;
+      update.$unset = { imageUrl: 1 };
+    }
+    return Interaction.findByIdAndUpdate(id, update, { new: true });
   },
 
   save(doc: InstanceType<typeof Interaction>) {
