@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { Media } from "../models/media.model";
 import { ModerationCase } from "../models/moderationCase.model";
 import { Church } from "../models/church.model";
+import { User } from "../models/user.model";
 import { AuditService } from "../service/audit.service";
 import cacheService from "../service/cache.service";
 import {
@@ -12,7 +13,7 @@ import {
 import logger from "../utils/logger";
 
 const MEDIA_SELECT =
-  "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt";
+  "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes moderationAssignee moderationNoteThread isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt";
 
 /**
  * GET /api/admin/moderation/:id
@@ -32,6 +33,7 @@ export const getModerationMediaDetail = async (
     const media = await Media.findById(id)
       .select(MEDIA_SELECT)
       .populate("uploadedBy", "firstName lastName email username")
+      .populate("moderationAssignee", "firstName lastName email")
       .lean();
 
     if (!media) {
@@ -93,6 +95,7 @@ export const refreshAdminMediaPreview = async (
     const media = await Media.findById(id)
       .select(MEDIA_SELECT)
       .populate("uploadedBy", "firstName lastName email username")
+      .populate("moderationAssignee", "firstName lastName email")
       .lean();
 
     if (!media) {
@@ -116,6 +119,276 @@ export const refreshAdminMediaPreview = async (
       success: false,
       message: "Failed to refresh media preview",
     });
+  }
+};
+
+/**
+ * POST /api/admin/moderation/:id/rerun
+ * Force a new AI moderation pass (enqueues worker).
+ */
+export const rerunModeration = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId!;
+    const reason =
+      typeof req.body?.reason === "string"
+        ? req.body.reason.trim().slice(0, 500)
+        : "Admin requested new scan";
+
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid media ID" });
+      return;
+    }
+
+    const media = await Media.findById(id);
+    if (!media) {
+      res.status(404).json({ success: false, message: "Media not found" });
+      return;
+    }
+
+    let inputUrl: string | null = null;
+    const stagingKey = media.uploadIntent?.stagingKey;
+    if (stagingKey?.startsWith("staging/")) {
+      const fileUploadService = (
+        await import("../service/fileUpload.service")
+      ).default;
+      inputUrl = await fileUploadService.getPresignedGetUrl(stagingKey, 7200);
+    } else if (
+      media.fileObjectKey &&
+      typeof media.fileObjectKey === "string"
+    ) {
+      const fileUploadService = (
+        await import("../service/fileUpload.service")
+      ).default;
+      inputUrl = await fileUploadService.getPresignedGetUrl(
+        media.fileObjectKey,
+        7200
+      );
+    } else if (
+      typeof media.fileUrl === "string" &&
+      /^https?:\/\//i.test(media.fileUrl)
+    ) {
+      inputUrl = media.fileUrl;
+    } else if (
+      typeof media.playbackUrl === "string" &&
+      /^https?:\/\//i.test(media.playbackUrl)
+    ) {
+      inputUrl = media.playbackUrl;
+    }
+
+    if (!inputUrl) {
+      res.status(400).json({
+        success: false,
+        message: "No file URL available to re-run moderation",
+        code: "NO_MEDIA_SOURCE",
+      });
+      return;
+    }
+
+    await Media.findByIdAndUpdate(id, {
+      moderationStatus: "pending",
+      "processing.status": "queued",
+    });
+
+    const { enqueueMediaPostUpload } = await import("../queues/enqueue");
+    const jobIdSuffix = `rerun-${Date.now()}`;
+    enqueueMediaPostUpload({
+      mediaId: id,
+      userId: String(media.uploadedBy),
+      contentType: media.contentType,
+      fileUrl: inputUrl,
+      requestId: `admin-rerun:${id}`,
+      jobIdSuffix,
+      skipModeration: false,
+    });
+
+    await AuditService.logAdminAction(adminId, "rerun_moderation", id, {
+      reason,
+      jobIdSuffix,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        mediaId: id,
+        jobId: jobIdSuffix,
+        moderationStatus: "pending",
+        reason,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Rerun moderation error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to enqueue moderation rerun",
+    });
+  }
+};
+
+/**
+ * PATCH /api/admin/moderation/:id/assign
+ */
+export const assignModeration = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId!;
+    const { assigneeId } = req.body || {};
+
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid media ID" });
+      return;
+    }
+
+    if (assigneeId !== null && assigneeId !== undefined && assigneeId !== "") {
+      if (!Types.ObjectId.isValid(assigneeId)) {
+        res.status(400).json({ success: false, message: "Invalid assigneeId" });
+        return;
+      }
+      const assignee = await User.findById(assigneeId).select("role email");
+      if (!assignee || assignee.role !== "admin") {
+        res.status(400).json({
+          success: false,
+          message: "assigneeId must be an admin user",
+        });
+        return;
+      }
+    }
+
+    const media = await Media.findByIdAndUpdate(
+      id,
+      {
+        moderationAssignee:
+          assigneeId && assigneeId !== ""
+            ? new Types.ObjectId(assigneeId)
+            : null,
+      },
+      { new: true }
+    )
+      .select(MEDIA_SELECT)
+      .populate("uploadedBy", "firstName lastName email username")
+      .populate("moderationAssignee", "firstName lastName email");
+
+    if (!media) {
+      res.status(404).json({ success: false, message: "Media not found" });
+      return;
+    }
+
+    await AuditService.logAdminAction(adminId, "assign_moderation", id, {
+      assigneeId: assigneeId || null,
+    });
+
+    const preview = await resolveAdminMediaPreview(media.toObject() as any);
+    res.status(200).json({
+      success: true,
+      data: shapeAdminMediaCard(media.toObject(), preview),
+    });
+  } catch (error: any) {
+    logger.error("Assign moderation error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to assign" });
+  }
+};
+
+/**
+ * GET /api/admin/moderation/:id/notes
+ * POST /api/admin/moderation/:id/notes
+ */
+export const getModerationNotes = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid media ID" });
+      return;
+    }
+    const media = await Media.findById(id)
+      .select("moderationNoteThread adminModerationNotes")
+      .lean();
+    if (!media) {
+      res.status(404).json({ success: false, message: "Media not found" });
+      return;
+    }
+    const thread = ((media as any).moderationNoteThread || []).map((n: any) => ({
+      body: n.body,
+      authorId: n.authorId?.toString?.() || null,
+      authorEmail: n.authorEmail || null,
+      createdAt: n.createdAt,
+    }));
+    res.status(200).json({
+      success: true,
+      data: {
+        notes: thread,
+        legacyNote: (media as any).adminModerationNotes || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Get moderation notes error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to get notes" });
+  }
+};
+
+export const addModerationNote = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminId = req.userId!;
+    const body =
+      typeof req.body?.body === "string" ? req.body.body.trim() : "";
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid media ID" });
+      return;
+    }
+    if (!body) {
+      res.status(400).json({ success: false, message: "body is required" });
+      return;
+    }
+
+    const author = await User.findById(adminId).select("email");
+    const note = {
+      body: body.slice(0, 2000),
+      authorId: new Types.ObjectId(adminId),
+      authorEmail: author?.email || null,
+      createdAt: new Date(),
+    };
+
+    const media = await Media.findByIdAndUpdate(
+      id,
+      { $push: { moderationNoteThread: note } },
+      { new: true }
+    ).select("moderationNoteThread");
+
+    if (!media) {
+      res.status(404).json({ success: false, message: "Media not found" });
+      return;
+    }
+
+    await AuditService.logAdminAction(adminId, "add_moderation_note", id, {
+      preview: body.slice(0, 120),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        note: {
+          body: note.body,
+          authorId: adminId,
+          authorEmail: note.authorEmail,
+          createdAt: note.createdAt,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("Add moderation note error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to add note" });
   }
 };
 

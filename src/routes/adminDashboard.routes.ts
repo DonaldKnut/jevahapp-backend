@@ -35,6 +35,10 @@ import {
   updateAdminMediaMetadata,
   listAdminChurches,
   refreshAdminMediaPreview,
+  rerunModeration,
+  assignModeration,
+  getModerationNotes,
+  addModerationNote,
 } from "../controllers/adminModeration.controller";
 import {
   createChurch,
@@ -46,6 +50,9 @@ import {
   sendAdminEmail,
   getRecentUploads,
   getDashboardFeed,
+  listAdminNotifications,
+  markAdminNotificationsRead,
+  listAdminCopyrightFreeAudio,
 } from "../controllers/adminOps.controller";
 import {
   getAdminConfig,
@@ -248,6 +255,30 @@ router.get(
   getRecentUploads
 );
 
+router.get(
+  "/audio/copyright-free",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminCopyrightFreeAudio
+);
+
+router.get(
+  "/notifications",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminNotifications
+);
+
+router.post(
+  "/notifications/read",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  markAdminNotificationsRead
+);
+
 router.post(
   "/email",
   verifyToken,
@@ -339,6 +370,38 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   bulkUpdateModerationStatus
+);
+
+router.post(
+  "/moderation/:id/rerun",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  rerunModeration
+);
+
+router.patch(
+  "/moderation/:id/assign",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  assignModeration
+);
+
+router.get(
+  "/moderation/:id/notes",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getModerationNotes
+);
+
+router.post(
+  "/moderation/:id/notes",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  addModerationNote
 );
 
 router.get(

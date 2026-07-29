@@ -44,7 +44,9 @@ export const getPlatformAnalytics = async (
       newMedia7d,
       newMedia30d,
       pendingModeration,
+      underReviewModeration,
       rejectedContent,
+      approvedToday,
       totalReports,
       pendingReports,
       bannedUsers,
@@ -60,10 +62,13 @@ export const getPlatformAnalytics = async (
       Media.countDocuments({ createdAt: { $gte: last24Hours } }),
       Media.countDocuments({ createdAt: { $gte: last7Days } }),
       Media.countDocuments({ createdAt: { $gte: last30Days } }),
-      Media.countDocuments({
-        moderationStatus: { $in: ["pending", "under_review"] },
-      }),
+      Media.countDocuments({ moderationStatus: "pending" }),
+      Media.countDocuments({ moderationStatus: "under_review" }),
       Media.countDocuments({ moderationStatus: "rejected" }),
+      Media.countDocuments({
+        moderationStatus: "approved",
+        updatedAt: { $gte: last24Hours },
+      }),
       MediaReport.countDocuments(),
       MediaReport.countDocuments({ status: "pending" }),
       User.countDocuments({ isBanned: true }),
@@ -114,6 +119,21 @@ export const getPlatformAnalytics = async (
       },
     ]);
 
+    const flagAgg = await Media.aggregate([
+      { $match: { "moderationResult.flags.0": { $exists: true } } },
+      { $unwind: "$moderationResult.flags" },
+      { $group: { _id: "$moderationResult.flags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]);
+    const byFlag = flagAgg.reduce(
+      (acc: Record<string, number>, item: any) => {
+        if (item._id) acc[item._id] = item.count;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
     res.status(200).json({
       success: true,
       data: {
@@ -147,7 +167,11 @@ export const getPlatformAnalytics = async (
         },
         moderation: {
           pending: pendingModeration,
+          under_review: underReviewModeration,
           rejected: rejectedContent,
+          approvedToday,
+          avgReviewMinutes: null,
+          byFlag,
           statusDistribution: moderationDistribution.reduce(
             (acc, item) => {
               acc[item._id || "none"] = item.count;
@@ -839,9 +863,10 @@ export const getModerationQueue = async (
     const [docs, total] = await Promise.all([
       Media.find(query)
         .select(
-          "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+          "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes moderationAssignee isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
         )
         .populate("uploadedBy", "firstName lastName email username")
+        .populate("moderationAssignee", "firstName lastName email")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

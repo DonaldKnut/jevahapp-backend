@@ -15,6 +15,7 @@ Last updated: July 2026 (post-modularization refactor)
 9. **[FRONTEND_VIEW_HANDOFF.md](./FRONTEND_VIEW_HANDOFF.md)** — Media views (thresholds, `counted`, sockets)
 10. **[ADMIN.md](./ADMIN.md)** — Admin dashboard API (reports, moderation, verification, bans)
 11. **[FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md)** — Admin UI screen recipes and action maps
+11b. **[FRONTEND_ADMIN_HANDOFF_STATUS.md](./FRONTEND_ADMIN_HANDOFF_STATUS.md)** — Done/partial/missing vs web FE handoff
 12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Moderation + reports handoff for the web admin team (card shapes, P1 wiring)
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers

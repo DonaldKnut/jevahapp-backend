@@ -103,6 +103,19 @@ export function shapeAdminMediaCard(
     likeCount: media.likeCount || 0,
     viewCount: media.viewCount || 0,
     adminModerationNotes: media.adminModerationNotes || null,
+    assignee: (() => {
+      const a = media.moderationAssignee;
+      if (!a) return null;
+      if (typeof a === "object" && a._id) {
+        return {
+          id: a._id.toString(),
+          firstName: a.firstName,
+          lastName: a.lastName,
+          email: a.email,
+        };
+      }
+      return { id: String(a) };
+    })(),
     moderationResult: media.moderationResult
       ? {
           isApproved: Boolean(media.moderationResult.isApproved),

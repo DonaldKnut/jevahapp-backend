@@ -5,6 +5,10 @@ import { Media } from "../models/media.model";
 import { MediaReport } from "../models/mediaReport.model";
 import { AuditService } from "../service/audit.service";
 import resendEmailService from "../service/resendEmail.service";
+import {
+  resolveAdminMediaPreview,
+  shapeAdminMediaCard,
+} from "../service/admin/mediaPreview.service";
 import logger from "../utils/logger";
 
 function getSocketService(): any | null {
@@ -288,12 +292,13 @@ export const getRecentUploads = async (req: Request, res: Response): Promise<voi
       filter.uploadedBy = new Types.ObjectId(req.query.uploadedBy as string);
     }
 
-    const [media, total] = await Promise.all([
+    const [docs, total] = await Promise.all([
       Media.find(filter)
         .select(
-          "title contentType thumbnailUrl moderationStatus isHidden reportCount likeCount viewCount createdAt uploadedBy"
+          "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes moderationAssignee isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
         )
         .populate("uploadedBy", "firstName lastName email username avatar role")
+        .populate("moderationAssignee", "firstName lastName email")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -301,32 +306,18 @@ export const getRecentUploads = async (req: Request, res: Response): Promise<voi
       Media.countDocuments(filter),
     ]);
 
+    const media = await Promise.all(
+      docs.map(async (doc: any) => {
+        const preview = await resolveAdminMediaPreview(doc);
+        return shapeAdminMediaCard(doc, preview);
+      })
+    );
+
     res.status(200).json({
       success: true,
       data: {
-        media: (media as any[]).map(m => ({
-          id: m._id.toString(),
-          title: m.title,
-          contentType: m.contentType,
-          thumbnailUrl: m.thumbnailUrl,
-          moderationStatus: m.moderationStatus,
-          isHidden: m.isHidden,
-          reportCount: m.reportCount || 0,
-          likeCount: m.likeCount || 0,
-          viewCount: m.viewCount || 0,
-          createdAt: m.createdAt,
-          uploader: m.uploadedBy
-            ? {
-                id: m.uploadedBy._id?.toString?.() || m.uploadedBy.toString(),
-                firstName: m.uploadedBy.firstName,
-                lastName: m.uploadedBy.lastName,
-                email: m.uploadedBy.email,
-                username: m.uploadedBy.username,
-                avatar: m.uploadedBy.avatar,
-                role: m.uploadedBy.role,
-              }
-            : null,
-        })),
+        media,
+        items: media,
         pagination: {
           page,
           limit,
@@ -451,5 +442,187 @@ export const getDashboardFeed = async (req: Request, res: Response): Promise<voi
   } catch (error: any) {
     logger.error("Get dashboard feed error", { error: error.message });
     res.status(500).json({ success: false, message: "Failed to fetch dashboard feed" });
+  }
+};
+
+/**
+ * GET /api/admin/notifications?unread=true
+ * Admin bell: content_report + moderation_alert for the current admin user.
+ */
+export const listAdminNotifications = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.userId!;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const unreadOnly = req.query.unread === "true";
+
+    const { Notification } = await import("../models/notification.model");
+    const query: Record<string, unknown> = {
+      user: adminId,
+      type: { $in: ["content_report", "moderation_alert", "admin_warning"] },
+    };
+    if (unreadOnly) query.isRead = false;
+
+    const [items, total, unreadCount] = await Promise.all([
+      Notification.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Notification.countDocuments(query),
+      Notification.countDocuments({
+        user: adminId,
+        type: { $in: ["content_report", "moderation_alert"] },
+        isRead: false,
+      }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        items: (items as any[]).map(n => ({
+          id: n._id.toString(),
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          isRead: !!n.isRead,
+          priority: n.priority,
+          metadata: n.metadata || {},
+          relatedId: n.relatedId?.toString?.() || null,
+          createdAt: n.createdAt,
+        })),
+        unreadCount,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("List admin notifications error", { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to list notifications",
+    });
+  }
+};
+
+/**
+ * POST /api/admin/notifications/read
+ * { ids: [] } | { all: true }
+ */
+export const markAdminNotificationsRead = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.userId!;
+    const { ids, all } = req.body || {};
+    const { NotificationService } = await import(
+      "../service/notification.service"
+    );
+
+    if (all === true) {
+      await NotificationService.markAllAsRead(adminId);
+      res.status(200).json({ success: true, data: { all: true } });
+      return;
+    }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "Provide ids[] or { all: true }",
+      });
+      return;
+    }
+
+    let marked = 0;
+    for (const id of ids.slice(0, 100)) {
+      if (!Types.ObjectId.isValid(id)) continue;
+      try {
+        await NotificationService.markAsRead(id, adminId);
+        marked += 1;
+      } catch {
+        // skip missing / not owned
+      }
+    }
+
+    res.status(200).json({ success: true, data: { marked } });
+  } catch (error: any) {
+    logger.error("Mark admin notifications read error", {
+      error: error.message,
+    });
+    res.status(500).json({
+      success: false,
+      message: "Failed to mark notifications read",
+    });
+  }
+};
+
+/**
+ * GET /api/admin/audio/copyright-free?search=&page=&limit=
+ */
+export const listAdminCopyrightFreeAudio = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const search = ((req.query.search as string) || "").trim();
+    const { CopyrightFreeSong } = await import(
+      "../models/copyrightFreeSong.model"
+    );
+
+    const filter: Record<string, unknown> = {};
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { singer: { $regex: search, $options: "i" } },
+        { category: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [songs, total] = await Promise.all([
+      CopyrightFreeSong.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      CopyrightFreeSong.countDocuments(filter),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        items: (songs as any[]).map(s => ({
+          id: s._id.toString(),
+          title: s.title,
+          singer: s.singer,
+          category: s.category || null,
+          fileUrl: s.fileUrl,
+          thumbnailUrl: s.thumbnailUrl || null,
+          duration: s.duration ?? null,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("List admin copyright-free audio error", {
+      error: error.message,
+    });
+    res.status(500).json({ success: false, message: "Failed to list audio" });
   }
 };

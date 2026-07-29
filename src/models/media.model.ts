@@ -137,6 +137,13 @@ export interface IMedia extends Document {
   };
   /** Free-text notes from admin review (approve/reject/hold or metadata edit). */
   adminModerationNotes?: string;
+  moderationAssignee?: mongoose.Types.ObjectId | null;
+  moderationNoteThread?: Array<{
+    body: string;
+    authorId?: mongoose.Types.ObjectId;
+    authorEmail?: string;
+    createdAt?: Date;
+  }>;
   reportCount?: number;
   isHidden?: boolean; // Hidden from public view due to reports/moderation
   /** SHA-256 of source file bytes for moderation decision reuse (not object sharing). */
@@ -599,6 +606,22 @@ const mediaSchema = new Schema<IMedia>(
       trim: true,
       maxlength: 2000,
     },
+    /** Queue assignment — admin user currently owning this review */
+    moderationAssignee: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    /** Append-only admin notes thread (does not replace adminModerationNotes) */
+    moderationNoteThread: [
+      {
+        body: { type: String, required: true, maxlength: 2000 },
+        authorId: { type: Schema.Types.ObjectId, ref: "User" },
+        authorEmail: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     reportCount: {
       type: Number,
       default: 0,

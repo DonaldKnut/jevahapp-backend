@@ -8,7 +8,7 @@ Authorization: Bearer <access_token>
 
 Caller must have `role: "admin"` (`requireAdmin`).
 
-**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) · **Moderation handoff:** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)
+**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) · **Moderation handoff:** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md) · **Handoff status:** [FRONTEND_ADMIN_HANDOFF_STATUS.md](./FRONTEND_ADMIN_HANDOFF_STATUS.md)
 
 ---
 
@@ -182,11 +182,19 @@ Prefer `/api/admin/reports/*` for new UI:
 | GET | `/api/admin/moderation/queue` | Shaped media cards + preview URLs (`pending`+`under_review` by default) |
 | GET | `/api/admin/moderation/:id` | Single media card + latest AI case summary |
 | GET | `/api/admin/moderation/:id/case` | Full ModerationCase history (AI evidence) |
+| GET | `/api/admin/moderation/:id/notes` | Append-only notes thread |
+| POST | `/api/admin/moderation/:id/notes` | `{ body }` add note |
+| PATCH | `/api/admin/moderation/:id/assign` | `{ assigneeId }` or `null` |
+| POST | `/api/admin/moderation/:id/rerun` | Re-enqueue AI moderation (`jobId`) |
 | PATCH | `/api/admin/moderation/:id/status` | `approved` \| `rejected` \| `under_review` + `adminNotes?` |
 | POST | `/api/admin/moderation/bulk` | Bulk status (max 50; partial success) |
-| PATCH | `/api/admin/media/:id` | Admin metadata edit (`title`, `description`, `adminModerationNotes`, `category`) |
-| POST | `/api/admin/media/:id/preview-refresh` | Re-issue signed `preview.*` (TTL ~3600s) |
-| GET | `/api/admin/media/search` | Paginated AdminMediaCard search (`q`, filters) |
+| PATCH | `/api/admin/media/:id` | Admin metadata edit |
+| POST | `/api/admin/media/:id/preview-refresh` | Re-issue signed `preview.*` |
+| GET | `/api/admin/media/search` | Paginated AdminMediaCard search |
+| GET | `/api/admin/media/recent` | Recent uploads as AdminMediaCard[] |
+| GET | `/api/admin/audio/copyright-free` | Admin paginated CF audio (`search`) |
+| GET | `/api/admin/notifications` | Admin bell (`unread=true`) |
+| POST | `/api/admin/notifications/read` | `{ ids }` or `{ all: true }` |
 | DELETE | `/api/admin/media/:id` | Admin force-delete any media |
 | DELETE | `/api/media/:id` | Owner or admin delete |
 
