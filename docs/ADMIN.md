@@ -8,7 +8,7 @@ Authorization: Bearer <access_token>
 
 Caller must have `role: "admin"` (`requireAdmin`).
 
-**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) · **Moderation handoff:** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md) · **Handoff status:** [FRONTEND_ADMIN_HANDOFF_STATUS.md](./FRONTEND_ADMIN_HANDOFF_STATUS.md)
+**Frontend UI guide:** [FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md) · **Moderation handoff:** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md) · **Handoff status:** [FRONTEND_ADMIN_HANDOFF_STATUS.md](./FRONTEND_ADMIN_HANDOFF_STATUS.md) · **Audio tracks:** [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md)
 
 ---
 
@@ -48,7 +48,8 @@ flowchart TD
 | GET | `/api/app/config` | **Public** (no auth) — mobile reads same shape |
 | GET | `/api/admin/activity` | Admin activity (`scope=all` master-only) |
 | GET | `/api/admin/media/recent` | Recent uploads (filter `moderationStatus`, `uploadedBy`) |
-| POST | `/api/admin/email` | Email users by `userIds` and/or `emails` (Resend) |
+| POST | `/api/admin/email` | Email users by `userIds` / `emails` / `churchIds` (`dryRun: true` supported) |
+| GET | `/api/admin/email/log` | Recent admin email sends + dry runs |
 
 ### Analytics payload (key fields)
 
@@ -193,6 +194,15 @@ Prefer `/api/admin/reports/*` for new UI:
 | GET | `/api/admin/media/search` | Paginated AdminMediaCard search |
 | GET | `/api/admin/media/recent` | Recent uploads as AdminMediaCard[] |
 | GET | `/api/admin/audio/copyright-free` | Admin paginated CF audio (`search`) |
+| GET | `/api/admin/audio/tracks` | Track catalog (`lane`, `search`, `visibility`) |
+| POST | `/api/admin/audio/tracks/upload-intent` | Presigned R2 PUT (audio + optional cover) |
+| POST | `/api/admin/audio/tracks/:trackId/finalize` | Probe duration + publish |
+| GET/PATCH/DELETE | `/api/admin/audio/tracks/:id` | Detail / metadata / hard-delete + R2 purge |
+| POST | `/api/admin/audio/tracks/:id/replace-audio|cover/intent` | Replace media |
+| GET/POST | `/api/admin/artists` | Creator/artist registry |
+| PATCH | `/api/admin/artists/:id` | Activate / suspend / verify |
+| GET/POST/PATCH | `/api/admin/announcements` | Broadcast drafts/publish |
+| GET/POST/DELETE | `/api/admin/categories` | Content category registry |
 | GET | `/api/admin/notifications` | Admin bell (`unread=true`) |
 | POST | `/api/admin/notifications/read` | `{ ids }` or `{ all: true }` |
 | DELETE | `/api/admin/media/:id` | Admin force-delete any media |
@@ -251,16 +261,23 @@ Churches in Mongo power **onboarding church search** (`GET /api/places/suggest`)
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/admin/churches` | Paginated list (`search`, `isVerified`, `isListed`, `source`, `hasContactEmail`) |
+| GET | `/api/admin/churches/:id` | Detail + branches |
 | POST | `/api/admin/churches` | **Add church** for onboarding catalog (+ contact fields) |
 | PATCH | `/api/admin/churches/:id` | Update name/contact/`isListed`/`isVerified`/notes |
+| PATCH/DELETE | `/api/admin/churches/:id/branches/:branchId` | Edit / remove branch |
 | DELETE | `/api/admin/churches/:id` | Remove church (+ branches by default) |
 | PATCH | `/api/admin/churches/:id/verification` | `{ "isVerified": true }` only |
 | POST | `/api/churches` | Same create (legacy mount) |
 | POST | `/api/churches/:id/branches` | Add branch |
 | POST | `/api/churches/bulk` | Bulk upsert |
-| POST | `/api/audio/copyright-free` | Create copyright-free song |
+| POST | `/api/audio/copyright-free` | Create copyright-free song (URL paste legacy) |
 | PUT | `/api/audio/copyright-free/:songId` | Update |
-| DELETE | `/api/audio/copyright-free/:songId` | Delete |
+| DELETE | `/api/audio/copyright-free/:songId` | Delete (+ R2 purge when keys exist) |
+| POST | `/api/creators/apply` | User applies as artist/minister/podcaster |
+| GET | `/api/creators/me` | Current creator application |
+| GET | `/api/app/announcements` | Public published announcements |
+
+Full Track upload contract: [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md).
 
 ### Create church body
 

@@ -24,7 +24,8 @@ export class CopyrightFreeSongService {
   async getAllSongs(
     page: number = 1,
     limit: number = 20,
-    category?: string
+    category?: string,
+    opts: { search?: string; updatedSince?: string } = {}
   ): Promise<{
     songs: ICopyrightFreeSong[];
     total: number;
@@ -33,13 +34,30 @@ export class CopyrightFreeSongService {
   }> {
     try {
       const skip = (page - 1) * limit;
-      
-      // Build query with optional category filter
-      const query: any = {};
+      const { publicCuratedReadyFilter } = await import(
+        "../modules/audio/track.formatter"
+      );
+
+      // Only published + ready curated tracks reach the mobile library
+      const query: any = publicCuratedReadyFilter();
       if (category && category.trim()) {
         query.category = { $regex: new RegExp(category.trim(), "i") };
       }
-      
+      if (opts.search?.trim()) {
+        const s = opts.search.trim();
+        query.$or = [
+          { title: new RegExp(s, "i") },
+          { singer: new RegExp(s, "i") },
+          { artistName: new RegExp(s, "i") },
+        ];
+      }
+      if (opts.updatedSince) {
+        const since = new Date(opts.updatedSince);
+        if (!Number.isNaN(since.getTime())) {
+          query.updatedAt = { $gte: since };
+        }
+      }
+
       const [songs, total] = await Promise.all([
         CopyrightFreeSong.find(query)
           .populate("uploadedBy", "firstName lastName avatar")
@@ -64,7 +82,13 @@ export class CopyrightFreeSongService {
 
   async getSongById(songId: string): Promise<ICopyrightFreeSong | null> {
     try {
-      const song = await CopyrightFreeSong.findById(songId)
+      const { publicCuratedReadyFilter } = await import(
+        "../modules/audio/track.formatter"
+      );
+      const song = await CopyrightFreeSong.findOne({
+        _id: songId,
+        ...publicCuratedReadyFilter(),
+      })
         .populate("uploadedBy", "firstName lastName avatar")
         .lean();
 
@@ -75,19 +99,55 @@ export class CopyrightFreeSongService {
     }
   }
 
+  /** Admin/internal fetch — includes drafts */
+  async getSongByIdAdmin(songId: string): Promise<ICopyrightFreeSong | null> {
+    try {
+      const song = await CopyrightFreeSong.findById(songId)
+        .populate("uploadedBy", "firstName lastName avatar")
+        .lean();
+      return song as ICopyrightFreeSong | null;
+    } catch (error: any) {
+      logger.error("Error getting copyright-free song (admin):", error);
+      throw error;
+    }
+  }
+
   async createSong(input: CreateSongInput): Promise<ICopyrightFreeSong> {
     try {
+      const now = new Date();
       const song = await CopyrightFreeSong.create({
         title: input.title,
         singer: input.singer,
+        artistName: input.singer,
         fileUrl: input.fileUrl,
         thumbnailUrl: input.thumbnailUrl,
         category: input.category,
         duration: input.duration,
+        durationSec: input.duration,
         uploadedBy: input.uploadedBy,
+        createdByAdminId: input.uploadedBy,
+        lane: "curated",
+        visibility: "published",
+        copyrightStatus: "copyright_free",
+        publishedAt: now,
+        audio: {
+          playbackUrl: input.fileUrl,
+          originalUrl: input.fileUrl,
+          signed: false,
+        },
+        artwork: input.thumbnailUrl
+          ? { url: input.thumbnailUrl, key: null }
+          : null,
+        processing: {
+          status: "ready",
+          error: null,
+          updatedAt: now,
+        },
         likeCount: 0,
         shareCount: 0,
+        saveCount: 0,
         viewCount: 0,
+        playCount: 0,
       });
 
       return song;
@@ -99,9 +159,22 @@ export class CopyrightFreeSongService {
 
   async updateSong(songId: string, input: UpdateSongInput): Promise<ICopyrightFreeSong | null> {
     try {
+      const $set: Record<string, unknown> = { ...input };
+      if (input.singer) {
+        $set.artistName = input.singer;
+        $set.singer = input.singer;
+      }
+      if (input.duration != null) {
+        $set.duration = input.duration;
+        $set.durationSec = input.duration;
+      }
+      if (input.thumbnailUrl) {
+        $set.thumbnailUrl = input.thumbnailUrl;
+        $set["artwork.url"] = input.thumbnailUrl;
+      }
       const song = await CopyrightFreeSong.findByIdAndUpdate(
         songId,
-        { $set: input },
+        { $set },
         { new: true, runValidators: true }
       );
 

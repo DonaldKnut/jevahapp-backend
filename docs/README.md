@@ -16,6 +16,7 @@ Last updated: July 2026 (post-modularization refactor)
 10. **[ADMIN.md](./ADMIN.md)** — Admin dashboard API (reports, moderation, verification, bans)
 11. **[FRONTEND_ADMIN.md](./FRONTEND_ADMIN.md)** — Admin UI screen recipes and action maps
 11b. **[FRONTEND_ADMIN_HANDOFF_STATUS.md](./FRONTEND_ADMIN_HANDOFF_STATUS.md)** — Done/partial/missing vs web FE handoff
+11c. **[FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md)** — Curated Track upload + Artists foundation
 12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Moderation + reports handoff for the web admin team (card shapes, P1 wiring)
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers

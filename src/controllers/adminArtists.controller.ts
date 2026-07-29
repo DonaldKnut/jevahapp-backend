@@ -1,0 +1,317 @@
+import { Request, Response } from "express";
+import { Types } from "mongoose";
+import { Artist, slugifyArtistName } from "../models/artist.model";
+import { User } from "../models/user.model";
+import { AuditService } from "../service/audit.service";
+import logger from "../utils/logger";
+
+function shapeArtist(doc: any) {
+  return {
+    id: doc._id.toString(),
+    userId: doc.userId?.toString?.() || doc.userId || null,
+    displayName: doc.displayName,
+    slug: doc.slug,
+    bio: doc.bio || null,
+    avatarUrl: doc.avatarUrl || null,
+    genres: doc.genres || [],
+    creatorTypes: doc.creatorTypes || ["artist"],
+    isVerified: Boolean(doc.isVerified),
+    status: doc.status,
+    socials: doc.socials || {},
+    applicationNote: doc.applicationNote || null,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    reviewedAt: doc.reviewedAt || null,
+  };
+}
+
+async function uniqueSlug(base: string): Promise<string> {
+  let slug = slugifyArtistName(base);
+  let n = 0;
+  while (await Artist.exists({ slug })) {
+    n += 1;
+    slug = `${slugifyArtistName(base)}-${n}`;
+  }
+  return slug;
+}
+
+/**
+ * GET /api/admin/artists
+ */
+export const listAdminArtists = async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
+    const limit = Math.min(
+      Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1),
+      100
+    );
+    const status = String(req.query.status || "").trim();
+    const search = String(req.query.search || "").trim();
+    const query: Record<string, unknown> = {};
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { displayName: new RegExp(search, "i") },
+        { slug: new RegExp(search, "i") },
+      ];
+    }
+    const skip = (page - 1) * limit;
+    const [rows, total] = await Promise.all([
+      Artist.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Artist.countDocuments(query),
+    ]);
+    res.status(200).json({
+      success: true,
+      data: {
+        items: rows.map(shapeArtist),
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("List artists error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to list artists" });
+  }
+};
+
+/**
+ * POST /api/admin/artists — register / stub artist (admin)
+ */
+export const createAdminArtist = async (req: Request, res: Response) => {
+  try {
+    const adminId = req.userId;
+    const {
+      displayName,
+      userId,
+      bio,
+      genres,
+      creatorTypes,
+      socials,
+      status,
+      isVerified,
+      avatarUrl,
+    } = req.body || {};
+
+    if (!displayName?.trim()) {
+      res.status(400).json({ success: false, message: "displayName is required" });
+      return;
+    }
+
+    if (userId && !Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ success: false, message: "Invalid userId" });
+      return;
+    }
+
+    const slug = await uniqueSlug(displayName);
+    const doc = await Artist.create({
+      displayName: displayName.trim(),
+      slug,
+      userId: userId || null,
+      bio: bio || null,
+      genres: Array.isArray(genres) ? genres : [],
+      creatorTypes: Array.isArray(creatorTypes) ? creatorTypes : ["artist"],
+      socials: socials || {},
+      status: status || "active",
+      isVerified: Boolean(isVerified),
+      avatarUrl: avatarUrl || null,
+      reviewedByAdminId: adminId || null,
+      reviewedAt: new Date(),
+    });
+
+    if (userId && (status === "active" || !status)) {
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          role: "artist",
+          isVerifiedArtist: Boolean(isVerified),
+          "artistProfile.artistName": displayName.trim(),
+          "artistProfile.isVerifiedArtist": Boolean(isVerified),
+        },
+      });
+    }
+
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "create_artist", doc._id.toString(), {
+        displayName,
+        status: doc.status,
+      });
+    }
+
+    res.status(201).json({ success: true, data: shapeArtist(doc) });
+  } catch (error: any) {
+    logger.error("Create artist error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to create artist" });
+  }
+};
+
+/**
+ * PATCH /api/admin/artists/:id
+ */
+export const patchAdminArtist = async (req: Request, res: Response) => {
+  try {
+    const adminId = req.userId;
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid artist id" });
+      return;
+    }
+    const artist = await Artist.findById(id);
+    if (!artist) {
+      res.status(404).json({ success: false, message: "Artist not found" });
+      return;
+    }
+
+    const body = req.body || {};
+    if (typeof body.displayName === "string" && body.displayName.trim()) {
+      artist.displayName = body.displayName.trim();
+    }
+    if (typeof body.bio === "string") artist.bio = body.bio;
+    if (typeof body.avatarUrl === "string") artist.avatarUrl = body.avatarUrl;
+    if (Array.isArray(body.genres)) artist.genres = body.genres;
+    if (Array.isArray(body.creatorTypes)) artist.creatorTypes = body.creatorTypes;
+    if (body.socials && typeof body.socials === "object") {
+      artist.socials = { ...(artist.socials || {}), ...body.socials };
+    }
+    if (typeof body.isVerified === "boolean") {
+      artist.isVerified = body.isVerified;
+    }
+    if (["pending", "active", "suspended"].includes(body.status)) {
+      artist.status = body.status;
+      artist.reviewedByAdminId = adminId
+        ? new Types.ObjectId(adminId)
+        : artist.reviewedByAdminId;
+      artist.reviewedAt = new Date();
+    }
+
+    await artist.save();
+
+    if (artist.userId && (body.status === "active" || body.isVerified != null)) {
+      const userPatch: Record<string, unknown> = {
+        isVerifiedArtist: artist.isVerified,
+        "artistProfile.artistName": artist.displayName,
+        "artistProfile.isVerifiedArtist": artist.isVerified,
+      };
+      if (artist.status === "active") {
+        userPatch.role = "artist";
+      }
+      await User.findByIdAndUpdate(artist.userId, { $set: userPatch });
+    }
+
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "update_artist", id, {
+        status: artist.status,
+        isVerified: artist.isVerified,
+      });
+    }
+
+    res.status(200).json({ success: true, data: shapeArtist(artist) });
+  } catch (error: any) {
+    logger.error("Patch artist error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to update artist" });
+  }
+};
+
+/**
+ * PATCH /api/admin/artists/:id/verification
+ */
+export const verifyAdminArtist = async (req: Request, res: Response) => {
+  req.body = { ...(req.body || {}), isVerified: Boolean(req.body?.isVerified) };
+  if (req.body.isVerified === true && !req.body.status) {
+    req.body.status = "active";
+  }
+  return patchAdminArtist(req, res);
+};
+
+/**
+ * POST /api/creators/apply — authenticated user applies to become artist/minister/podcaster
+ */
+export const applyAsCreator = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const existing = await Artist.findOne({ userId });
+    if (existing) {
+      res.status(200).json({
+        success: true,
+        data: shapeArtist(existing),
+        message: "Application already exists",
+      });
+      return;
+    }
+
+    const {
+      displayName,
+      bio,
+      genres,
+      creatorTypes,
+      socials,
+      applicationNote,
+      avatarUrl,
+    } = req.body || {};
+
+    const user = await User.findById(userId).select("firstName lastName artistProfile");
+    const name =
+      (typeof displayName === "string" && displayName.trim()) ||
+      user?.artistProfile?.artistName ||
+      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+      "Creator";
+
+    const types = Array.isArray(creatorTypes) && creatorTypes.length
+      ? creatorTypes.filter((t: string) =>
+          ["artist", "minister", "podcaster"].includes(t)
+        )
+      : ["artist"];
+
+    const slug = await uniqueSlug(name);
+    const doc = await Artist.create({
+      userId,
+      displayName: name,
+      slug,
+      bio: bio || null,
+      genres: Array.isArray(genres) ? genres : [],
+      creatorTypes: types.length ? types : ["artist"],
+      socials: socials || {},
+      applicationNote: applicationNote || null,
+      avatarUrl: avatarUrl || null,
+      status: "pending",
+      isVerified: false,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: shapeArtist(doc),
+      message:
+        "Application received. You can upload to the artist catalog after an admin activates your profile.",
+    });
+  } catch (error: any) {
+    logger.error("Creator apply error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to submit application" });
+  }
+};
+
+/**
+ * GET /api/creators/me — current user's artist/creator application
+ */
+export const getMyCreatorProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const doc = await Artist.findOne({ userId }).lean();
+    res.status(200).json({
+      success: true,
+      data: doc ? shapeArtist(doc) : null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Failed to load creator profile" });
+  }
+};

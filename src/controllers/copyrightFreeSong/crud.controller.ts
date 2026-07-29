@@ -9,34 +9,38 @@ export const getAllSongs = async (req: Request, res: Response): Promise<void> =>
     const page = parseInt(req.query.page as string) || 1;
     let limit = parseInt(req.query.limit as string) || 20;
     const category = req.query.category as string | undefined;
+    const search = (req.query.search as string) || undefined;
+    const updatedSince = (req.query.updatedSince as string) || undefined;
 
     // Enforce maximum limit for mobile-friendly payloads
     limit = Math.min(Math.max(limit, 1), 100);
 
-    const result = await songService.getAllSongs(page, limit, category);
+    const result = await songService.getAllSongs(page, limit, category, {
+      search,
+      updatedSince,
+    });
 
-    // Normalize payload: audioUrl, views/likes aliases, and viewCount >= likeCount invariant
+    const { shapePublicSong } = await import("../../modules/audio/track.formatter");
+    const { CopyrightFreeSongService } = await import(
+      "../../service/copyrightFreeSong.service"
+    );
+
     const songs = (result.songs || []).map((s: any) => {
-      const fileUrl = normalizeUrl(s.fileUrl);
       const viewCount = CopyrightFreeSongService.normalizedViewCount(s);
       const likeCount = s.likeCount ?? s.likes ?? 0;
-      return {
-        ...s,
-        id: s._id?.toString?.() || s.id,
-        artist: s.singer,
-        audioUrl: fileUrl,
-        fileUrl,
+      return shapePublicSong(s, {
         viewCount,
         views: viewCount,
         likeCount,
         likes: likeCount,
-      };
+      });
     });
 
     res.status(200).json({
       success: true,
       data: {
         songs,
+        items: songs,
         pagination: {
           total: result.total,
           page: result.page,
@@ -164,30 +168,51 @@ export const streamSong = async (req: Request, res: Response): Promise<void> => 
 
 export const createSong = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, singer, fileUrl, thumbnailUrl, category, duration } = req.body;
+    const {
+      title,
+      singer,
+      artistName,
+      fileUrl,
+      playbackUrl,
+      thumbnailUrl,
+      category,
+      duration,
+      durationSec,
+    } = req.body;
     const uploadedBy = req.userId;
+    const displayArtist = artistName || singer;
+    const audioUrl = playbackUrl || fileUrl;
 
-    if (!title || !singer || !fileUrl || !uploadedBy) {
+    if (!title || !displayArtist || !audioUrl || !uploadedBy) {
       res.status(400).json({
         success: false,
-        message: "Title, singer, fileUrl, and uploadedBy are required",
+        message: "Title, singer/artistName, fileUrl/playbackUrl, and auth are required",
       });
       return;
     }
 
     const song = await songService.createSong({
       title,
-      singer,
-      fileUrl,
+      singer: displayArtist,
+      fileUrl: audioUrl,
       thumbnailUrl,
       category,
-      duration,
+      duration: durationSec ?? duration,
       uploadedBy,
     });
 
+    const { shapeTrackCard } = await import("../../modules/audio/track.formatter");
+    const { AuditService } = await import("../../service/audit.service");
+    await AuditService.logAdminAction(
+      uploadedBy,
+      "create_track",
+      (song as any)._id.toString(),
+      { source: "legacy_url_post", lane: "curated" }
+    );
+
     res.status(201).json({
       success: true,
-      data: song,
+      data: shapeTrackCard(song.toObject ? song.toObject() : song),
     });
   } catch (error: any) {
     logger.error("Error creating song:", error);
@@ -202,14 +227,22 @@ export const createSong = async (req: Request, res: Response): Promise<void> => 
 export const updateSong = async (req: Request, res: Response): Promise<void> => {
   try {
     const { songId } = req.params;
-    const { title, singer, thumbnailUrl, category, duration } = req.body;
-
-    const song = await songService.updateSong(songId, {
+    const {
       title,
       singer,
+      artistName,
       thumbnailUrl,
       category,
       duration,
+      durationSec,
+    } = req.body;
+
+    const song = await songService.updateSong(songId, {
+      title,
+      singer: artistName || singer,
+      thumbnailUrl,
+      category,
+      duration: durationSec ?? duration,
     });
 
     if (!song) {
@@ -220,9 +253,10 @@ export const updateSong = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const { shapeTrackCard } = await import("../../modules/audio/track.formatter");
     res.status(200).json({
       success: true,
-      data: song,
+      data: shapeTrackCard(song.toObject ? song.toObject() : song),
     });
   } catch (error: any) {
     logger.error("Error updating song:", error);
@@ -237,9 +271,27 @@ export const updateSong = async (req: Request, res: Response): Promise<void> => 
 export const deleteSong = async (req: Request, res: Response): Promise<void> => {
   try {
     const { songId } = req.params;
+    const adminId = req.userId;
+
+    if (adminId) {
+      const { hardDeleteTrack, TrackUploadError } = await import(
+        "../../modules/audio/trackUpload.service"
+      );
+      try {
+        await hardDeleteTrack(songId, adminId);
+        res.status(200).json({
+          success: true,
+          message: "Song deleted successfully",
+        });
+        return;
+      } catch (err: any) {
+        if (!(err instanceof TrackUploadError) || err.status !== 404) {
+          throw err;
+        }
+      }
+    }
 
     const deleted = await songService.deleteSong(songId);
-
     if (!deleted) {
       res.status(404).json({
         success: false,

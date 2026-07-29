@@ -150,7 +150,8 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { userIds, emails, churchIds, subject, message, html } = req.body || {};
+    const { userIds, emails, churchIds, subject, message, html, dryRun } =
+      req.body || {};
 
     if (!subject || typeof subject !== "string" || !subject.trim()) {
       res.status(400).json({ success: false, message: "subject is required" });
@@ -230,6 +231,37 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
             <p style="color:#888;font-size:12px">Sent by Jevah Admin</p>
           </div>`;
 
+    if (dryRun === true) {
+      const { AdminEmailLog } = await import("../models/adminEmailLog.model");
+      await AdminEmailLog.create({
+        adminId,
+        subject: subject.trim(),
+        recipientCount: recipients.length,
+        recipientsSample: recipients.slice(0, 20),
+        dryRun: true,
+        sent: 0,
+        failed: 0,
+        meta: { churchRecipientMeta: churchRecipientMeta.slice(0, 20) },
+      });
+      await AuditService.logAdminAction(adminId, "send_email_dry_run", undefined, {
+        subject: subject.trim(),
+        recipientCount: recipients.length,
+      });
+      res.status(200).json({
+        success: true,
+        message: `Dry run: would send to ${recipients.length} recipients`,
+        data: {
+          dryRun: true,
+          sent: 0,
+          failed: 0,
+          recipientCount: recipients.length,
+          recipients: recipients.slice(0, 50),
+          churchesEmailed: churchRecipientMeta,
+        },
+      });
+      return;
+    }
+
     const results: Array<{ email: string; ok: boolean; error?: string }> = [];
     for (const to of recipients) {
       try {
@@ -245,6 +277,19 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
     }
 
     const sent = results.filter(r => r.ok).length;
+    const failed = recipients.length - sent;
+    const { AdminEmailLog } = await import("../models/adminEmailLog.model");
+    await AdminEmailLog.create({
+      adminId,
+      subject: subject.trim(),
+      recipientCount: recipients.length,
+      recipientsSample: recipients.slice(0, 20),
+      dryRun: false,
+      sent,
+      failed,
+      meta: { churchRecipientMeta: churchRecipientMeta.slice(0, 20) },
+    });
+
     await AuditService.logAdminAction(adminId, "send_email", undefined, {
       subject: subject.trim(),
       recipientCount: recipients.length,
@@ -259,7 +304,7 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
       message: `Sent ${sent} of ${recipients.length} emails`,
       data: {
         sent,
-        failed: recipients.length - sent,
+        failed,
         results,
         churchesEmailed: churchRecipientMeta,
         churchesSkippedNoEmail: Array.isArray(churchIds)
@@ -270,6 +315,52 @@ export const sendAdminEmail = async (req: Request, res: Response): Promise<void>
   } catch (error: any) {
     logger.error("Admin send email error", { error: error.message });
     res.status(500).json({ success: false, message: "Failed to send email" });
+  }
+};
+
+/**
+ * GET /api/admin/email/log
+ */
+export const listAdminEmailLog = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const skip = (page - 1) * limit;
+    const { AdminEmailLog } = await import("../models/adminEmailLog.model");
+    const [rows, total] = await Promise.all([
+      AdminEmailLog.find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("adminId", "firstName lastName email")
+        .lean(),
+      AdminEmailLog.countDocuments(),
+    ]);
+    res.status(200).json({
+      success: true,
+      data: {
+        items: rows.map((r: any) => ({
+          id: r._id.toString(),
+          subject: r.subject,
+          recipientCount: r.recipientCount,
+          recipientsSample: r.recipientsSample,
+          dryRun: r.dryRun,
+          sent: r.sent,
+          failed: r.failed,
+          admin: r.adminId,
+          createdAt: r.createdAt,
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("List email log error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to list email log" });
   }
 };
 

@@ -44,16 +44,46 @@ import {
   createChurch,
   updateChurch,
   deleteChurch,
+  getChurchById,
+  updateChurchBranch,
+  deleteChurchBranch,
 } from "../controllers/churches.admin.controller";
 import {
   getUsersPresence,
   sendAdminEmail,
+  listAdminEmailLog,
   getRecentUploads,
   getDashboardFeed,
   listAdminNotifications,
   markAdminNotificationsRead,
   listAdminCopyrightFreeAudio,
 } from "../controllers/adminOps.controller";
+import {
+  listAdminTracks,
+  getAdminTrack,
+  createAdminTrackUploadIntent,
+  finalizeAdminTrack,
+  patchAdminTrack,
+  deleteAdminTrack,
+  replaceAdminTrackAudioIntent,
+  finalizeAdminTrackAudioReplace,
+  replaceAdminTrackCoverIntent,
+  finalizeAdminTrackCoverReplace,
+} from "../controllers/adminAudioTracks.controller";
+import {
+  listAdminArtists,
+  createAdminArtist,
+  patchAdminArtist,
+  verifyAdminArtist,
+} from "../controllers/adminArtists.controller";
+import {
+  listAdminAnnouncements,
+  createAdminAnnouncement,
+  patchAdminAnnouncement,
+  listAdminCategories,
+  upsertAdminCategory,
+  deleteAdminCategory,
+} from "../controllers/adminCatalog.controller";
 import {
   getAdminConfig,
   patchAdminConfig,
@@ -198,6 +228,30 @@ router.post(
   createChurch
 );
 
+router.get(
+  "/churches/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getChurchById
+);
+
+router.patch(
+  "/churches/:id/branches/:branchId",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  updateChurchBranch
+);
+
+router.delete(
+  "/churches/:id/branches/:branchId",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  deleteChurchBranch
+);
+
 router.patch(
   "/churches/:id",
   verifyToken,
@@ -263,6 +317,167 @@ router.get(
   listAdminCopyrightFreeAudio
 );
 
+/** Phase-1 Track catalog (presigned upload) — keep static paths before :id */
+router.get(
+  "/audio/tracks",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminTracks
+);
+
+router.post(
+  "/audio/tracks/upload-intent",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  createAdminTrackUploadIntent
+);
+
+router.post(
+  "/audio/tracks/:trackId/finalize",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  finalizeAdminTrack
+);
+
+router.post(
+  "/audio/tracks/:id/replace-audio/intent",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  replaceAdminTrackAudioIntent
+);
+
+router.post(
+  "/audio/tracks/:id/replace-audio/finalize",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  finalizeAdminTrackAudioReplace
+);
+
+router.post(
+  "/audio/tracks/:id/replace-cover/intent",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  replaceAdminTrackCoverIntent
+);
+
+router.post(
+  "/audio/tracks/:id/replace-cover/finalize",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  finalizeAdminTrackCoverReplace
+);
+
+router.get(
+  "/audio/tracks/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  getAdminTrack
+);
+
+router.patch(
+  "/audio/tracks/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  patchAdminTrack
+);
+
+router.delete(
+  "/audio/tracks/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  deleteAdminTrack
+);
+
+router.get(
+  "/artists",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminArtists
+);
+
+router.post(
+  "/artists",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  createAdminArtist
+);
+
+router.patch(
+  "/artists/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  patchAdminArtist
+);
+
+router.patch(
+  "/artists/:id/verification",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  verifyAdminArtist
+);
+
+router.get(
+  "/announcements",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminAnnouncements
+);
+
+router.post(
+  "/announcements",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  createAdminAnnouncement
+);
+
+router.patch(
+  "/announcements/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  patchAdminAnnouncement
+);
+
+router.get(
+  "/categories",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminCategories
+);
+
+router.post(
+  "/categories",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  upsertAdminCategory
+);
+
+router.delete(
+  "/categories/:id",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  deleteAdminCategory
+);
+
 router.get(
   "/notifications",
   verifyToken,
@@ -285,6 +500,14 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   sendAdminEmail
+);
+
+router.get(
+  "/email/log",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminEmailLog
 );
 
 router.get("/reports", verifyToken, requireAdmin, apiRateLimiter, listAdminReports);

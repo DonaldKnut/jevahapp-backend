@@ -1,0 +1,528 @@
+import { Types } from "mongoose";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { CopyrightFreeSong, ICopyrightFreeSong } from "../../models/copyrightFreeSong.model";
+import fileUploadService from "../../service/fileUpload.service";
+import { AuditService } from "../../service/audit.service";
+import { hasFfprobe } from "../../utils/mediaTools";
+import logger from "../../utils/logger";
+import {
+  ALLOWED_AUDIO_MIME,
+  ALLOWED_COVER_MIME,
+  TRACK_AUDIO_MAX_BYTES,
+  TRACK_COVER_MAX_BYTES,
+  TRACK_PRESIGN_EXPIRES_SEC,
+  extFromMime,
+  normalizeCategory,
+  normalizeGenre,
+} from "./track.constants";
+import { shapeTrackCard } from "./track.formatter";
+
+const execFileAsync = promisify(execFile);
+
+export class TrackUploadError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status = 400, code?: string) {
+    super(message);
+    this.name = "TrackUploadError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface UploadIntentInput {
+  adminId: string;
+  title: string;
+  artistName: string;
+  category?: string;
+  genre?: string;
+  language?: string;
+  copyrightStatus?: string;
+  licenseNote?: string;
+  lane?: "curated" | "artist";
+  artistId?: string | null;
+  contentType: string;
+  fileName: string;
+  fileSizeBytes: number;
+  coverContentType?: string;
+  coverFileName?: string;
+  coverFileSizeBytes?: number;
+}
+
+async function probeDurationSec(url: string): Promise<number | null> {
+  if (!(await hasFfprobe())) return null;
+  try {
+    const { stdout } = await execFileAsync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        url,
+      ],
+      { timeout: 90_000 }
+    );
+    const n = parseFloat(String(stdout).trim());
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  } catch (err: any) {
+    logger.warn("ffprobe duration failed for track", {
+      error: err?.message,
+      url: url.slice(0, 120),
+    });
+    return null;
+  }
+}
+
+function assertAudioMime(mime: string) {
+  if (!ALLOWED_AUDIO_MIME.has(mime.toLowerCase())) {
+    throw new TrackUploadError(
+      `Unsupported audio type: ${mime}. Allowed: mp3, m4a, wav`,
+      400,
+      "INVALID_AUDIO_TYPE"
+    );
+  }
+}
+
+function assertCoverMime(mime: string) {
+  if (!ALLOWED_COVER_MIME.has(mime.toLowerCase())) {
+    throw new TrackUploadError(
+      `Unsupported cover type: ${mime}. Allowed: jpeg, png, webp`,
+      400,
+      "INVALID_COVER_TYPE"
+    );
+  }
+}
+
+export async function createTrackUploadIntent(input: UploadIntentInput) {
+  const {
+    adminId,
+    title,
+    artistName,
+    contentType,
+    fileName,
+    fileSizeBytes,
+  } = input;
+
+  if (!Types.ObjectId.isValid(adminId)) {
+    throw new TrackUploadError("Invalid admin", 401);
+  }
+  if (!title?.trim() || !artistName?.trim()) {
+    throw new TrackUploadError("title and artistName are required");
+  }
+  assertAudioMime(contentType);
+  if (!fileSizeBytes || fileSizeBytes <= 0) {
+    throw new TrackUploadError("fileSizeBytes is required");
+  }
+  if (fileSizeBytes > TRACK_AUDIO_MAX_BYTES) {
+    throw new TrackUploadError(
+      `Audio exceeds ${TRACK_AUDIO_MAX_BYTES / (1024 * 1024)}MB limit`,
+      400,
+      "FILE_TOO_LARGE"
+    );
+  }
+
+  const lane = input.lane === "artist" ? "artist" : "curated";
+  if (lane === "artist" && input.artistId && !Types.ObjectId.isValid(input.artistId)) {
+    throw new TrackUploadError("Invalid artistId");
+  }
+
+  const trackId = new Types.ObjectId();
+  const audioExt = extFromMime(contentType, fileName);
+  const audioKey = `audio/${lane}/${trackId.toString()}/original.${audioExt}`;
+
+  let coverKey: string | null = null;
+  let coverPutUrl: string | null = null;
+  if (input.coverContentType) {
+    assertCoverMime(input.coverContentType);
+    const coverSize = input.coverFileSizeBytes || 0;
+    if (coverSize > TRACK_COVER_MAX_BYTES) {
+      throw new TrackUploadError(
+        `Cover exceeds ${TRACK_COVER_MAX_BYTES / (1024 * 1024)}MB limit`,
+        400,
+        "COVER_TOO_LARGE"
+      );
+    }
+    const coverExt = extFromMime(
+      input.coverContentType,
+      input.coverFileName || "cover.jpg"
+    );
+    coverKey = `audio/${lane}/${trackId.toString()}/cover.${coverExt}`;
+    coverPutUrl = await fileUploadService.getPresignedPutUrl(
+      coverKey,
+      input.coverContentType,
+      coverSize > 0 ? coverSize : undefined,
+      TRACK_PRESIGN_EXPIRES_SEC
+    );
+  }
+
+  const audioPutUrl = await fileUploadService.getPresignedPutUrl(
+    audioKey,
+    contentType,
+    fileSizeBytes,
+    TRACK_PRESIGN_EXPIRES_SEC
+  );
+
+  const pendingUrl = `pending://${audioKey}`;
+  const now = new Date();
+
+  await CopyrightFreeSong.create({
+    _id: trackId,
+    title: title.trim(),
+    singer: artistName.trim(),
+    artistName: artistName.trim(),
+    uploadedBy: new Types.ObjectId(adminId),
+    createdByAdminId: new Types.ObjectId(adminId),
+    fileUrl: pendingUrl,
+    thumbnailUrl: null,
+    category: normalizeCategory(input.category),
+    genre: normalizeGenre(input.genre),
+    language: input.language?.trim() || null,
+    lane,
+    visibility: "draft",
+    copyrightStatus: input.copyrightStatus || "copyright_free",
+    licenseNote: input.licenseNote?.trim() || null,
+    artistId:
+      lane === "artist" && input.artistId
+        ? new Types.ObjectId(input.artistId)
+        : null,
+    audio: {
+      originalKey: audioKey,
+      originalUrl: null,
+      playbackUrl: pendingUrl,
+      format: contentType,
+      fileSizeBytes,
+      signed: false,
+    },
+    artwork: coverKey ? { key: coverKey, url: null } : null,
+    processing: {
+      status: "pending",
+      error: null,
+      updatedAt: now,
+    },
+    likeCount: 0,
+    shareCount: 0,
+    saveCount: 0,
+    viewCount: 0,
+    playCount: 0,
+  });
+
+  await AuditService.logAdminAction(adminId, "create_track", trackId.toString(), {
+    lane,
+    title: title.trim(),
+    stage: "upload_intent",
+  });
+
+  return {
+    trackId: trackId.toString(),
+    audio: {
+      putUrl: audioPutUrl,
+      key: audioKey,
+      headers: { "Content-Type": contentType },
+      expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+    },
+    cover: coverKey
+      ? {
+          putUrl: coverPutUrl,
+          key: coverKey,
+          headers: { "Content-Type": input.coverContentType },
+          expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+        }
+      : null,
+  };
+}
+
+export async function finalizeTrackUpload(
+  trackId: string,
+  adminId: string,
+  opts: { publish?: boolean } = {}
+) {
+  if (!Types.ObjectId.isValid(trackId)) {
+    throw new TrackUploadError("Invalid track id");
+  }
+
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const audioKey = track.audio?.originalKey;
+  if (!audioKey) {
+    throw new TrackUploadError("Track has no audio key — create via upload-intent");
+  }
+
+  track.processing = {
+    ...(track.processing || { status: "pending" }),
+    status: "processing",
+    error: null,
+    updatedAt: new Date(),
+  };
+  await track.save();
+
+  try {
+    const head = await fileUploadService.headObject(audioKey);
+    const size = Number(head.ContentLength || track.audio?.fileSizeBytes || 0);
+    const playbackUrl = fileUploadService.generatePublicUrl(audioKey);
+
+    let coverUrl: string | null = track.thumbnailUrl || null;
+    const coverKey = track.artwork?.key;
+    if (coverKey) {
+      try {
+        await fileUploadService.headObject(coverKey);
+        coverUrl = fileUploadService.generatePublicUrl(coverKey);
+      } catch {
+        logger.warn("Cover object missing on finalize", { trackId, coverKey });
+      }
+    }
+
+    const durationSec = await probeDurationSec(playbackUrl);
+
+    track.fileUrl = playbackUrl;
+    track.thumbnailUrl = coverUrl;
+    track.duration = durationSec;
+    track.durationSec = durationSec;
+    track.audio = {
+      ...(track.audio || {}),
+      originalKey: audioKey,
+      originalUrl: playbackUrl,
+      playbackUrl,
+      format: track.audio?.format || head.ContentType || null,
+      fileSizeBytes: size || track.audio?.fileSizeBytes || null,
+      signed: false,
+      expiresInSeconds: null,
+    };
+    if (coverKey) {
+      track.artwork = { key: coverKey, url: coverUrl };
+    }
+    track.processing = {
+      status: "ready",
+      error: null,
+      waveformUrl: null,
+      updatedAt: new Date(),
+    };
+
+    const publish = opts.publish !== false;
+    if (publish) {
+      track.visibility = "published";
+      track.publishedAt = new Date();
+    }
+
+    await track.save();
+
+    await AuditService.logAdminAction(adminId, "finalize_track", trackId, {
+      publish,
+      durationSec,
+      audioKey,
+    });
+
+    return shapeTrackCard(track.toObject());
+  } catch (err: any) {
+    track.processing = {
+      status: "failed",
+      error: err?.message || "Finalize failed",
+      updatedAt: new Date(),
+    };
+    await track.save().catch(() => undefined);
+
+    if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) {
+      throw new TrackUploadError(
+        "Audio object not found in storage — complete the presigned PUT first",
+        400,
+        "OBJECT_MISSING"
+      );
+    }
+    if (err instanceof TrackUploadError) throw err;
+    throw new TrackUploadError(
+      err?.message || "Failed to finalize track",
+      500,
+      "FINALIZE_FAILED"
+    );
+  }
+}
+
+export async function createReplaceAudioIntent(
+  trackId: string,
+  adminId: string,
+  input: { contentType: string; fileName: string; fileSizeBytes: number }
+) {
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+  assertAudioMime(input.contentType);
+  if (input.fileSizeBytes > TRACK_AUDIO_MAX_BYTES) {
+    throw new TrackUploadError("Audio file too large", 400, "FILE_TOO_LARGE");
+  }
+
+  const lane = track.lane || "curated";
+  const ext = extFromMime(input.contentType, input.fileName);
+  const key = `audio/${lane}/${trackId}/original.${ext}`;
+  const putUrl = await fileUploadService.getPresignedPutUrl(
+    key,
+    input.contentType,
+    input.fileSizeBytes,
+    TRACK_PRESIGN_EXPIRES_SEC
+  );
+
+  track.audio = {
+    ...(track.audio || {}),
+    originalKey: key,
+    format: input.contentType,
+    fileSizeBytes: input.fileSizeBytes,
+  };
+  track.processing = {
+    status: "pending",
+    error: null,
+    updatedAt: new Date(),
+  };
+  await track.save();
+
+  await AuditService.logAdminAction(adminId, "replace_track_audio_intent", trackId, {
+    key,
+  });
+
+  return {
+    trackId,
+    audio: {
+      putUrl,
+      key,
+      headers: { "Content-Type": input.contentType },
+      expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+    },
+  };
+}
+
+export async function createReplaceCoverIntent(
+  trackId: string,
+  adminId: string,
+  input: { contentType: string; fileName: string; fileSizeBytes?: number }
+) {
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+  assertCoverMime(input.contentType);
+  const size = input.fileSizeBytes || 0;
+  if (size > TRACK_COVER_MAX_BYTES) {
+    throw new TrackUploadError("Cover too large", 400, "COVER_TOO_LARGE");
+  }
+
+  const lane = track.lane || "curated";
+  const ext = extFromMime(input.contentType, input.fileName || "cover.jpg");
+  const key = `audio/${lane}/${trackId}/cover.${ext}`;
+  const putUrl = await fileUploadService.getPresignedPutUrl(
+    key,
+    input.contentType,
+    size > 0 ? size : undefined,
+    TRACK_PRESIGN_EXPIRES_SEC
+  );
+
+  track.artwork = { ...(track.artwork || {}), key, url: track.artwork?.url || null };
+  await track.save();
+
+  await AuditService.logAdminAction(adminId, "replace_track_cover_intent", trackId, {
+    key,
+  });
+
+  return {
+    trackId,
+    cover: {
+      putUrl,
+      key,
+      headers: { "Content-Type": input.contentType },
+      expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+    },
+  };
+}
+
+export async function finalizeReplaceCover(trackId: string, adminId: string) {
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+  const key = track.artwork?.key;
+  if (!key) throw new TrackUploadError("No cover key on track");
+  await fileUploadService.headObject(key);
+  const url = fileUploadService.generatePublicUrl(key);
+  track.artwork = { key, url };
+  track.thumbnailUrl = url;
+  await track.save();
+  await AuditService.logAdminAction(adminId, "replace_track_cover", trackId, { key });
+  return shapeTrackCard(track.toObject());
+}
+
+export async function hardDeleteTrack(trackId: string, adminId: string) {
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const keys = [
+    track.audio?.originalKey,
+    track.artwork?.key,
+  ].filter(Boolean) as string[];
+
+  for (const key of keys) {
+    try {
+      await fileUploadService.deleteMedia(key);
+    } catch (err: any) {
+      logger.warn("R2 delete failed during track delete", {
+        trackId,
+        key,
+        error: err?.message,
+      });
+    }
+  }
+
+  await CopyrightFreeSong.findByIdAndDelete(trackId);
+  await AuditService.logAdminAction(adminId, "delete_track", trackId, {
+    keys,
+    title: track.title,
+  });
+  return true;
+}
+
+export async function patchTrack(
+  trackId: string,
+  adminId: string,
+  body: Record<string, unknown>
+) {
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const artistName =
+    (body.artistName as string) || (body.singer as string) || undefined;
+  if (typeof body.title === "string" && body.title.trim()) {
+    track.title = body.title.trim();
+  }
+  if (artistName?.trim()) {
+    track.singer = artistName.trim();
+    track.artistName = artistName.trim();
+  }
+  if (body.category !== undefined) {
+    track.category = normalizeCategory(body.category as string);
+  }
+  if (body.genre !== undefined) {
+    track.genre = normalizeGenre(body.genre as string);
+  }
+  if (body.language !== undefined) {
+    track.language = (body.language as string)?.trim() || null;
+  }
+  if (body.licenseNote !== undefined) {
+    track.licenseNote = (body.licenseNote as string)?.trim() || null;
+  }
+  if (body.copyrightStatus !== undefined) {
+    track.copyrightStatus = body.copyrightStatus as any;
+  }
+  if (body.visibility !== undefined) {
+    const v = body.visibility as string;
+    if (!["draft", "published", "archived"].includes(v)) {
+      throw new TrackUploadError("Invalid visibility");
+    }
+    track.visibility = v as any;
+    if (v === "published" && !track.publishedAt) {
+      track.publishedAt = new Date();
+    }
+  }
+
+  await track.save();
+  await AuditService.logAdminAction(adminId, "update_track", trackId, {
+    fields: Object.keys(body),
+  });
+  return shapeTrackCard(track.toObject());
+}
+
+export type { ICopyrightFreeSong };

@@ -237,6 +237,130 @@ export async function updateChurch(
 }
 
 /**
+ * GET /api/admin/churches/:id
+ */
+export async function getChurchById(
+  request: Request,
+  response: Response
+): Promise<void> {
+  try {
+    const { id } = request.params;
+    if (!mongoose.isValidObjectId(id)) {
+      response.status(400).json({ success: false, message: "Invalid church id" });
+      return;
+    }
+    const church = await Church.findById(id).lean();
+    if (!church) {
+      response.status(404).json({ success: false, message: "Church not found" });
+      return;
+    }
+    const branches = await ChurchBranch.find({ churchId: id })
+      .sort({ name: 1 })
+      .lean();
+    response.status(200).json({
+      success: true,
+      data: {
+        ...shapeChurch(church),
+        branches: branches.map((b: any) => ({
+          id: b._id.toString(),
+          name: b.name,
+          address: b.address || null,
+          state: b.state || null,
+          lga: b.lga || null,
+          contactPhone: b.contactPhone || null,
+          location: b.location || null,
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error("Get church error", { error: error?.message });
+    response.status(500).json({ success: false, message: "Failed to get church" });
+  }
+}
+
+/**
+ * PATCH /api/admin/churches/:id/branches/:branchId
+ */
+export async function updateChurchBranch(
+  request: Request,
+  response: Response
+): Promise<void> {
+  try {
+    const adminId = request.userId;
+    const { id, branchId } = request.params;
+    if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(branchId)) {
+      response.status(400).json({ success: false, message: "Invalid id" });
+      return;
+    }
+    const body = request.body || {};
+    const updates: Record<string, unknown> = {};
+    for (const key of ["name", "address", "state", "lga"]) {
+      if (typeof body[key] === "string") updates[key] = body[key].trim();
+    }
+    if (body.location !== undefined) {
+      updates.location = parseLocation(body.location);
+    }
+    const branch = await ChurchBranch.findOneAndUpdate(
+      { _id: branchId, churchId: id },
+      { $set: updates },
+      { new: true }
+    );
+    if (!branch) {
+      response.status(404).json({ success: false, message: "Branch not found" });
+      return;
+    }
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "update_church_branch", branchId, {
+        churchId: id,
+      });
+    }
+    response.status(200).json({
+      success: true,
+      data: {
+        id: branch._id.toString(),
+        name: branch.name,
+        address: (branch as any).address || null,
+        state: (branch as any).state || null,
+        lga: (branch as any).lga || null,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Update branch error", { error: error?.message });
+    response.status(500).json({ success: false, message: "Failed to update branch" });
+  }
+}
+
+/**
+ * DELETE /api/admin/churches/:id/branches/:branchId
+ */
+export async function deleteChurchBranch(
+  request: Request,
+  response: Response
+): Promise<void> {
+  try {
+    const adminId = request.userId;
+    const { id, branchId } = request.params;
+    if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(branchId)) {
+      response.status(400).json({ success: false, message: "Invalid id" });
+      return;
+    }
+    const result = await ChurchBranch.deleteOne({ _id: branchId, churchId: id });
+    if (!result.deletedCount) {
+      response.status(404).json({ success: false, message: "Branch not found" });
+      return;
+    }
+    if (adminId) {
+      await AuditService.logAdminAction(adminId, "delete_church_branch", branchId, {
+        churchId: id,
+      });
+    }
+    response.status(200).json({ success: true, message: "Branch deleted" });
+  } catch (error: any) {
+    response.status(500).json({ success: false, message: "Failed to delete branch" });
+  }
+}
+
+/**
  * DELETE /api/admin/churches/:id
  * Removes church (+ optional branches). Prefer isListed:false to hide without delete.
  */
