@@ -32,6 +32,7 @@ export type TrackCard = {
   likeCount: number;
   viewCount: number;
   artistId: string | null;
+  moderationStatus: string;
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
@@ -120,6 +121,7 @@ export function shapeTrackCard(doc: any): TrackCard {
     likeCount: doc.likeCount ?? 0,
     viewCount: doc.viewCount ?? 0,
     artistId: doc.artistId?._id?.toString?.() || doc.artistId?.toString?.() || doc.artistId || null,
+    moderationStatus: doc.moderationStatus || "approved",
     createdAt: asIso(doc.createdAt) || new Date(0).toISOString(),
     updatedAt: asIso(doc.updatedAt) || new Date(0).toISOString(),
     publishedAt: asIso(doc.publishedAt),
@@ -161,6 +163,7 @@ export function shapePublicSong(doc: any, extras: Record<string, unknown> = {}) 
 /**
  * Hard filter: Copyright-free shelf — curated only, never artist-lane.
  * Legacy rows without `lane` count as curated.
+ * Never returns lane=artist creator uploads.
  */
 export function publicCuratedReadyFilter(extra: Record<string, unknown> = {}) {
   return {
@@ -185,6 +188,14 @@ export function publicCuratedReadyFilter(extra: Record<string, unknown> = {}) {
       {
         fileUrl: { $not: /^pending:\/\// },
       },
+      // Artist under_review rows must never leak even if lane mis-set
+      {
+        $or: [
+          { moderationStatus: { $exists: false } },
+          { moderationStatus: "approved" },
+          { lane: { $ne: "artist" } },
+        ],
+      },
     ],
     ...extra,
   };
@@ -192,6 +203,8 @@ export function publicCuratedReadyFilter(extra: Record<string, unknown> = {}) {
 
 /**
  * Hard filter: Artists shelf — lane=artist only, never curated beds.
+ * Requires moderation approved (or legacy missing status treated carefully:
+ * only approved appears for new pipeline; missing allowed for pre-gate rows).
  */
 export function publicArtistReadyFilter(extra: Record<string, unknown> = {}) {
   return {
@@ -205,6 +218,15 @@ export function publicArtistReadyFilter(extra: Record<string, unknown> = {}) {
         ],
       },
       { fileUrl: { $not: /^pending:\/\// } },
+      {
+        $or: [
+          { moderationStatus: "approved" },
+          // Pre-review-field artist rows (back-compat)
+          { moderationStatus: { $exists: false } },
+        ],
+      },
+      // Explicitly exclude curated mis-tags
+      { lane: { $eq: "artist" } },
     ],
     ...extra,
   };

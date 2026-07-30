@@ -45,11 +45,13 @@ export const listAdminTracks = async (req: Request, res: Response) => {
     const search = String(req.query.search || "").trim();
     const category = String(req.query.category || "").trim();
     const visibility = String(req.query.visibility || "").trim();
+    const moderationStatus = String(req.query.moderationStatus || "").trim();
 
     const query: Record<string, unknown> = {};
     if (lane === "curated" || lane === "artist") query.lane = lane;
     if (category) query.category = new RegExp(category, "i");
-    if (visibility) query.visibility = visibility;
+    if (visibility) query.visibility = visibility === "public" ? "published" : visibility;
+    if (moderationStatus) query.moderationStatus = moderationStatus;
     if (search) {
       query.$or = [
         { title: new RegExp(search, "i") },
@@ -197,6 +199,67 @@ export const deleteAdminTrack = async (req: Request, res: Response) => {
     res.status(200).json({ success: true, message: "Track deleted" });
   } catch (error: any) {
     handleTrackError(res, error, "Failed to delete track");
+  }
+};
+
+/**
+ * PATCH /api/admin/audio/tracks/:id/moderation
+ * Body: { status: "approved"|"rejected"|"under_review", reason? }
+ * Approving puts track on public Artists shelf (if visibility published + ready).
+ */
+export const reviewAdminTrackModeration = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const adminId = req.userId;
+    if (!adminId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid track id" });
+      return;
+    }
+    const status = String(req.body?.status || "").toLowerCase();
+    if (!["approved", "rejected", "under_review"].includes(status)) {
+      res.status(400).json({
+        success: false,
+        message: "status must be approved|rejected|under_review",
+      });
+      return;
+    }
+    const track = await CopyrightFreeSong.findById(id);
+    if (!track) {
+      res.status(404).json({ success: false, message: "Track not found" });
+      return;
+    }
+    track.moderationStatus = status as any;
+    track.moderationResult = {
+      decision: status,
+      reason: String(req.body?.reason || `Admin ${status}`).slice(0, 500),
+      source: "admin",
+      reviewedAt: new Date(),
+      reviewedByAdminId: new Types.ObjectId(adminId),
+    };
+    if (status === "approved" && track.visibility === "published" && !track.publishedAt) {
+      track.publishedAt = new Date();
+    }
+    if (status === "rejected") {
+      track.visibility = "draft";
+    }
+    await track.save();
+
+    const { AuditService } = await import("../service/audit.service");
+    await AuditService.logAdminAction(adminId, "review_track_moderation", id, {
+      status,
+      lane: track.lane,
+    });
+
+    res.status(200).json({ success: true, data: shapeTrackCard(track.toObject()) });
+  } catch (error: any) {
+    handleTrackError(res, error, "Failed to review track");
   }
 };
 

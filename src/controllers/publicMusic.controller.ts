@@ -6,7 +6,12 @@ import {
   shapeArtistCard,
   shapeCreatorMePayload,
 } from "../modules/creators/creator.presenter";
-import { shapeTrackCard, shapeUploadIntentResponse, publicArtistReadyFilter } from "../modules/audio/track.formatter";
+import { shapeTrackCard, shapeUploadIntentResponse, publicArtistReadyFilter, publicCuratedReadyFilter } from "../modules/audio/track.formatter";
+import {
+  decodeCatalogCursor,
+  catalogCursorFilter,
+  nextCatalogCursorFromDoc,
+} from "../modules/audio/catalogCursor";
 import {
   createTrackUploadIntent,
   finalizeTrackUpload,
@@ -124,51 +129,33 @@ export const listPublicArtistTracks = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/music/tracks?lane=artist|curated — browse catalog (Spotify-like shelf)
- * Hard shelf: lane=artist never returns curated; prefer /copyright-free for curated.
+ * GET /api/music/tracks?lane=artist|curated&cursor=&limit=&search=&genre=&page=
+ * Hard shelf: lane=artist never returns curated; CF tab should use /copyright-free.
+ * Prefer `cursor` over deep `page` skip at scale.
  */
 export const browseMusicTracks = async (req: Request, res: Response) => {
   try {
     const requested = String(req.query.lane || "artist");
     const lane = requested === "curated" ? "curated" : "artist";
-    const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
     const limit = Math.min(
       Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1),
       100
     );
+    const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
     const search = String(req.query.search || "").trim();
     const genre = String(req.query.genre || "").trim();
+    const cursor = decodeCatalogCursor(String(req.query.cursor || ""));
 
-    // Artists shelf: strict artist-lane only (never curated beds)
-    // Curated browse: allow but CF endpoint remains source of truth for mobile CF tab
     const filter: Record<string, unknown> =
       lane === "artist"
         ? publicArtistReadyFilter()
-        : {
-            $and: [
-              { $or: [{ lane: "curated" }, { lane: { $exists: false } }] },
-              { lane: { $ne: "artist" } },
-              {
-                $or: [
-                  { visibility: "published" },
-                  { visibility: { $exists: false } },
-                ],
-              },
-              {
-                $or: [
-                  { "processing.status": "ready" },
-                  { processing: { $exists: false } },
-                ],
-              },
-              { fileUrl: { $not: /^pending:\/\// } },
-            ],
-          };
+        : publicCuratedReadyFilter();
 
     const andExtra: Record<string, unknown>[] = [];
     if (genre) {
       andExtra.push({ genre: new RegExp(`^${genre}$`, "i") });
     }
-    if (search) {
+    if (search.length >= 2) {
       andExtra.push({
         $or: [
           { title: new RegExp(search, "i") },
@@ -178,6 +165,9 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
         ],
       });
     }
+    const cursorClause = catalogCursorFilter(cursor, "publishedAt");
+    if (cursorClause) andExtra.push(cursorClause);
+
     if (andExtra.length) {
       const existingAnd = Array.isArray((filter as any).$and)
         ? (filter as any).$and
@@ -185,17 +175,29 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
       (filter as any).$and = [...existingAnd, ...andExtra];
     }
 
-    const skip = (page - 1) * limit;
+    const query = CopyrightFreeSong.find(filter).sort({
+      publishedAt: -1,
+      _id: -1,
+    });
+
+    // Cursor mode: no skip. Page mode kept for FE compat.
+    if (!cursor) {
+      query.skip((page - 1) * limit);
+    }
+
     const [rows, total] = await Promise.all([
-      CopyrightFreeSong.find(filter)
-        .sort({ publishedAt: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      query.limit(limit + 1).lean(),
       CopyrightFreeSong.countDocuments(filter),
     ]);
 
-    const cards = rows.map((r: any) => shapeTrackCard(r));
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const cards = pageRows.map((r: any) => shapeTrackCard(r));
+    const nextCursor =
+      hasMore && pageRows.length
+        ? nextCatalogCursorFromDoc(pageRows[pageRows.length - 1], "publishedAt")
+        : null;
+
     res.status(200).json({
       success: true,
       data: {
@@ -203,8 +205,10 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
         tracks: cards,
         items: cards,
         total,
+        nextCursor,
+        hasMore,
         pagination: {
-          page,
+          page: cursor ? undefined : page,
           limit,
           total,
           pages: Math.ceil(total / limit) || 1,
@@ -459,34 +463,51 @@ export const listPublicArtists = async (req: Request, res: Response) => {
     );
     const search = String(req.query.search || "").trim();
     const genre = String(req.query.genre || "").trim();
+    const cursor = decodeCatalogCursor(String(req.query.cursor || ""));
     const query: Record<string, unknown> = { status: "active" };
-    if (search) {
-      query.$or = [
-        { displayName: new RegExp(search, "i") },
-        { slug: new RegExp(search, "i") },
-      ];
+    const andExtra: Record<string, unknown>[] = [];
+    if (search.length >= 2) {
+      // Use text index when query is long enough; always OR regex for partials
+      andExtra.push({
+        $or: [
+          { displayName: new RegExp(search, "i") },
+          { slug: new RegExp(search, "i") },
+          { bio: new RegExp(search, "i") },
+        ],
+      });
     }
     if (genre) {
-      query.genres = new RegExp(genre, "i");
+      andExtra.push({ genres: new RegExp(genre, "i") });
     }
-    const skip = (page - 1) * limit;
+    const cursorClause = catalogCursorFilter(cursor, "displayName", "asc");
+    if (cursorClause) andExtra.push(cursorClause);
+    if (andExtra.length) query.$and = andExtra;
+
+    const find = Artist.find(query).sort({ displayName: 1, _id: 1 });
+    if (!cursor) find.skip((page - 1) * limit);
+
     const [rows, total] = await Promise.all([
-      Artist.find(query)
-        .sort({ isVerified: -1, displayName: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      find.limit(limit + 1).lean(),
       Artist.countDocuments(query),
     ]);
-    const items = rows.map((r: any) => shapeArtistCard(r));
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const items = pageRows.map((r: any) => shapeArtistCard(r));
+    const nextCursor =
+      hasMore && pageRows.length
+        ? nextCatalogCursorFromDoc(pageRows[pageRows.length - 1], "displayName")
+        : null;
+
     res.status(200).json({
       success: true,
       data: {
         artists: items,
         items,
         total,
+        nextCursor,
+        hasMore,
         pagination: {
-          page,
+          page: cursor ? undefined : page,
           limit,
           total,
           pages: Math.ceil(total / limit) || 1,

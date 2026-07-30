@@ -65,6 +65,7 @@ import {
   finalizeAdminTrack,
   patchAdminTrack,
   deleteAdminTrack,
+  reviewAdminTrackModeration,
   replaceAdminTrackAudioIntent,
   finalizeAdminTrackAudioReplace,
   replaceAdminTrackCoverIntent,
@@ -380,6 +381,14 @@ router.get(
   requireAdmin,
   apiRateLimiter,
   getAdminTrack
+);
+
+router.patch(
+  "/audio/tracks/:id/moderation",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  reviewAdminTrackModeration
 );
 
 router.patch(

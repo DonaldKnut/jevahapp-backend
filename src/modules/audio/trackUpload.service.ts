@@ -16,6 +16,11 @@ import {
   normalizeCategory,
   normalizeGenre,
 } from "./track.constants";
+import {
+  reviewTrackMetadata,
+  shouldAutoApproveVerifiedArtist,
+} from "./trackReview.service";
+import { Artist } from "../../models/artist.model";
 import { shapeTrackCard, fromFeVisibility } from "./track.formatter";
 
 const execFileAsync = promisify(execFile);
@@ -213,6 +218,13 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     saveCount: 0,
     viewCount: 0,
     playCount: 0,
+    moderationStatus: lane === "artist" ? "pending" : "approved",
+    moderationResult: {
+      decision: lane === "artist" ? "pending" : "approved",
+      reason: lane === "artist" ? "Awaiting finalize review" : "Admin curated",
+      source: lane === "artist" ? null : "admin",
+      reviewedAt: lane === "artist" ? null : now,
+    },
   });
 
   await AuditService.logAdminAction(adminId, "create_track", trackId.toString(), {
@@ -308,17 +320,84 @@ export async function finalizeTrackUpload(
     };
 
     const publish = opts.publish !== false;
-    if (publish) {
-      track.visibility = "published";
-      track.publishedAt = new Date();
+    const wantsPublic = publish;
+
+    // Curated admin uploads: auto-approved. Artist lane: AI + admin gate.
+    if (track.lane === "artist") {
+      let decision: "approved" | "under_review" | "rejected" = "under_review";
+      let reason = "Queued for admin review";
+      let source: string = "fail_open";
+
+      let isVerified = false;
+      if (track.artistId) {
+        const artist = await Artist.findById(track.artistId)
+          .select("isVerified")
+          .lean();
+        isVerified = Boolean((artist as any)?.isVerified);
+      }
+
+      if (shouldAutoApproveVerifiedArtist(isVerified)) {
+        decision = "approved";
+        reason = "Auto-approved verified artist";
+        source = "auto_verified";
+      } else {
+        const ai = await reviewTrackMetadata({
+          title: track.title,
+          artistName: track.artistName || track.singer,
+          genre: track.genre,
+          category: track.category,
+          licenseNote: track.licenseNote,
+        });
+        decision = ai.decision;
+        reason = ai.reason;
+        source = ai.source;
+      }
+
+      track.moderationStatus = decision;
+      track.moderationResult = {
+        decision,
+        reason,
+        source,
+        reviewedAt: decision === "approved" ? new Date() : null,
+        reviewedByAdminId: null,
+      };
+
+      // Public Artists shelf only if approved. Studio still sees published drafts via me/tracks.
+      if (wantsPublic && decision === "approved") {
+        track.visibility = "published";
+        track.publishedAt = track.publishedAt || new Date();
+      } else if (wantsPublic && decision === "under_review") {
+        // Visible in studio as "public" intent but not on public shelf until approved
+        track.visibility = "published";
+        track.publishedAt = track.publishedAt || new Date();
+      } else if (decision === "rejected") {
+        track.visibility = "draft";
+      } else if (!wantsPublic) {
+        track.visibility = "draft";
+      }
+    } else {
+      track.moderationStatus = "approved";
+      track.moderationResult = {
+        decision: "approved",
+        reason: "Admin curated upload",
+        source: "admin",
+        reviewedAt: new Date(),
+        reviewedByAdminId: new Types.ObjectId(adminId),
+      };
+      if (wantsPublic) {
+        track.visibility = "published";
+        track.publishedAt = new Date();
+      }
     }
 
     await track.save();
 
     await AuditService.logAdminAction(adminId, "finalize_track", trackId, {
-      publish,
+      publish: wantsPublic,
       durationSec,
       audioKey,
+      moderationStatus: track.moderationStatus,
+      lane: track.lane,
     });
 
     return shapeTrackCard(track.toObject());

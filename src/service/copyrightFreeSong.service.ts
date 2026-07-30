@@ -143,6 +143,13 @@ export class CopyrightFreeSongService {
           error: null,
           updatedAt: now,
         },
+        moderationStatus: "approved",
+        moderationResult: {
+          decision: "approved",
+          reason: "Admin curated / URL create",
+          source: "admin",
+          reviewedAt: now,
+        },
         likeCount: 0,
         shareCount: 0,
         saveCount: 0,

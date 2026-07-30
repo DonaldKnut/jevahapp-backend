@@ -76,6 +76,15 @@ export interface ICopyrightFreeSong extends Document {
   viewCount: number;
   playCount?: number;
 
+  moderationStatus?: "pending" | "under_review" | "approved" | "rejected";
+  moderationResult?: {
+    decision?: string | null;
+    reason?: string | null;
+    source?: string | null;
+    reviewedAt?: Date | null;
+    reviewedByAdminId?: mongoose.Types.ObjectId | null;
+  };
+
   publishedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -202,6 +211,25 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
     saveCount: { type: Number, default: 0 },
     viewCount: { type: Number, default: 0 },
     playCount: { type: Number, default: 0 },
+
+    /** Creator-lane review (curated admin uploads default approved) */
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "under_review", "approved", "rejected"],
+      default: "approved",
+      index: true,
+    },
+    moderationResult: {
+      decision: { type: String, default: null },
+      reason: { type: String, default: null },
+      source: { type: String, default: null }, // ai | admin | auto_verified
+      reviewedAt: { type: Date, default: null },
+      reviewedByAdminId: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+    },
 
     publishedAt: { type: Date, default: null },
   },

@@ -40,9 +40,24 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/
   | jq '.data | {trackId, uploadUrl, uploadHeaders, coverUploadUrl, expiresInSec}'
 ```
 
-**R2 CORS:** Bucket must allow `PUT` from the app / Expo origins with `Content-Type` header (presign binds Content-Type).
+**R2 CORS:** Bucket must allow `PUT` from the app / Expo origins with `Content-Type` header (presign binds Content-Type). See [R2_CORS.md](./R2_CORS.md).
+
+## Shelf integrity (no mix)
+
+| Endpoint | Includes | Excludes |
+|----------|----------|----------|
+| `GET /api/audio/copyright-free` | `lane=curated` (or legacy missing) | **All** `lane=artist` |
+| `GET /api/music/tracks?lane=artist` | `lane=artist` + published + ready + **moderation approved** | Curated beds + under_review/rejected |
+
+Creator finalize: unverified → AI metadata review → often `under_review` (studio visible, **not** on Artists shelf until `PATCH /api/admin/audio/tracks/:id/moderation`). Verified artists auto-approve when `TRACK_AUTO_APPROVE_VERIFIED` is not `false`.
+
+## Scale
+
+- `GET /api/music/tracks?cursor=` and `GET /api/artists?cursor=` — prefer cursor over deep `page`
+- Admin review queue: `GET /api/admin/audio/tracks?lane=artist&moderationStatus=under_review`
 
 ## Related
 
 - [FRONTEND_CREATORS.md](./FRONTEND_CREATORS.md) — full UI map  
 - [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md) — admin curated upload  
+- [R2_CORS.md](./R2_CORS.md) — infra CORS
