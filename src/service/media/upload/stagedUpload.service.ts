@@ -41,6 +41,13 @@ export interface CreateIntentInput {
   thumbnailMimeType?: string;
   thumbnailSizeBytes?: number;
   idempotencyKey?: string;
+  /** Sermon / teaching metadata */
+  speaker?: string;
+  church?: string;
+  scripture?: string;
+  series?: string;
+  mediaType?: "audio" | "video";
+  language?: string;
 }
 
 /**
@@ -104,6 +111,18 @@ export async function createUploadIntent(input: CreateIntentInput) {
     thumbnailUrl: "staging://pending-thumbnail",
     moderationStatus: "pending",
     isHidden: true,
+    speaker: input.speaker?.trim() || undefined,
+    church: input.church?.trim() || undefined,
+    scripture: input.scripture?.trim() || undefined,
+    series: input.series?.trim() || undefined,
+    mediaType:
+      input.mediaType ||
+      (mimeType.startsWith("audio/")
+        ? "audio"
+        : contentType === "sermon" || contentType === "videos"
+          ? "video"
+          : undefined),
+    language: input.language?.trim() || undefined,
     processing: {
       status: "uploaded",
       updatedAt: new Date(),

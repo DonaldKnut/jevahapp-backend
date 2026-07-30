@@ -123,6 +123,13 @@ export interface IMedia extends Document {
   // Copyright-free audio library fields (YouTube Audio Library style)
   isPublicDomain?: boolean; // For copyright-free songs
   speaker?: string; // For audio content (speaker/preacher/artist name)
+  /** Sermon teaching metadata (contentType=sermon) */
+  church?: string | null;
+  scripture?: string | null;
+  series?: string | null;
+  /** Prefer explicit media kind for public sermons catalog */
+  mediaType?: "audio" | "video" | null;
+  language?: string | null;
   year?: number; // Year of creation/release
 
   // Content moderation fields
@@ -544,6 +551,34 @@ const mediaSchema = new Schema<IMedia>(
     speaker: {
       type: String,
       trim: true,
+    },
+    church: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    scripture: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    series: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    mediaType: {
+      type: String,
+      enum: ["audio", "video"],
+      default: undefined,
+    },
+    language: {
+      type: String,
+      trim: true,
+      default: "en",
+      index: true,
     },
     year: {
       type: Number,

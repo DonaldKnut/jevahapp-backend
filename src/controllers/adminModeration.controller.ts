@@ -514,11 +514,26 @@ export const updateAdminMediaMetadata = async (
       updates.category = body.category.trim();
     }
 
+    for (const key of [
+      "speaker",
+      "church",
+      "scripture",
+      "series",
+      "language",
+    ] as const) {
+      if (typeof body[key] === "string") {
+        updates[key] = body[key].trim() || null;
+      }
+    }
+    if (body.mediaType === "audio" || body.mediaType === "video") {
+      updates.mediaType = body.mediaType;
+    }
+
     if (Object.keys(updates).length === 0) {
       res.status(400).json({
         success: false,
         message:
-          "Provide at least one of: title, description, adminModerationNotes, category",
+          "Provide at least one of: title, description, adminModerationNotes, category, speaker, church, scripture, series, mediaType, language",
       });
       return;
     }

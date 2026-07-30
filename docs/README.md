@@ -20,6 +20,7 @@ Last updated: July 2026 (post-modularization refactor)
 11d. **[FRONTEND_CREATORS.md](./FRONTEND_CREATORS.md)** — Mobile + web creator UI, apply/studio, gospel catalog shelves
 11e. **[BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md](./BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md)** — Mobile FE contract corroboration
 11f. **[R2_CORS.md](./R2_CORS.md)** — Bucket CORS for presigned Track uploads
+11g. **[FRONTEND_SERMONS.md](./FRONTEND_SERMONS.md)** — Public `/api/sermons` for web marketing catalog
 12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Moderation + reports handoff for the web admin team (card shapes, P1 wiring)
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers

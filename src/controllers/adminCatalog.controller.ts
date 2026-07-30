@@ -159,19 +159,29 @@ export const listAdminCategories = async (_req: Request, res: Response) => {
     const rows = await ContentCategory.find().sort({ sortOrder: 1, key: 1 }).lean();
     // Seed defaults into response if empty (non-destructive)
     if (rows.length === 0) {
+      const defaults = [
+        ...TRACK_CATEGORIES.map((key, i) => ({
+          id: null,
+          key,
+          label: key.replace(/_/g, " "),
+          kind: "audio" as const,
+          sortOrder: i,
+          isActive: true,
+          ephemeral: true,
+        })),
+        {
+          id: null,
+          key: "sermons",
+          label: "Sermons",
+          kind: "media" as const,
+          sortOrder: 100,
+          isActive: true,
+          ephemeral: true,
+        },
+      ];
       res.status(200).json({
         success: true,
-        data: {
-          items: TRACK_CATEGORIES.map((key, i) => ({
-            id: null,
-            key,
-            label: key.replace(/_/g, " "),
-            kind: "audio",
-            sortOrder: i,
-            isActive: true,
-            ephemeral: true,
-          })),
-        },
+        data: { items: defaults },
       });
       return;
     }

@@ -26,6 +26,12 @@ export const createStagedUploadIntent = async (req: Request, res: Response): Pro
       checksumSha256,
       thumbnailMimeType,
       thumbnailSizeBytes,
+      speaker,
+      church,
+      scripture,
+      series,
+      mediaType,
+      language,
     } = req.body || {};
 
     const idempotencyKey =
@@ -36,7 +42,8 @@ export const createStagedUploadIntent = async (req: Request, res: Response): Pro
       title,
       contentType,
       description,
-      category,
+      category:
+        contentType === "sermon" && !category ? "sermons" : category,
       topics,
       mimeType,
       sizeBytes: Number(sizeBytes),
@@ -44,6 +51,12 @@ export const createStagedUploadIntent = async (req: Request, res: Response): Pro
       thumbnailMimeType,
       thumbnailSizeBytes: thumbnailSizeBytes ? Number(thumbnailSizeBytes) : undefined,
       idempotencyKey,
+      speaker,
+      church,
+      scripture,
+      series,
+      mediaType,
+      language,
     });
 
     res.status(201).json({ success: true, data: result });
