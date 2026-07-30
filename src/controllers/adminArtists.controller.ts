@@ -2,27 +2,16 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { Artist, slugifyArtistName } from "../models/artist.model";
 import { User } from "../models/user.model";
+import { CopyrightFreeSong } from "../models/copyrightFreeSong.model";
 import { AuditService } from "../service/audit.service";
+import {
+  shapeArtistCard,
+  shapeCreatorMePayload,
+} from "../modules/creators/creator.presenter";
 import logger from "../utils/logger";
 
 function shapeArtist(doc: any) {
-  return {
-    id: doc._id.toString(),
-    userId: doc.userId?.toString?.() || doc.userId || null,
-    displayName: doc.displayName,
-    slug: doc.slug,
-    bio: doc.bio || null,
-    avatarUrl: doc.avatarUrl || null,
-    genres: doc.genres || [],
-    creatorTypes: doc.creatorTypes || ["artist"],
-    isVerified: Boolean(doc.isVerified),
-    status: doc.status,
-    socials: doc.socials || {},
-    applicationNote: doc.applicationNote || null,
-    createdAt: doc.createdAt,
-    updatedAt: doc.updatedAt,
-    reviewedAt: doc.reviewedAt || null,
-  };
+  return shapeArtistCard(doc);
 }
 
 async function uniqueSlug(base: string): Promise<string> {
@@ -238,9 +227,13 @@ export const applyAsCreator = async (req: Request, res: Response) => {
 
     const existing = await Artist.findOne({ userId });
     if (existing) {
+      const trackCount = await CopyrightFreeSong.countDocuments({
+        artistId: existing._id,
+        lane: "artist",
+      });
       res.status(200).json({
         success: true,
-        data: shapeArtist(existing),
+        data: shapeCreatorMePayload(existing, { trackCount }),
         message: "Application already exists",
       });
       return;
@@ -286,7 +279,7 @@ export const applyAsCreator = async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      data: shapeArtist(doc),
+      data: shapeCreatorMePayload(doc, { trackCount: 0 }),
       message:
         "Application received. You can upload to the artist catalog after an admin activates your profile.",
     });
@@ -307,9 +300,16 @@ export const getMyCreatorProfile = async (req: Request, res: Response) => {
       return;
     }
     const doc = await Artist.findOne({ userId }).lean();
+    let trackCount = 0;
+    if (doc) {
+      trackCount = await CopyrightFreeSong.countDocuments({
+        artistId: (doc as any)._id,
+        lane: "artist",
+      });
+    }
     res.status(200).json({
       success: true,
-      data: doc ? shapeArtist(doc) : null,
+      data: shapeCreatorMePayload(doc as any, { trackCount }),
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "Failed to load creator profile" });

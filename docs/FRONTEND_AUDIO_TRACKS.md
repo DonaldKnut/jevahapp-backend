@@ -5,6 +5,8 @@
 **Storage:** Cloudflare R2 (same as media) · max audio **100MB** · cover **5MB**  
 **Presign TTL:** 900s
 
+Full creator mobile/web UI handoff: [FRONTEND_CREATORS.md](./FRONTEND_CREATORS.md).
+
 ## Artist / minister / podcaster onboarding (product advice shipped as foundation)
 
 **Do not** give every user an upload button. Use one **Creator application** funnel:

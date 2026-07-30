@@ -25,6 +25,7 @@ import * as hymns from "./hymns";
 import * as ebooks from "./ebooks";
 import * as playlists from "./playlists";
 import * as audio from "./audio";
+import * as music from "./music";
 import * as search from "./search";
 import * as feed from "./feed";
 import * as health from "./health";
@@ -66,6 +67,7 @@ export function registerModules(app: Application): void {
     ebooks,
     playlists,
     audio,
+    music,
     search,
     feed,
     health,
