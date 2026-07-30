@@ -95,7 +95,7 @@ export async function toggleSave(
       await deps.songService.decrementSaveCount(songId);
     }
 
-    const updatedSong = await deps.songService.getSongById(songId);
+    const updatedSong = await deps.songService.getSongByIdAdmin(songId);
     const saveCount = Math.max(updatedSong?.saveCount ?? 0, 0);
 
     return {

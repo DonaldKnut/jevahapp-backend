@@ -24,6 +24,8 @@ export interface ICopyrightFreeSong extends Document {
   singer: string;
   artistName?: string;
   artistId?: mongoose.Types.ObjectId | null;
+  /** Denormalized Artist.slug for FE deep links */
+  artistSlug?: string | null;
   albumId?: mongoose.Types.ObjectId | null;
   genre?: string | null;
   category?: string | null;
@@ -99,6 +101,14 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
     artistId: {
       type: Schema.Types.ObjectId,
       ref: "Artist",
+      default: null,
+      index: true,
+    },
+    /** Denormalized for catalog cards / deep links without populate */
+    artistSlug: {
+      type: String,
+      trim: true,
+      lowercase: true,
       default: null,
       index: true,
     },
@@ -223,6 +233,14 @@ copyrightFreeSongSchema.index(
 copyrightFreeSongSchema.index(
   { lane: 1, visibility: 1, "processing.status": 1, createdAt: -1 },
   { name: "catalog_list_index" }
+);
+copyrightFreeSongSchema.index(
+  { lane: 1, visibility: 1, publishedAt: -1, createdAt: -1 },
+  { name: "catalog_published_sort_index" }
+);
+copyrightFreeSongSchema.index(
+  { artistId: 1, lane: 1, visibility: 1, publishedAt: -1 },
+  { name: "artist_catalog_index" }
 );
 
 /** Sync legacy + preferred fields before save */

@@ -16,7 +16,7 @@ import {
   normalizeCategory,
   normalizeGenre,
 } from "./track.constants";
-import { shapeTrackCard } from "./track.formatter";
+import { shapeTrackCard, fromFeVisibility } from "./track.formatter";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,6 +42,7 @@ export interface UploadIntentInput {
   licenseNote?: string;
   lane?: "curated" | "artist";
   artistId?: string | null;
+  artistSlug?: string | null;
   contentType: string;
   fileName: string;
   fileSizeBytes: number;
@@ -188,6 +189,10 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     artistId:
       lane === "artist" && input.artistId
         ? new Types.ObjectId(input.artistId)
+        : null,
+    artistSlug:
+      lane === "artist" && input.artistSlug
+        ? String(input.artistSlug).toLowerCase()
         : null,
     audio: {
       originalKey: audioKey,
@@ -507,15 +512,27 @@ export async function patchTrack(
   if (body.copyrightStatus !== undefined) {
     track.copyrightStatus = body.copyrightStatus as any;
   }
+  if (body.publish === true) {
+    track.visibility = "published";
+    if (!track.publishedAt) track.publishedAt = new Date();
+  } else if (body.publish === false) {
+    track.visibility = "draft";
+  }
+
   if (body.visibility !== undefined) {
-    const v = body.visibility as string;
-    if (!["draft", "published", "archived"].includes(v)) {
-      throw new TrackUploadError("Invalid visibility");
+    const mapped = fromFeVisibility(String(body.visibility));
+    if (!mapped) {
+      throw new TrackUploadError("Invalid visibility (use public|draft|archived)");
     }
-    track.visibility = v as any;
-    if (v === "published" && !track.publishedAt) {
+    track.visibility = mapped;
+    if (mapped === "published" && !track.publishedAt) {
       track.publishedAt = new Date();
     }
+  }
+
+  // Never allow creator/artist tracks to leave artist lane
+  if (track.lane === "artist") {
+    track.lane = "artist";
   }
 
   await track.save();

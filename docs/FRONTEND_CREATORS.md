@@ -1,9 +1,48 @@
+**Status:** Backend contracts corroborated for mobile (see [BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md](./BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md)).
+
+## Architecture decision
+
+**Artist uploads do not belong on Copyright-free, and do not need a separate AllContentTikTok top-level tab.**
+
+| Surface | Behavior |
+|---------|----------|
+| AllContentTikTok → MUSIC | Mounts `music.tsx` (existing) |
+| Music → Copyright-free | Curated beds only (`/api/audio/copyright-free`) |
+| Music → Artists | Creator originals only (`/api/music/tracks?lane=artist`) |
+| Creator hub | Apply → wait → upload → manage tracks |
+
+Reason: TikTok feed is video/sermon/ebook chrome. Music already has its own player + modal UX. A second shelf **inside Music** keeps shelves pure without polluting CF or the vertical feed.
+
+## Mobile DoD (FE) + Backend
+
+- [x] Profile entry + Apply + Pending + Hub (`capabilities.nextStep`)
+- [x] Music tabs: Copyright-free \| Artists (strict filters, no mix)
+- [x] Artist profile + play (shared player)
+- [x] Active upload: intent → PUT → finalize (`uploadUrl` aliases)
+- [x] Studio my-tracks list + publish/delete
+- [x] Never call `/api/admin/*` from mobile
+- [x] Backend gap handoff written + shelf integrity + playCount + engagement aliases
+
+## FE files
+
+- `app/services/creators/` — API, types, upload pipeline
+- `app/services/music-catalog/` — TrackCard + Artists catalog
+- `app/hooks/useCreatorMe.ts`
+- `app/components/creators/*`
+- `app/creators/index.tsx` · `apply.tsx` · `upload.tsx`
+- `app/artists/ArtistProfile.tsx`
+- `app/categories/music.tsx` · `music/MusicLaneTabs.tsx`
+- `ProfileSummary` → `CreatorStatusBanner`
+
+---
+
 # Frontend Creators Handoff — Spotify for Gospel
 
 **Audience:** Mobile app + public creator web + admin web  
 **Backend:** `jevahapp-backend` (`main`)  
 **Date:** 30 July 2026  
-**Related:** [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md) · [ADMIN.md](./ADMIN.md)
+**Related:** [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md) · [ADMIN.md](./ADMIN.md) · [BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md](./BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md)
+
 
 This is the **source of truth** for Creator (artist / minister / podcaster) UX on **mobile and web**, how each screen talks to the API, and how catalog surfaces stay scalable (one Track model, many shelves).
 

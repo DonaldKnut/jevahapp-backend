@@ -6,8 +6,17 @@ import {
   getPublicArtistBySlug,
   listPublicArtistTracks,
   browseMusicTracks,
+  listPublicArtists,
+  recordMusicTrackPlay,
 } from "../../controllers/publicMusic.controller";
+import {
+  toggleLike as toggleLikeCopyrightFreeSongNew,
+  recordView as recordViewCopyrightFreeSong,
+  shareSong as shareCopyrightFreeSongNew,
+  toggleSave as toggleSaveCopyrightFreeSong,
+} from "../../controllers/copyrightFreeSong.controller";
 import { apiRateLimiter } from "../../middleware/rateLimiter";
+import { verifyToken } from "../../middleware/auth.middleware";
 
 export interface Mount {
   path: string;
@@ -15,11 +24,42 @@ export interface Mount {
 }
 
 const artistsRouter = Router();
+artistsRouter.get("/", apiRateLimiter, listPublicArtists);
 artistsRouter.get("/:slug/tracks", apiRateLimiter, listPublicArtistTracks);
 artistsRouter.get("/:slug", apiRateLimiter, getPublicArtistBySlug);
 
 const musicRouter = Router();
 musicRouter.get("/tracks", apiRateLimiter, browseMusicTracks);
+musicRouter.post(
+  "/tracks/:songId/like",
+  verifyToken,
+  apiRateLimiter,
+  toggleLikeCopyrightFreeSongNew
+);
+musicRouter.post(
+  "/tracks/:songId/view",
+  verifyToken,
+  apiRateLimiter,
+  recordViewCopyrightFreeSong
+);
+musicRouter.post(
+  "/tracks/:songId/share",
+  verifyToken,
+  apiRateLimiter,
+  shareCopyrightFreeSongNew
+);
+musicRouter.post(
+  "/tracks/:songId/save",
+  verifyToken,
+  apiRateLimiter,
+  toggleSaveCopyrightFreeSong
+);
+musicRouter.post(
+  "/tracks/:songId/play",
+  verifyToken,
+  apiRateLimiter,
+  recordMusicTrackPlay
+);
 
 export const mounts: Mount[] = [
   { path: "/api/artists", router: artistsRouter },

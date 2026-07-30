@@ -36,7 +36,7 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
     const likeCount = fast.likeCount;
 
     // Get updated song to ensure we have latest counts (invariant already applied by service)
-    const updatedSong = await songService.getSongById(songId);
+    const updatedSong = await songService.getSongByIdAdmin(songId);
     const outViewCount = Math.max(updatedSong?.viewCount ?? 0, updatedSong?.likeCount ?? likeCount);
     const listenCount = 0;
 
@@ -263,7 +263,7 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
     });
 
     // Get updated song for real-time updates
-    const updatedSong = await songService.getSongById(songId);
+    const updatedSong = await songService.getSongByIdAdmin(songId);
 
     // Emit real-time update via WebSocket
     try {
@@ -371,7 +371,7 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
 
     const result = await interactionService.toggleSave(userId, songId);
 
-    const updatedSong = await songService.getSongById(songId);
+    const updatedSong = await songService.getSongByIdAdmin(songId);
 
     try {
       const { getIO } = await import("../../socket/socketManager");
@@ -433,5 +433,67 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
       message: "Failed to toggle save",
       error: error.message,
     });
+  }
+};
+
+/**
+ * POST /api/audio/copyright-free/:songId/play
+ * Also used for artist-lane tracks (same collection).
+ * Increments playCount (scrobble-style; not unique).
+ */
+export const recordPlay = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { songId } = req.params;
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required" });
+      return;
+    }
+    const mongoose = await import("mongoose");
+    if (!songId || !mongoose.Types.ObjectId.isValid(songId)) {
+      res.status(400).json({ success: false, message: "Invalid song ID" });
+      return;
+    }
+
+    const { CopyrightFreeSong } = await import("../../models/copyrightFreeSong.model");
+    const updated = await CopyrightFreeSong.findByIdAndUpdate(
+      songId,
+      { $inc: { playCount: 1 } },
+      { new: true }
+    )
+      .select("playCount viewCount likeCount lane artistSlug title")
+      .lean();
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "Track not found" });
+      return;
+    }
+
+    // Also count as a view if threshold-like play (optional dual path — FE may still call /view)
+    try {
+      const { getIO } = await import("../../socket/socketManager");
+      const io = getIO();
+      if (io) {
+        io.to(`content:audio:${songId}`).emit("copyright-free-song-interaction-updated", {
+          songId,
+          playCount: (updated as any).playCount ?? 0,
+          viewCount: (updated as any).viewCount ?? 0,
+          likeCount: (updated as any).likeCount ?? 0,
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        playCount: (updated as any).playCount ?? 0,
+        id: songId,
+      },
+    });
+  } catch (error: any) {
+    logger.error("Error recording play:", error);
+    res.status(500).json({ success: false, message: "Failed to record play" });
   }
 };

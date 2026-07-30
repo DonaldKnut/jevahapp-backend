@@ -11,7 +11,7 @@ import {
   patchTrack,
   TrackUploadError,
 } from "../modules/audio/trackUpload.service";
-import { shapeTrackCard } from "../modules/audio/track.formatter";
+import { shapeTrackCard, shapeUploadIntentResponse } from "../modules/audio/track.formatter";
 import {
   TRACK_CATEGORIES,
   TRACK_GENRES,
@@ -144,7 +144,10 @@ export const createAdminTrackUploadIntent = async (
         ? Number(body.coverFileSizeBytes)
         : undefined,
     });
-    res.status(201).json({ success: true, data });
+    res.status(201).json({
+      success: true,
+      data: shapeUploadIntentResponse(data as any),
+    });
   } catch (error: any) {
     handleTrackError(res, error, "Failed to create upload intent");
   }

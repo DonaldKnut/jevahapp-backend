@@ -34,6 +34,15 @@ router.post(
 );
 router.patch("/tracks/:id", verifyToken, apiRateLimiter, patchCreatorTrack);
 router.delete("/tracks/:id", verifyToken, apiRateLimiter, deleteCreatorTrack);
+// FE alias param name
+router.patch("/tracks/:trackId", verifyToken, apiRateLimiter, (req, res, next) => {
+  (req.params as any).id = req.params.trackId;
+  return patchCreatorTrack(req, res);
+});
+router.delete("/tracks/:trackId", verifyToken, apiRateLimiter, (req, res, next) => {
+  (req.params as any).id = req.params.trackId;
+  return deleteCreatorTrack(req, res);
+});
 
 export default router;
 

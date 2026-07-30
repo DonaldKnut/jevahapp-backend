@@ -14,6 +14,7 @@ import {
   trackPlayback as trackCopyrightFreeSongPlayback,
   recordView as recordViewCopyrightFreeSong,
   toggleSave as toggleSaveCopyrightFreeSong,
+  recordPlay as recordPlayCopyrightFreeSong,
   getCategories as getCopyrightFreeCategories,
 } from "../../controllers/copyrightFreeSong.controller";
 import {
@@ -211,6 +212,17 @@ router.post(
   verifyToken,
   apiRateLimiter,
   recordViewCopyrightFreeSong
+);
+
+/**
+ * @route   POST /api/audio/copyright-free/:songId/play
+ * @desc    Increment playCount (works for curated + artist-lane track IDs)
+ */
+router.post(
+  "/copyright-free/:songId/play",
+  verifyToken,
+  apiRateLimiter,
+  recordPlayCopyrightFreeSong
 );
 
 /**

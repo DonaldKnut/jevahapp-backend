@@ -25,7 +25,7 @@ export async function shareSong(
       interaction.hasShared = true;
       await interaction.save();
     } else {
-      const song = await deps.songService.getSongById(songId);
+      const song = await deps.songService.getSongByIdAdmin(songId);
       return {
         shareCount: song?.shareCount || 0,
         likeCount: song?.likeCount || 0,
@@ -35,7 +35,7 @@ export async function shareSong(
 
     await deps.songService.incrementShareCount(songId);
 
-    const song = await deps.songService.getSongById(songId);
+    const song = await deps.songService.getSongByIdAdmin(songId);
 
     return {
       shareCount: song?.shareCount || 0,

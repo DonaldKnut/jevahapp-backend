@@ -51,7 +51,7 @@ export async function toggleLike(
 
     await deps.songService.ensureViewCountInvariant(songId);
 
-    const song = await deps.songService.getSongById(songId);
+    const song = await deps.songService.getSongByIdAdmin(songId);
     const likeCount = song?.likeCount ?? 0;
     const viewCount = Math.max(song?.viewCount ?? 0, likeCount);
 
