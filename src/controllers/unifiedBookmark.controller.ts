@@ -101,35 +101,44 @@ export const toggleBookmark = async (
       data: result,
     });
   } catch (error: any) {
+    const msg = String(error?.message || "");
     logger.error("Toggle bookmark error", {
-      error: error.message,
-      stack: error.stack,
+      error: msg,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      stack: error?.stack,
       userId: req.userId,
       mediaId: req.params.mediaId || req.params.contentId,
       ip: req.ip,
       timestamp: new Date().toISOString(),
     });
 
-    if (error.message?.includes("copyright-free")) {
-      res.status(400).json({
+    if (typeof error?.statusCode === "number" && error.statusCode >= 400) {
+      res.status(error.statusCode).json({
         success: false,
-        message: error.message,
+        code: error.code || undefined,
+        message: msg || "Bookmark toggle failed",
       });
       return;
     }
 
-    if (error.message?.includes("Unsupported content type")) {
+    if (msg.includes("copyright-free")) {
       res.status(400).json({
         success: false,
-        message: error.message,
+        message: msg,
       });
       return;
     }
 
-    if (
-      error.message.includes("not found") ||
-      error.message.includes("Media not found")
-    ) {
+    if (msg.includes("Unsupported content type")) {
+      res.status(400).json({
+        success: false,
+        message: msg,
+      });
+      return;
+    }
+
+    if (msg.includes("not found") || msg.includes("Media not found")) {
       res.status(404).json({
         success: false,
         message: "Media not found",
@@ -137,10 +146,18 @@ export const toggleBookmark = async (
       return;
     }
 
-    if (error.message.includes("Invalid")) {
+    if (msg.includes("can’t be saved") || msg.includes("can't be saved")) {
       res.status(400).json({
         success: false,
-        message: error.message,
+        message: msg,
+      });
+      return;
+    }
+
+    if (msg.includes("Invalid")) {
+      res.status(400).json({
+        success: false,
+        message: msg,
       });
       return;
     }

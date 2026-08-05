@@ -9,6 +9,11 @@ import {
 import { getEngagementMetrics, isRedisConnected } from "../lib/engagementRedis";
 import { getAiBudgetSnapshot } from "../service/moderation/aiBudget.service";
 import { contentModerationService } from "../service/contentModeration.service";
+import {
+  guardianHealth,
+  isGuardianConfigured,
+  isGuardianCircuitOpen,
+} from "../service/moderation/guardianClient";
 import { verifyToken } from "../middleware/auth.middleware";
 import { requireAdmin } from "../middleware/role.middleware";
 import { execFile } from "child_process";
@@ -69,6 +74,10 @@ router.get(
       hasBinary("ffprobe"),
     ]);
 
+    const guardian = isGuardianConfigured()
+      ? await guardianHealth()
+      : { ok: false, detail: { reason: "not_configured" } };
+
     res.status(200).json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -87,6 +96,11 @@ router.get(
       },
       moderation: {
         providerAvailable: contentModerationService.isAvailable(),
+        guardianConfigured: isGuardianConfigured(),
+        guardianOk: guardian.ok,
+        guardianCircuitOpen: isGuardianCircuitOpen(),
+        guardian: guardian.detail,
+        fusionMode: process.env.MODERATION_FUSION_MODE || "guardian_first",
         aiBudget: await getAiBudgetSnapshot(),
       },
       mediaTools: { ffmpeg, ffprobe },

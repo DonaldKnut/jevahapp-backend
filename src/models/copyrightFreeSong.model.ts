@@ -27,6 +27,10 @@ export interface ICopyrightFreeSong extends Document {
   /** Denormalized Artist.slug for FE deep links */
   artistSlug?: string | null;
   albumId?: mongoose.Types.ObjectId | null;
+  /** Canonical release attachment (synced with albumId) */
+  releaseId?: mongoose.Types.ObjectId | null;
+  trackNumber?: number | null;
+  discNumber?: number | null;
   genre?: string | null;
   category?: string | null;
   language?: string | null;
@@ -56,6 +60,8 @@ export interface ICopyrightFreeSong extends Document {
     fileSizeBytes?: number | null;
     signed?: boolean;
     expiresInSeconds?: number | null;
+    /** Active R2 multipart upload id (cleared after complete/abort) */
+    multipartUploadId?: string | null;
   };
 
   artwork?: {
@@ -123,9 +129,19 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
     },
     albumId: {
       type: Schema.Types.ObjectId,
-      ref: "Album",
+      ref: "Release",
       default: null,
+      index: true,
     },
+    /** Preferred field — kept in sync with albumId */
+    releaseId: {
+      type: Schema.Types.ObjectId,
+      ref: "Release",
+      default: null,
+      index: true,
+    },
+    trackNumber: { type: Number, default: null, min: 1 },
+    discNumber: { type: Number, default: 1, min: 1 },
     genre: { type: String, trim: true, default: null, index: true },
     category: {
       type: String,
@@ -187,6 +203,7 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
       fileSizeBytes: { type: Number, default: null },
       signed: { type: Boolean, default: false },
       expiresInSeconds: { type: Number, default: null },
+      multipartUploadId: { type: String, default: null },
     },
 
     artwork: {
@@ -270,10 +287,17 @@ copyrightFreeSongSchema.index(
   { artistId: 1, lane: 1, visibility: 1, publishedAt: -1 },
   { name: "artist_catalog_index" }
 );
+copyrightFreeSongSchema.index(
+  { releaseId: 1, discNumber: 1, trackNumber: 1 },
+  { name: "release_tracklist_index" }
+);
 
 /** Sync legacy + preferred fields before save */
 copyrightFreeSongSchema.pre("save", function (next) {
   const doc = this as ICopyrightFreeSong;
+  if (doc.releaseId && !doc.albumId) doc.albumId = doc.releaseId;
+  if (doc.albumId && !doc.releaseId) doc.releaseId = doc.albumId;
+  if (doc.discNumber == null) doc.discNumber = 1;
   if (doc.artistName && !doc.singer) doc.singer = doc.artistName;
   if (doc.singer && !doc.artistName) doc.artistName = doc.singer;
   if (doc.durationSec != null && doc.duration == null) {

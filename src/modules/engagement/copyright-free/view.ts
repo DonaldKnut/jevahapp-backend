@@ -15,7 +15,24 @@ export function isTransactionUnsupportedError(error: any): boolean {
     code === "IllegalOperation" ||
     msg.includes("replica set") ||
     msg.includes("transaction numbers are only allowed") ||
-    msg.includes("transaction is not supported")
+    msg.includes("transaction is not supported") ||
+    // Atlas / driver: global readPreference primaryPreferred breaks withTransaction
+    msg.includes("read preference in a transaction must be primary")
+  );
+}
+
+/** CF family: ≥3s OR ≥25% OR complete (progressPct is 0–100 from FE). */
+export function qualifiesCopyrightFreeView(payload: {
+  durationMs?: number;
+  progressPct?: number;
+  isComplete?: boolean;
+}): boolean {
+  const durationMs = typeof payload.durationMs === "number" ? payload.durationMs : 0;
+  const progressPct = typeof payload.progressPct === "number" ? payload.progressPct : 0;
+  return (
+    payload.isComplete === true ||
+    durationMs >= 3000 ||
+    progressPct >= 25
   );
 }
 
@@ -49,6 +66,18 @@ export async function recordViewWithoutTransaction(
     return {
       viewCount,
       hasViewed: true,
+      isNewView: false,
+    };
+  }
+
+  if (!qualifiesCopyrightFreeView({ durationMs, progressPct, isComplete })) {
+    await deps.songService.ensureViewCountInvariant(songIdObj.toString());
+    const currentSong = await CopyrightFreeSong.findById(songIdObj)
+      .select("viewCount likeCount")
+      .lean() as { viewCount?: number; likeCount?: number } | null;
+    return {
+      viewCount: Math.max(currentSong?.viewCount ?? 0, currentSong?.likeCount ?? 0),
+      hasViewed: false,
       isNewView: false,
     };
   }
@@ -145,7 +174,11 @@ export async function recordView(
     }
 
     const now = new Date();
-    const isQualified = durationMs >= 3000 || progressPct >= 25 || isComplete === true;
+    const isQualified = qualifiesCopyrightFreeView({
+      durationMs,
+      progressPct,
+      isComplete,
+    });
 
     const existingInteraction = await CopyrightFreeSongInteraction.findOne({
       userId: userIdObj,
@@ -189,7 +222,8 @@ export async function recordView(
       let isNewView = false;
       let viewCount = 0;
 
-      await session.withTransaction(async () => {
+      await session.withTransaction(
+        async () => {
         const existingViewInTx = await CopyrightFreeSongInteraction.findOne(
           {
             userId: userIdObj,
@@ -269,7 +303,13 @@ export async function recordView(
 
         const updatedSong = await CopyrightFreeSong.findById(songIdObj).select("viewCount").session(session).lean() as { viewCount?: number } | null;
         viewCount = (updatedSong?.viewCount as number) || 0;
-      });
+      },
+        {
+          readPreference: "primary",
+          readConcern: { level: "local" },
+          writeConcern: { w: "majority" },
+        }
+      );
 
       await deps.songService.ensureViewCountInvariant(songId);
       const afterInvariant = await CopyrightFreeSong.findById(songIdObj).select("viewCount likeCount").lean() as { viewCount?: number; likeCount?: number } | null;

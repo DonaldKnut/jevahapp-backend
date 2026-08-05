@@ -1,11 +1,24 @@
-# For You ranking — deferred
+# For You ranking
 
-Server-side For You (`watch_time` ingestion → candidate generation → scoring → `GET /api/feed/for-you`) is **explicitly deferred** until social correctness (likes, comments, follows, shares, views, notification durability) is stable on Contabo.
+## Status (2026-08-02)
 
-Until this ships:
+**MVP shipped** (additive):
 
-- Clients may keep using local ranking helpers (e.g. `rankFeedForYou`).
-- Do not treat Redis engagement counters as ranking authority.
-- Feed list APIs remain chronological / existing query paths under `/api/media/*` and the thin Feed module façade.
+| Piece | Endpoint / module |
+|-------|-------------------|
+| Events ingest | `POST /api/feed/events` → `FeedEvent` |
+| For You list | `GET /api/feed/for-you` → same card shape as all-content |
+| Fatigue | Demote impression / watch_time / skip from last 24h |
+| Scoring | Engagement + recency + light exploration + type diversification |
 
-When ready, implement in order: watch-time events → candidates → scorer → authenticated For You endpoint — without dual Kafka+BullMQ analytics paths on Contabo.
+Chronological feed **`GET /api/media/all-content` remains the stable default**. FE may keep `rankFeedForYou` until events are wired and For You is feature-flagged.
+
+## Not yet (next iterations)
+
+- Heavy candidate generation / embeddings
+- Dual Kafka + BullMQ analytics paths (avoid on Contabo)
+- Treating Redis counters as ranking authority
+
+## FE contract
+
+See [FRONTEND_TIKTOK_FEED_HANDOFF.md](./FRONTEND_TIKTOK_FEED_HANDOFF.md).

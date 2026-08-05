@@ -630,31 +630,88 @@ export const getUserAudioLibrary = async (
 
     const { Bookmark } = await import("../models/bookmark.model");
     const { Media } = await import("../models/media.model");
+    const { CopyrightFreeSongInteraction } = await import(
+      "../models/copyrightFreeSongInteraction.model"
+    );
+    const { CopyrightFreeSong } = await import("../models/copyrightFreeSong.model");
+    const { shapePublicSong } = await import("../modules/audio/track.formatter");
+    const { CopyrightFreeSongService } = await import(
+      "../service/copyrightFreeSong.service"
+    );
 
-    // Get all bookmarked media that are audio/music
-    const bookmarks = await Bookmark.find({
-      user: new Types.ObjectId(userId),
-    })
-      .populate({
-        path: "media",
-        match: {
-          contentType: { $in: ["music", "audio"] },
-        },
+    // Media bookmarks (uploaded music/audio) + CF saves (Spotify-style Liked / Library)
+    const [bookmarks, cfSaves] = await Promise.all([
+      Bookmark.find({ user: new Types.ObjectId(userId) })
+        .populate({
+          path: "media",
+          match: { contentType: { $in: ["music", "audio", "podcast", "sermon"] } },
+        })
+        .sort({ createdAt: -1 })
+        .lean(),
+      CopyrightFreeSongInteraction.find({
+        userId: new Types.ObjectId(userId),
+        hasSaved: true,
       })
-      .sort({ createdAt: -1 })
-      .lean();
+        .sort({ updatedAt: -1 })
+        .lean(),
+    ]);
 
-    // Filter out null media (populate failed)
-    const audioBookmarks = bookmarks.filter((b: any) => b.media !== null);
+    const mediaItems = bookmarks
+      .filter((b: any) => b.media !== null)
+      .map((b: any) => ({
+        id: String(b.media._id),
+        ...b.media,
+        source: "media",
+        contentType: b.media.contentType,
+        isInLibrary: true,
+        saved: true,
+        savedAt: b.createdAt,
+      }));
+
+    const cfSongIds = cfSaves.map((s: any) => s.songId).filter(Boolean);
+    const cfSongs =
+      cfSongIds.length > 0
+        ? await CopyrightFreeSong.find({ _id: { $in: cfSongIds } }).lean()
+        : [];
+    const cfMap = new Map(cfSongs.map((s: any) => [String(s._id), s]));
+    const savedAtBySong = new Map(
+      cfSaves.map((s: any) => [String(s.songId), s.updatedAt || s.createdAt])
+    );
+
+    const cfItems = cfSongIds
+      .map((id: any) => {
+        const song = cfMap.get(String(id));
+        if (!song) return null;
+        const viewCount = CopyrightFreeSongService.normalizedViewCount(song);
+        return shapePublicSong(song, {
+          viewCount,
+          views: viewCount,
+          likeCount: song.likeCount ?? 0,
+          likes: song.likeCount ?? 0,
+          source: "copyright-free",
+          contentType: "copyright-free-music",
+          isInLibrary: true,
+          saved: true,
+          isSaved: true,
+          savedAt: savedAtBySong.get(String(id)),
+        });
+      })
+      .filter(Boolean);
+
+    const items = [...cfItems, ...mediaItems].sort((a: any, b: any) => {
+      const ta = new Date(a.savedAt || 0).getTime();
+      const tb = new Date(b.savedAt || 0).getTime();
+      return tb - ta;
+    });
 
     res.status(200).json({
       success: true,
       message: "Audio library retrieved successfully",
-      data: audioBookmarks.map((b: any) => ({
-        id: b.media._id,
-        ...b.media,
-        savedAt: b.createdAt,
-      })),
+      data: {
+        items,
+        songs: items,
+        total: items.length,
+      },
     });
   } catch (error: any) {
     logger.error("Error getting audio library:", error);
@@ -694,12 +751,10 @@ export const downloadCopyrightFreeSong = async (
       return;
     }
 
-    // Fetch the song to verify it exists and is a copyright-free song
-    const { Media } = await import("../models/media.model");
-    const song = await Media.findById(songId).select(
-      "fileSize fileUrl contentType title isPublicDomain"
-    );
+    const { CopyrightFreeSong } = await import("../models/copyrightFreeSong.model");
+    const { normalizeUrl } = await import("./copyrightFreeSong/shared");
 
+    const song = await CopyrightFreeSong.findById(songId).lean();
     if (!song) {
       res.status(404).json({
         success: false,
@@ -708,26 +763,12 @@ export const downloadCopyrightFreeSong = async (
       return;
     }
 
-    // Verify this is a copyright-free song
-    if (!song.isPublicDomain) {
-      res.status(403).json({
-        success: false,
-        message: "This song is not available for download as a copyright-free song",
-      });
-      return;
-    }
-
-    // Verify it's an audio/music file
-    if (!["music", "audio"].includes(song.contentType)) {
-      res.status(400).json({
-        success: false,
-        message: "This content is not an audio file",
-      });
-      return;
-    }
-
-    // Check if file is available
-    if (!song.fileUrl) {
+    const rawUrl =
+      (song as any).audio?.playbackUrl ||
+      (song as any).fileUrl ||
+      (song as any).audioUrl ||
+      null;
+    if (!rawUrl || String(rawUrl).startsWith("pending://")) {
       res.status(403).json({
         success: false,
         message: "Song file not available for download",
@@ -735,29 +776,37 @@ export const downloadCopyrightFreeSong = async (
       return;
     }
 
-    // Use provided fileSize, or fallback to song.fileSize, or 0 as default
+    const downloadUrl = normalizeUrl(rawUrl);
     const finalFileSize =
       fileSize && typeof fileSize === "number" && fileSize > 0
         ? fileSize
-        : song.fileSize && typeof song.fileSize === "number" && song.fileSize > 0
-        ? song.fileSize
-        : 0;
+        : Number((song as any).audio?.fileSizeBytes || 0) || 0;
 
-    // Use the existing MediaService to handle download
-    const mediaService = new MediaService();
-    const result = await mediaService.downloadMedia({
-      userId,
-      mediaId: songId,
-      fileSize: finalFileSize,
-    });
+    const safeTitle = String((song as any).title || "song")
+      .replace(/[^\w\s.-]+/g, "")
+      .trim()
+      .replace(/\s+/g, "_")
+      .slice(0, 80);
+    const format = String((song as any).audio?.format || "audio/mpeg");
+    const ext = format.includes("wav")
+      ? "wav"
+      : format.includes("mp4") || format.includes("m4a")
+        ? "m4a"
+        : "mp3";
 
     res.status(200).json({
       success: true,
-      message: "Download recorded successfully",
-      downloadUrl: result.downloadUrl,
-      fileName: result.fileName,
-      fileSize: result.fileSize,
-      contentType: result.contentType,
+      message: "Download ready",
+      downloadUrl,
+      fileName: `${safeTitle || "song"}.${ext}`,
+      fileSize: finalFileSize,
+      contentType: format.startsWith("audio/") ? format : "audio/mpeg",
+      data: {
+        downloadUrl,
+        fileName: `${safeTitle || "song"}.${ext}`,
+        fileSize: finalFileSize,
+        contentType: format.startsWith("audio/") ? format : "audio/mpeg",
+      },
     });
   } catch (error: unknown) {
     logger.error("Error downloading copyright-free song:", error);

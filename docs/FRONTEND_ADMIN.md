@@ -150,6 +150,8 @@ On `/admin` load these in parallel:
 | `moderation.pending` | Items on review | Moderation queue |
 | `users.banned` | Banned | Users `?isBanned=true` |
 | `verification.unverifiedArtists` | Unverified artists | Users `?role=artist` |
+| `verification.activeArtistsMissingOnboardEmail` | Need onboard email | Email → Artist onboard |
+| `reminders[]` | Action banners (incl. artist onboard) | Follow `action.path` / `hrefHint` |
 | Feed `onlineCount` | Online now | Users → Presence |
 
 ### Feed event types (`GET /api/admin/dashboard/feed`)
@@ -175,6 +177,7 @@ Poll feed + analytics every **30–60s** (no report websocket yet).
 | **Overview** | `…/dashboard/analytics`, `…/dashboard/feed`, `…/media/recent`, `…/users/presence` | KPIs, uploads, review, online |
 | **Users** | `GET /api/admin/users`, presence, ban/role/verification | Manage accounts |
 | **Compose email** | `POST /api/admin/email` | Mail users by id or email |
+| **Artist onboard email** | `POST /api/admin/email/artist-onboard` | Invite/welcome creators (see `FRONTEND_MARKETING_EMAIL_HANDOFF.md` §4) |
 | **Reports** | `GET /api/admin/reports` | Media + comment inbox |
 | **Moderation** | `GET /api/admin/moderation/queue` | Approve / reject AI-held uploads |
 | **Churches** | `GET/POST/PATCH/DELETE /api/admin/churches` + email via `churchIds` | Catalog for onboarding + outreach |

@@ -3,7 +3,10 @@ import {
   isUniversalLikeContentType,
   isCommentableContentType,
   assertCommentableContentType,
+  getContentModel,
 } from "../shared/contentType.resolver";
+import { Media } from "../../../models/media.model";
+import { Devotional } from "../../../models/devotional.model";
 
 describe("normalizeContentType — feed aliases", () => {
   it.each([
@@ -60,5 +63,22 @@ describe("isCommentableContentType / assertCommentableContentType", () => {
 
   it("assert throws on unsupported", () => {
     expect(() => assertCommentableContentType("artist")).toThrow(/not supported/i);
+  });
+});
+
+describe("getContentModel", () => {
+  it("maps feed aliases to Media", () => {
+    expect(getContentModel("videos")).toBe(Media);
+    expect(getContentModel("media")).toBe(Media);
+    expect(getContentModel("sermon")).toBe(Media);
+    expect(getContentModel("merch")).toBe(Media);
+  });
+
+  it("maps exact devotional to Devotional collection", () => {
+    expect(getContentModel("devotional")).toBe(Devotional);
+  });
+
+  it("returns null for unknown types", () => {
+    expect(getContentModel("junk")).toBeNull();
   });
 });

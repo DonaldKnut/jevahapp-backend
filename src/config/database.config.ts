@@ -3,6 +3,13 @@
 
 import type { ConnectOptions } from "mongoose";
 
+/**
+ * Default readPreference MUST be `primary` for this API.
+ * Engagement paths (CF views, likes, shares, comments) use multi-document
+ * transactions; MongoDB rejects `primaryPreferred` / secondary reads inside
+ * transactions ("Read preference in a transaction must be primary").
+ * Opt into secondary reads per-query for analytics if needed later.
+ */
 export const mongooseConfig: ConnectOptions = {
   maxPoolSize: parseInt(process.env.MONGODB_POOL_SIZE || "10"),
   minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || "2"),
@@ -15,7 +22,5 @@ export const mongooseConfig: ConnectOptions = {
   maxIdleTimeMS: 30000, // Close idle connections after 30s
   connectTimeoutMS: 10000, // 10s connection timeout
   heartbeatFrequencyMS: 10000, // Check connection health every 10s
-  // Enable read preference for better performance
-  readPreference: "primaryPreferred", // Prefer primary but allow secondary reads
+  readPreference: "primary",
 };
-

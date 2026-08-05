@@ -15,8 +15,12 @@ export function isPubliclyVisibleMedia(doc: {
   moderationStatus?: string | null;
   isHidden?: boolean | null;
   publicationState?: string | null;
+  deletedAt?: Date | string | null;
 }): boolean {
   if (doc?.moderationStatus !== "approved" || doc?.isHidden === true) {
+    return false;
+  }
+  if (doc?.deletedAt) {
     return false;
   }
   if (

@@ -1,11 +1,15 @@
-import { Types, ClientSession } from "mongoose";
+import { Types } from "mongoose";
 import { Bookmark } from "../../models/bookmark.model";
 import { Media } from "../../models/media.model";
 import logger from "../../utils/logger";
 import { AuditService } from "../audit.service";
 import { NotificationService } from "../notification.service";
 import { getBookmarkCount } from "./bookmark.query";
-import { normalizeContentType } from "../../modules/engagement/shared/contentType.resolver";
+import {
+  MEDIA_LIKE_ALIASES,
+  normalizeContentType,
+  resolveBookmarkableMedia,
+} from "../../modules/engagement/shared/contentType.resolver";
 import { setFeedUserBookmarkFlag } from "../media/feedUserFlags";
 
 export interface BookmarkResult {
@@ -15,6 +19,18 @@ export interface BookmarkResult {
   bookmarkCount: number;
   saves: number;
   bookmarkId?: string;
+}
+
+export class BookmarkToggleError extends Error {
+  statusCode: number;
+  code: string;
+
+  constructor(message: string, statusCode: number, code: string) {
+    super(message);
+    this.name = "BookmarkToggleError";
+    this.statusCode = statusCode;
+    this.code = code;
+  }
 }
 
 const FLOOR_BOOKMARK = [
@@ -27,47 +43,31 @@ const FLOOR_BOOKMARK = [
   },
 ];
 
-/** Map feed / FE aliases to the collection bookmark supports */
+/**
+ * Map feed / FE aliases to the collection bookmark supports.
+ * Aligns with like aliases; Media-card "devotional" also bookmarks Media (not Devotional coll).
+ */
 export function mapBookmarkContentType(raw?: string): string {
   if (!raw || typeof raw !== "string") return "media";
   const t = raw.trim().toLowerCase();
-  const mediaAliases = new Set([
-    "media",
-    "video",
-    "videos",
-    "audio",
-    "music",
-    "live",
-    "sermon",
-    "sermons",
-    "devotional",
-    "ebook",
-    "e-books",
-    "ebooks",
-    "books",
-    "podcast",
-    "podcasts",
-    "image",
-    "images",
-  ]);
-  if (mediaAliases.has(t)) return "media";
-  if (t === "copyright_free_song" || t === "copyright-free" || t === "copyright_free") {
+  if (
+    t === "copyright_free_song" ||
+    t === "copyright-free" ||
+    t === "copyright_free"
+  ) {
     return "copyright_free_song";
+  }
+  // Feed Media docs often carry contentType "devotional" — same Media collection as likes
+  if (t === "devotional" || MEDIA_LIKE_ALIASES.has(t) || t === "merch") {
+    return "media";
   }
   return normalizeContentType(t);
 }
 
+/** @deprecated Prefer resolveBookmarkableMedia — kept for tests / callers */
 export async function verifyMediaExists(mediaId: string): Promise<boolean> {
-  try {
-    const media = await Media.findById(mediaId).select("_id").lean();
-    return !!media;
-  } catch (error: any) {
-    logger.error("Failed to verify media exists", {
-      mediaId,
-      error: error.message,
-    });
-    return false;
-  }
+  const doc = await resolveBookmarkableMedia(mediaId);
+  return !!doc;
 }
 
 export async function toggleBookmark(
@@ -76,18 +76,26 @@ export async function toggleBookmark(
   contentTypeHint?: string
 ): Promise<BookmarkResult> {
   if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(mediaId)) {
-    throw new Error("Invalid user or media ID");
+    throw new BookmarkToggleError(
+      "Invalid user or media ID",
+      400,
+      "INVALID_ID"
+    );
   }
 
   const mapped = mapBookmarkContentType(contentTypeHint);
   if (mapped === "copyright_free_song") {
-    throw new Error(
-      "Use POST /api/audio/copyright-free/:songId/save for copyright-free songs"
+    throw new BookmarkToggleError(
+      "Use POST /api/audio/copyright-free/:songId/save for copyright-free songs",
+      400,
+      "WRONG_ENDPOINT"
     );
   }
   if (mapped !== "media") {
-    throw new Error(
-      `Unsupported content type for feed bookmark: ${contentTypeHint}. Use contentType "media".`
+    throw new BookmarkToggleError(
+      `Unsupported content type for feed bookmark: ${contentTypeHint}. Use contentType "media".`,
+      400,
+      "UNSUPPORTED_CONTENT_TYPE"
     );
   }
 
@@ -98,121 +106,81 @@ export async function toggleBookmark(
     timestamp: new Date().toISOString(),
   });
 
-  const mediaExists = await verifyMediaExists(mediaId);
-  if (!mediaExists) {
-    throw new Error(`Media not found: ${mediaId}`);
+  // Same Media collection as likes/views — pending / under_review / processing allowed
+  const content = await resolveBookmarkableMedia(mediaId);
+  if (!content) {
+    throw new BookmarkToggleError("Media not found", 404, "MEDIA_NOT_FOUND");
+  }
+  if (content.moderationStatus === "rejected") {
+    throw new BookmarkToggleError(
+      "This content can’t be saved",
+      400,
+      "MEDIA_REJECTED"
+    );
   }
 
-  const session: ClientSession = await Bookmark.startSession();
-  try {
-    let bookmarked = false;
-    let bookmarkId: string | undefined;
+  // Non-transactional: standalone Mongo rejects multi-doc transactions (→ opaque 500s).
+  // Duplicate key 11000 is treated as already-bookmarked.
+  return toggleBookmarkWithoutTransaction(userId, mediaId);
+}
 
-    await session.withTransaction(async () => {
-      const existingBookmark = await Bookmark.findOne({
-        user: new Types.ObjectId(userId),
-        media: new Types.ObjectId(mediaId),
-      }).session(session);
+async function finalizeBookmarkResult(
+  userId: string,
+  mediaId: string,
+  bookmarked: boolean,
+  bookmarkId?: string
+): Promise<BookmarkResult> {
+  const bookmarkCount = Math.max(0, await getBookmarkCount(mediaId));
+  void setFeedUserBookmarkFlag(userId, mediaId, bookmarked);
 
-      if (existingBookmark) {
-        await Bookmark.findByIdAndDelete(existingBookmark._id, { session });
-        await Media.findByIdAndUpdate(mediaId, FLOOR_BOOKMARK, { session });
-        bookmarked = false;
-      } else {
-        const created = await Bookmark.create(
-          [
-            {
-              user: new Types.ObjectId(userId),
-              media: new Types.ObjectId(mediaId),
-            },
-          ],
-          { session }
-        );
-        bookmarkId = created[0]._id.toString();
-        await Media.findByIdAndUpdate(
-          mediaId,
-          { $inc: { bookmarkCount: 1 } },
-          { session }
-        );
-        bookmarked = true;
-      }
-    });
-
-    const bookmarkCount = Math.max(0, await getBookmarkCount(mediaId));
-    // No feed-cache invalidation: saved flags are overlaid fresh per request.
-    void setFeedUserBookmarkFlag(userId, mediaId, bookmarked);
-
-    if (bookmarked) {
-      try {
-        await NotificationService.notifyContentBookmark(
-          userId,
-          mediaId,
-          "media",
-          bookmarkId
-        );
-      } catch (notificationError: any) {
-        logger.warn("Failed to send bookmark notification", {
-          error: notificationError?.message,
-          userId,
-          mediaId,
-        });
-      }
-    }
-
-    logger.info("Toggle bookmark completed", {
-      userId,
-      mediaId,
-      bookmarked,
-      bookmarkCount,
-      timestamp: new Date().toISOString(),
-    });
-
+  if (bookmarked) {
     try {
-      await AuditService.logMediaInteraction(
+      await NotificationService.notifyContentBookmark(
         userId,
-        bookmarked ? "media_save" : "media_remove",
-        mediaId
+        mediaId,
+        "media",
+        bookmarkId
       );
-    } catch (auditError: any) {
-      logger.warn("Failed to write audit log for bookmark toggle", {
-        error: auditError?.message,
+    } catch (notificationError: any) {
+      logger.warn("Failed to send bookmark notification", {
+        error: notificationError?.message,
         userId,
         mediaId,
-        bookmarked,
       });
     }
+  }
 
-    return {
-      contentId: mediaId,
-      bookmarked,
-      isBookmarked: bookmarked,
-      bookmarkCount,
-      saves: bookmarkCount,
-      bookmarkId,
-    };
-  } catch (error: any) {
-    if (
-      error.message?.includes("Transaction numbers are only allowed") ||
-      error.message?.includes("replica set")
-    ) {
-      logger.warn("Bookmark toggle falling back without transaction", {
-        mediaId,
-        userId,
-      });
-      return toggleBookmarkWithoutTransaction(userId, mediaId);
-    }
+  logger.info("Toggle bookmark completed", {
+    userId,
+    mediaId,
+    bookmarked,
+    bookmarkCount,
+    timestamp: new Date().toISOString(),
+  });
 
-    logger.error("Toggle bookmark transaction failed", {
-      error: error.message,
-      stack: error.stack,
+  try {
+    await AuditService.logMediaInteraction(
+      userId,
+      bookmarked ? "media_save" : "media_remove",
+      mediaId
+    );
+  } catch (auditError: any) {
+    logger.warn("Failed to write audit log for bookmark toggle", {
+      error: auditError?.message,
       userId,
       mediaId,
-      timestamp: new Date().toISOString(),
+      bookmarked,
     });
-    throw error;
-  } finally {
-    session.endSession();
   }
+
+  return {
+    contentId: mediaId,
+    bookmarked,
+    isBookmarked: bookmarked,
+    bookmarkCount,
+    saves: bookmarkCount,
+    bookmarkId,
+  };
 }
 
 async function toggleBookmarkWithoutTransaction(
@@ -248,15 +216,5 @@ async function toggleBookmarkWithoutTransaction(
     }
   }
 
-  const bookmarkCount = Math.max(0, await getBookmarkCount(mediaId));
-  void setFeedUserBookmarkFlag(userId, mediaId, bookmarked);
-
-  return {
-    contentId: mediaId,
-    bookmarked,
-    isBookmarked: bookmarked,
-    bookmarkCount,
-    saves: bookmarkCount,
-    bookmarkId,
-  };
+  return finalizeBookmarkResult(userId, mediaId, bookmarked, bookmarkId);
 }

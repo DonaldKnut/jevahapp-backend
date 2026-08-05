@@ -63,7 +63,7 @@ async function testConnection() {
     console.error("\n💡 Troubleshooting:");
     console.error("1. Check if Redis is running: redis-cli ping");
     console.error("2. Check REDIS_URL in .env file");
-    console.error("3. For production, verify Redis service is running in Render");
+    console.error("3. For Contabo production, verify Redis is running: redis-cli -h 127.0.0.1 ping");
     process.exit(1);
   } finally {
     await redis.quit();

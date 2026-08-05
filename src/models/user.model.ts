@@ -158,6 +158,13 @@ export interface IUser {
     securityAlerts?: boolean;
   };
 
+  /** Product / marketing email consent (opt-out). Transactional mail ignores this. */
+  marketingEmails?: {
+    enabled?: boolean;
+    unsubscribedAt?: Date;
+    unsubscribeToken?: string;
+  };
+
   // Push notification settings
   pushNotifications?: {
     enabled?: boolean;
@@ -415,6 +422,13 @@ const userSchema = new Schema<IUserDocument>(
       securityAlerts: { type: Boolean, default: true },
     },
 
+    // Marketing / product announcements (opt-out; default enabled)
+    marketingEmails: {
+      enabled: { type: Boolean, default: true },
+      unsubscribedAt: { type: Date },
+      unsubscribeToken: { type: String, index: true, sparse: true },
+    },
+
     // Push notification settings
     pushNotifications: {
       enabled: { type: Boolean, default: true },
@@ -481,6 +495,8 @@ userSchema.index({ role: 1, "artistProfile.isVerifiedArtist": 1 });
 userSchema.index({ subscriptionTier: 1, subscriptionStatus: 1 });
 userSchema.index({ "library.mediaId": 1 });
 userSchema.index({ "userActivities.timestamp": -1 });
+userSchema.index({ "marketingEmails.unsubscribeToken": 1 }, { sparse: true });
+userSchema.index({ "marketingEmails.enabled": 1, role: 1 });
 userSchema.index({ lastLoginAt: -1 });
 
 // Export the Mongoose model

@@ -88,6 +88,31 @@ export class EngagementShareService {
       shareCount,
     });
 
+    try {
+      const { getIO } = require("../../../socket/socketManager");
+      const io = getIO?.();
+      if (io) {
+        const updatedAt = new Date().toISOString();
+        const payload = {
+          mediaId: contentId,
+          contentId,
+          contentType: normalized,
+          shareCount,
+          totalShares: shareCount,
+          shared: true,
+          updatedAt,
+          timestamp: updatedAt,
+        };
+        io.emit("content-share-count-updated", payload);
+        io.emit("content-share-update", payload);
+      }
+    } catch (socketError: any) {
+      logger.warn("Failed to emit share socket update", {
+        error: socketError?.message,
+        contentId,
+      });
+    }
+
     void NotificationService.notifyContentShare(
       userId,
       contentId,

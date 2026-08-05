@@ -56,6 +56,10 @@ export class MediaService {
     return mediaDeleteService.deleteMedia(mediaIdentifier, userIdentifier, userRole);
   }
 
+  softDeleteMedia(mediaIdentifier: string, userIdentifier: string, userRole: string) {
+    return mediaDeleteService.softDeleteMedia(mediaIdentifier, userIdentifier, userRole);
+  }
+
   recordInteraction(data: MediaInteractionInput) {
     return mediaEngagementService.recordInteraction(data);
   }

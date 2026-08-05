@@ -4,7 +4,7 @@ async function testEndpoint() {
   console.log("🧪 Testing AI Content Description Endpoint...\n");
 
   const options = {
-    hostname: "jevahapp-backend.onrender.com",
+    hostname: "localhost",
     port: 443,
     path: "/api/media/public/all-content",
     method: "GET",

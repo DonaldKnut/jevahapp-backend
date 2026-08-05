@@ -44,7 +44,12 @@ export const ALLOWED_COVER_MIME = new Set([
   "image/webp",
 ]);
 
-export const TRACK_AUDIO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+export const TRACK_AUDIO_MAX_BYTES = 100 * 1024 * 1024; // 100 MB (single PUT)
+/** Masters above this use R2 multipart (or pass multipart:true). */
+export const TRACK_MULTIPART_THRESHOLD_BYTES = 20 * 1024 * 1024; // 20 MB
+export const TRACK_AUDIO_MULTIPART_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
+/** Suggested FE part size for multipart PUTs. */
+export const TRACK_MULTIPART_PART_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 export const TRACK_COVER_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 export const TRACK_PRESIGN_EXPIRES_SEC = 900;
 

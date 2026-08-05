@@ -1,8 +1,12 @@
 /**
  * Bounded Gemini generateContent helper with timeout + jittered retries.
+ * On API_KEY_INVALID, rotates through GOOGLE_AI_API_KEY / GOOGLE_GEMINI_API_KEY / GEMINI_API_KEY.
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getGoogleAiApiKey } from "./geminiConfig";
+import {
+  getGoogleAiApiKeyCandidates,
+  getDefaultGeminiModel,
+} from "./geminiConfig";
 import { engagementRedisSafe } from "../../lib/engagementRedis";
 import logger from "../../utils/logger";
 
@@ -18,10 +22,36 @@ const MAX_CONCURRENT = Math.min(
 );
 const CONCURRENCY_KEY = "gemini:concurrency:v1";
 
+/** Index into key candidates when primary key is rejected by Google. */
+let keyFailIndex = 0;
+
 export function createGeminiClient(): GoogleGenerativeAI | null {
-  const key = getGoogleAiApiKey();
-  if (!key) return null;
-  return new GoogleGenerativeAI(key);
+  const candidates = getGoogleAiApiKeyCandidates();
+  if (candidates.length === 0) return null;
+  const idx = Math.min(keyFailIndex, candidates.length - 1);
+  return new GoogleGenerativeAI(candidates[idx]);
+}
+
+export function markGeminiApiKeyInvalid(): void {
+  const candidates = getGoogleAiApiKeyCandidates();
+  if (keyFailIndex < candidates.length - 1) {
+    keyFailIndex += 1;
+    logger.warn("Gemini API key marked invalid — rotating to next env candidate", {
+      nextIndex: keyFailIndex,
+      remaining: candidates.length - keyFailIndex,
+    });
+  } else {
+    logger.error(
+      "All configured Gemini API keys rejected (API_KEY_INVALID). Offline moderation will be used until keys are fixed."
+    );
+  }
+}
+
+export function isGeminiApiKeyError(err: unknown): boolean {
+  const msg = String((err as any)?.message || err || "");
+  return /API[_ ]?KEY[_ ]?INVALID|API key not valid|PERMISSION_DENIED.*API key/i.test(
+    msg
+  );
 }
 
 async function waitForSlot(): Promise<void> {
@@ -57,7 +87,6 @@ async function acquireDistributedSlot(): Promise<boolean> {
         ) === 1,
       null
     );
-    // Redis unavailable: the process-local limit remains active.
     if (acquired === null || acquired) return acquired === true;
     await new Promise(r => setTimeout(r, 75 + Math.random() * 125));
   }
@@ -87,21 +116,40 @@ export async function generateContentWithRetry(
 ): Promise<any> {
   const timeoutMs = opts?.timeoutMs || DEFAULT_TIMEOUT_MS;
   let lastErr: any;
+  const candidates = getGoogleAiApiKeyCandidates();
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     await waitForSlot();
     const distributedSlot = await acquireDistributedSlot();
     activeCalls++;
     try {
+      let activeModel = model;
+      if (keyFailIndex > 0 && candidates[keyFailIndex]) {
+        const client = new GoogleGenerativeAI(candidates[keyFailIndex]);
+        const modelId = getDefaultGeminiModel();
+        activeModel = client.getGenerativeModel({ model: modelId });
+      }
+
       const result = await Promise.race([
-        model.generateContent(request),
+        activeModel.generateContent(request),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Gemini timeout after ${timeoutMs}ms`)), timeoutMs)
+          setTimeout(
+            () => reject(new Error(`Gemini timeout after ${timeoutMs}ms`)),
+            timeoutMs
+          )
         ),
       ]);
       return result;
     } catch (err: any) {
       lastErr = err;
       const msg = String(err?.message || err);
+      if (isGeminiApiKeyError(err)) {
+        markGeminiApiKeyInvalid();
+        if (keyFailIndex < candidates.length) {
+          continue;
+        }
+        break;
+      }
       const retryable = /429|5\d\d|timeout|ECONNRESET|unavailable/i.test(msg);
       logger.warn("Gemini call failed", {
         label: opts?.label,

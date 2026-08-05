@@ -30,6 +30,38 @@ export function collectMediaObjectKeys(media: {
 }
 
 export class MediaDeleteService {
+  /**
+   * Soft-delete: hide from public feeds; keep DB + R2 for audit / restore.
+   * Sets isHidden, publicationState=tombstoned, deletedAt.
+   */
+  async softDeleteMedia(
+    mediaIdentifier: string,
+    userIdentifier: string,
+    userRole: string
+  ) {
+    if (!Types.ObjectId.isValid(mediaIdentifier)) {
+      throw new Error("Invalid media identifier");
+    }
+
+    const media = await Media.findById(mediaIdentifier);
+    if (!media) {
+      throw new Error("Media not found");
+    }
+
+    if (
+      media.uploadedBy.toString() !== userIdentifier &&
+      userRole !== "admin"
+    ) {
+      throw new Error("Unauthorized to delete this media");
+    }
+
+    (media as any).isHidden = true;
+    (media as any).publicationState = "tombstoned";
+    (media as any).deletedAt = new Date();
+    await media.save();
+    return true;
+  }
+
   async deleteMedia(
     mediaIdentifier: string,
     userIdentifier: string,

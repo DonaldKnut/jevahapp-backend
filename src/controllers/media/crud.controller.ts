@@ -306,7 +306,10 @@ export const getMediaByIdentifier = async (
       return;
     }
 
-    const media = await mediaService.getMediaByIdentifier(id);
+    const media = await mediaService.getMediaByIdentifier(id, {
+      actingUserId: request.userId,
+      userRole: request.userRole || request.user?.role,
+    });
     const interactionCounts = await mediaService.getInteractionCounts(id);
 
     // media is already an object (not a Mongoose document) from the service transformation
@@ -319,7 +322,10 @@ export const getMediaByIdentifier = async (
     });
   } catch (error: any) {
     logger.error("Get media by identifier error", { error: error?.message });
-    response.status(error.message === "Media not found" ? 404 : 400).json({
+    const notFound =
+      error.message === "Media not found" ||
+      error.message === "Media not found or under review";
+    response.status(notFound ? 404 : 400).json({
       success: false,
       message: error.message || "Failed to fetch media item",
     });

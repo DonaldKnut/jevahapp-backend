@@ -28,6 +28,7 @@ export interface ArtistCard {
   createdAt: string | Date | null;
   updatedAt: string | Date | null;
   reviewedAt: string | Date | null;
+  onboardEmailSentAt: string | Date | null;
 }
 
 export interface CreatorCapabilities {
@@ -61,6 +62,7 @@ export function shapeArtistCard(doc: any): ArtistCard {
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,
     reviewedAt: doc.reviewedAt || null,
+    onboardEmailSentAt: doc.onboardEmailSentAt || null,
   };
 }
 

@@ -147,13 +147,23 @@ Authenticated `GET /api/media/all-content` overlays per-user liked/saved **in th
 
 ### Bookmark vs like — important
 
-Media likes and bookmarks both verify Media existence before mutating. If one returns `404` and the other does not, re-fetch the feed — the ID may be stale in a cached list, not a different collection.
+Media likes and bookmarks both resolve the **Media** collection (`getContentModel` / `resolveBookmarkableMedia`) before mutating. Body `contentType` aliases (`videos`, `sermon`, …) map to `media` the same way as like path segments.
+
+If one returns `404` and the other does not for the same id, re-fetch the feed — the ID may be stale in a cached list. After deploy, bookmark must not 404 while like succeeds for a live feed id.
+
+See [FRONTEND_BOOKMARK_HANDOFF.md](./FRONTEND_BOOKMARK_HANDOFF.md).
 
 ---
 
 ### For You feed (`GET /api/feed/for-you`)
 
-Not shipped yet. Client-side ranking (`rankFeedForYou`) remains source of truth until watch_time ingestion + server ranking land.
+**MVP shipped** (authenticated). Returns the **same media card shape** as all-content (`data.items` + `data.media` alias), with fatigue + light scoring.
+
+Ranking signals: `POST /api/feed/events` (`impression` | `watch_time` | `skip` | …).
+
+Client-side `rankFeedForYou` may remain until FE switches list source. Full handoff: [FRONTEND_TIKTOK_FEED_HANDOFF.md](./FRONTEND_TIKTOK_FEED_HANDOFF.md).
+
+Feed cards also include `bookmarkCount` / `saves`, `engagementContentType: "media"`, and bookmark flag aliases (`bookmarked` / `isBookmarked`).
 
 ---
 
@@ -173,17 +183,17 @@ Do **not** use `/api/content/*` for copyright-free songs.
 
 | Action | Method | Endpoint | Auth |
 |--------|--------|----------|------|
-| List songs | GET | `/api/audio/copyright-free` | Public |
-| Get song | GET | `/api/audio/copyright-free/:songId` | Public |
+| List songs | GET | `/api/audio/copyright-free` | Optional Bearer (personalizes `isLiked` / `isInLibrary`) |
+| Get song | GET | `/api/audio/copyright-free/:songId` | Optional Bearer |
 | Stream redirect | GET | `/api/audio/copyright-free/:songId/stream` | Public |
-| Search | GET | `/api/audio/copyright-free/search?q=` | Public |
+| Search | GET | `/api/audio/copyright-free/search?q=` | Optional Bearer |
 | Categories | GET | `/api/audio/copyright-free/categories` | Public |
 | Like | POST | `/api/audio/copyright-free/:songId/like` | Required |
 | View | POST | `/api/audio/copyright-free/:songId/view` | Required |
 | Share | POST | `/api/audio/copyright-free/:songId/share` | Required |
 | Save | POST | `/api/audio/copyright-free/:songId/save` | Required |
 | Download | POST | `/api/audio/copyright-free/:songId/download` | Required |
-| Audio library | GET | `/api/audio/library` | Required |
+| Audio library | GET | `/api/audio/library` | Required — CF saves + media audio bookmarks |
 
 ### View body (copyright-free)
 
@@ -204,10 +214,42 @@ Do **not** use `/api/content/*` for copyright-free songs.
   "success": true,
   "data": {
     "viewCount": 42,
-    "hasViewed": true
+    "hasViewed": true,
+    "counted": true,
+    "isNewView": true
   }
 }
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `counted` / `isNewView` | Always present. `true` only if **this** request incremented `viewCount` |
+| `hasViewed` | User already has a counted view (this or prior) |
+| `viewCount` | Authoritative total (`>= likeCount`) |
+
+Do not treat a missing `counted` as true — field is always sent.
+
+### Share (copyright-free)
+
+Every successful share **increments** `shareCount` (YouTube Music / Spotify analytics style — repeats count).
+
+Optional body: `{ "platform": "instagram" }`
+
+```json
+{
+  "success": true,
+  "data": {
+    "shared": true,
+    "shareCount": 9,
+    "likeCount": 14,
+    "viewCount": 42,
+    "shareUrl": "https://jevahapp.com/audio/copyright-free/…",
+    "platform": "instagram"
+  }
+}
+```
+
+List/detail payloads include `shareCount` / `saveCount`. Detail includes `shareUrl`.
 
 ### Save response
 
@@ -240,7 +282,7 @@ socket.emit("join-content", { contentId: songId, contentType: "audio" });
 // Room: content:audio:{songId}
 ```
 
-Event: `copyright-free-song-interaction-updated` — payload includes `songId`, `likeCount`, `viewCount`, `liked`.
+Event: `copyright-free-song-interaction-updated` — payload includes `songId`, `likeCount`, `viewCount`, `shareCount`, `liked`, `shared`.
 
 For feed media:
 

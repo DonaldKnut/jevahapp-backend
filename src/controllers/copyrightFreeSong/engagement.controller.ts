@@ -27,13 +27,16 @@ export const toggleLike = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const fast = await likeService.toggleLikeFast(userId, songId, "copyright_free_song");
-    likeService.toggleLike(userId, songId, "copyright_free_song").catch((err: Error) => {
-      logger.error("Background copyright-free like sync failed", { error: err.message, songId, userId });
-    });
+    // Single durable toggle — do NOT also call toggleLikeFast then toggleLike
+    // (both paths fully flip CF likes → background call undoes the like).
+    const result = await likeService.toggleLike(
+      userId,
+      songId,
+      "copyright_free_song"
+    );
 
-    const liked = fast.liked;
-    const likeCount = fast.likeCount;
+    const liked = result.liked;
+    const likeCount = result.likeCount;
 
     // Get updated song to ensure we have latest counts (invariant already applied by service)
     const updatedSong = await songService.getSongByIdAdmin(songId);
@@ -108,6 +111,10 @@ export const shareSong = async (req: Request, res: Response): Promise<void> => {
   try {
     const { songId } = req.params;
     const userId = req.userId;
+    const platform =
+      typeof req.body?.platform === "string"
+        ? req.body.platform.slice(0, 64)
+        : undefined;
 
     if (!userId) {
       res.status(401).json({
@@ -127,18 +134,51 @@ export const shareSong = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { shareCount, likeCount, viewCount } = await interactionService.shareSong(userId, songId);
+    const result = await interactionService.shareSong(userId, songId, {
+      platform,
+    });
+
+    try {
+      const { getIO } = await import("../../socket/socketManager");
+      const io = getIO();
+      if (io) {
+        const roomKey = `content:audio:${songId}`;
+        io.to(roomKey).emit("copyright-free-song-interaction-updated", {
+          songId,
+          shareCount: result.shareCount,
+          likeCount: result.likeCount,
+          viewCount: result.viewCount,
+          shared: true,
+        });
+      }
+    } catch (socketError: any) {
+      logger.warn("Failed to emit realtime share update", {
+        error: socketError?.message,
+        songId,
+      });
+    }
 
     res.status(200).json({
       success: true,
       data: {
-        shareCount,
-        likeCount,
-        viewCount,
+        shared: true,
+        shareCount: result.shareCount,
+        likeCount: result.likeCount,
+        viewCount: result.viewCount,
+        shareUrl: result.shareUrl,
+        platform: result.platform,
       },
     });
   } catch (error: any) {
     logger.error("Error sharing song:", error);
+    if (error.message === "Song not found" || error.message?.includes("Song not found")) {
+      res.status(404).json({
+        success: false,
+        message: "Song not found",
+        code: "NOT_FOUND",
+      });
+      return;
+    }
     res.status(500).json({
       success: false,
       message: "Failed to share song",
@@ -203,7 +243,20 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
   try {
     const { songId } = req.params;
     const userId = req.userId;
-    const { durationMs, progressPct, isComplete } = req.body;
+    // Never trust client-supplied counters — ignore if present.
+    const {
+      durationMs,
+      progressPct,
+      isComplete,
+      viewCount: _ignoreViewCount,
+      likeCount: _ignoreLikeCount,
+      counted: _ignoreCounted,
+      ..._rest
+    } = req.body || {};
+    void _ignoreViewCount;
+    void _ignoreLikeCount;
+    void _ignoreCounted;
+    void _rest;
 
     // Authentication check (required per spec)
     if (!userId) {
@@ -294,8 +347,15 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
     res.status(200).json({
       success: true,
       data: {
+        // Server-owned durable total — source of truth for UI lifetime views
         viewCount: result.viewCount,
         hasViewed: result.hasViewed,
+        // Always present — FE must not treat omit as counted.
+        // true only when THIS request incremented the song viewCount.
+        counted: result.isNewView === true,
+        isNewView: result.isNewView === true,
+        // Explicit: this is NOT live presence (socket viewer-count-update)
+        metric: "lifetime_view",
       },
     });
   } catch (error: any) {

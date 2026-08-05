@@ -10,6 +10,7 @@ import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlag
 import logger from "../../utils/logger";
 import { extractObjectKeyFromUrl, mapContentType } from "./shared";
 import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
+import { enrichMediaPlaybackFields } from "../../service/media/playbackFields";
 
 export const getPublicMedia = async (
   request: Request,
@@ -257,7 +258,7 @@ export const getPublicMediaByIdentifier = async (
       async () => {
         const media = await mediaService.getMediaByIdentifier(id, {
           actingUserId: request.userId,
-          userRole: request.userRole
+          userRole: request.userRole || request.user?.role,
         });
 
         if (!media) {
@@ -269,7 +270,7 @@ export const getPublicMediaByIdentifier = async (
 
         return {
           success: true,
-          media: media.toObject(),
+          media,
         };
       },
       600 // 10 minutes cache
@@ -391,6 +392,7 @@ export const getDefaultContent = async (
 
     // Use direct public URLs - no need for signed URL generation
     const content = defaultContentRaw.map((item: any) => {
+      const enriched = enrichMediaPlaybackFields(item);
       // Transform to frontend-expected format
       return {
         _id: item._id,
@@ -399,7 +401,11 @@ export const getDefaultContent = async (
         mediaUrl: item.fileUrl, // Use direct public URL
         thumbnailUrl: item.thumbnailUrl || item.fileUrl, // Use direct public URL
         contentType: mapContentType(item.contentType),
-        duration: item.duration || null,
+        duration: enriched.duration,
+        processingStatus: enriched.processingStatus,
+        fileUrl: item.fileUrl || null,
+        playbackUrl: item.playbackUrl || null,
+        hlsUrl: item.hlsUrl || null,
         author: {
           _id: item.uploadedBy?._id || item.uploadedBy,
           firstName: item.uploadedBy?.firstName || "Unknown",

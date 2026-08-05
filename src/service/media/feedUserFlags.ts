@@ -23,6 +23,30 @@ const BOOKMARKED = 1 << 1;
 const LIKE_KNOWN = 1 << 2;
 const BOOKMARK_KNOWN = 1 << 3;
 
+function normalizeFeedCardFlags(
+  item: any,
+  hasLiked: boolean,
+  hasBookmarked: boolean
+): any {
+  const bookmarkCount =
+    Number(item.bookmarkCount ?? item.totalSaves ?? item.saves ?? 0) || 0;
+  return {
+    ...item,
+    engagementContentType: item.engagementContentType || "media",
+    hasLiked,
+    hasBookmarked,
+    bookmarked: hasBookmarked,
+    isBookmarked: hasBookmarked,
+    bookmarkCount,
+    saves: bookmarkCount,
+    totalSaves: item.totalSaves ?? bookmarkCount,
+    userInteractions: {
+      liked: hasLiked,
+      saved: hasBookmarked,
+    },
+  };
+}
+
 function decodeFlags(raw: string | null): {
   liked?: boolean;
   bookmarked?: boolean;
@@ -62,15 +86,7 @@ export async function attachFeedUserInteractionFlags(
   userId?: string | null
 ): Promise<any[]> {
   if (!userId || !Types.ObjectId.isValid(userId) || !Array.isArray(mediaItems) || mediaItems.length === 0) {
-    return mediaItems.map(item => ({
-      ...item,
-      hasLiked: item.hasLiked ?? false,
-      hasBookmarked: item.hasBookmarked ?? false,
-      userInteractions: item.userInteractions ?? {
-        liked: item.hasLiked ?? false,
-        saved: item.hasBookmarked ?? false,
-      },
-    }));
+    return mediaItems.map(item => normalizeFeedCardFlags(item, false, false));
   }
 
   const ids = [
@@ -149,15 +165,7 @@ export async function attachFeedUserInteractionFlags(
     const id = (item._id || item.id)?.toString?.() || "";
     const hasLiked = likedMap.get(id) ?? false;
     const hasBookmarked = savedMap.get(id) ?? false;
-    return {
-      ...item,
-      hasLiked,
-      hasBookmarked,
-      userInteractions: {
-        liked: hasLiked,
-        saved: hasBookmarked,
-      },
-    };
+    return normalizeFeedCardFlags(item, hasLiked, hasBookmarked);
   });
 }
 

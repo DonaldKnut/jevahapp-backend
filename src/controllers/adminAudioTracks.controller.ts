@@ -73,7 +73,7 @@ export const listAdminTracks = async (req: Request, res: Response) => {
     res.status(200).json({
       success: true,
       data: {
-        items: rows.map(shapeTrackCard),
+        items: rows.map((r) => shapeTrackCard(r)),
         pagination: {
           page,
           limit,
@@ -145,6 +145,10 @@ export const createAdminTrackUploadIntent = async (
       coverFileSizeBytes: body.coverFileSizeBytes
         ? Number(body.coverFileSizeBytes)
         : undefined,
+      multipart:
+        body.multipart === true ||
+        body.multipart === "true" ||
+        body.mode === "multipart",
     });
     res.status(201).json({
       success: true,

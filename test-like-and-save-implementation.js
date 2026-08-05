@@ -13,7 +13,7 @@ const axios = require("axios");
 const io = require("socket.io-client");
 
 // Configuration
-const API_BASE_URL = "https://jevahapp-backend.onrender.com";
+const API_BASE_URL = "http://localhost:4000";
 const TEST_USER_TOKEN = process.env.TEST_USER_TOKEN || "your-test-token-here";
 const TEST_MEDIA_ID = process.env.TEST_MEDIA_ID || "64f1a2b3c4d5e6f7g8h9i0j1";
 const TEST_CONTENT_TYPE = "media";

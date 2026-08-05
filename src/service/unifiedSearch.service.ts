@@ -43,6 +43,8 @@ export interface UnifiedSearchItem {
   audioUrl?: string;
   fileUrl?: string;
   duration?: number;
+  /** Alias of duration (seconds) for CF / audio clients */
+  durationSec?: number | null;
   viewCount?: number;
   views?: number; // For compatibility
   likeCount?: number;
@@ -296,7 +298,8 @@ export class UnifiedSearchService {
         thumbnailUrl: item.thumbnailUrl,
         audioUrl: item.fileUrl,
         fileUrl: item.fileUrl,
-        duration: item.duration,
+        duration: item.durationSec ?? item.duration ?? null,
+        durationSec: item.durationSec ?? item.duration ?? null,
         viewCount,
         views: viewCount,
         likeCount: l,

@@ -22,8 +22,13 @@ import {
   downloadCopyrightFreeSong,
 } from "../../controllers/audio.controller";
 import { verifyToken } from "../../middleware/auth.middleware";
+import { verifyTokenOptional } from "../../middleware/optionalAuth.middleware";
 import { requireAdmin } from "../../middleware/role.middleware";
 import { apiRateLimiter } from "../../middleware/rateLimiter";
+import { likeRateLimiter } from "../../middleware/likeRateLimiter.middleware";
+import { shareRateLimiter } from "../../middleware/shareRateLimiter.middleware";
+import { viewRateLimiter } from "../../middleware/viewRateLimiter.middleware";
+import { bookmarkRateLimiter } from "../../middleware/bookmarkRateLimiter.middleware";
 import { cacheMiddleware } from "../../middleware/cache.middleware";
 import { deprecatedEndpoint } from "../../middleware/deprecation.middleware";
 
@@ -36,9 +41,42 @@ const router = Router();
  */
 router.get(
   "/copyright-free",
+  verifyTokenOptional,
   apiRateLimiter,
-  cacheMiddleware(30),
+  cacheMiddleware(30, undefined, { allowAuthenticated: true, varyByUserId: true }),
   getCopyrightFreeSongsNew
+);
+
+/**
+ * Static paths MUST be registered before /:songId or "search" is captured as an id.
+ */
+router.get(
+  "/copyright-free/search",
+  verifyTokenOptional,
+  apiRateLimiter,
+  cacheMiddleware(15, undefined, { allowAuthenticated: true, varyByUserId: true }),
+  searchCopyrightFreeSongsNew
+);
+
+router.get(
+  "/copyright-free/search/suggestions",
+  apiRateLimiter,
+  cacheMiddleware(15),
+  getSearchSuggestionsCopyrightFree
+);
+
+router.get(
+  "/copyright-free/search/trending",
+  apiRateLimiter,
+  cacheMiddleware(60),
+  getTrendingSearchesCopyrightFree
+);
+
+router.get(
+  "/copyright-free/categories",
+  apiRateLimiter,
+  cacheMiddleware(120),
+  getCopyrightFreeCategories
 );
 
 /**
@@ -60,57 +98,10 @@ router.get(
  */
 router.get(
   "/copyright-free/:songId",
+  verifyTokenOptional,
   apiRateLimiter,
-  cacheMiddleware(60),
+  cacheMiddleware(60, undefined, { allowAuthenticated: true, varyByUserId: true }),
   getCopyrightFreeSongNew
-);
-
-/**
- * @route   GET /api/audio/copyright-free/search
- * @desc    Search copyright-free songs (Public)
- * @access  Public (No authentication required)
- */
-router.get(
-  "/copyright-free/search",
-  apiRateLimiter,
-  cacheMiddleware(15),
-  searchCopyrightFreeSongsNew
-);
-
-/**
- * @route   GET /api/audio/copyright-free/search/suggestions
- * @desc    Get search suggestions/autocomplete (Public)
- * @access  Public (No authentication required)
- */
-router.get(
-  "/copyright-free/search/suggestions",
-  apiRateLimiter,
-  cacheMiddleware(15),
-  getSearchSuggestionsCopyrightFree
-);
-
-/**
- * @route   GET /api/audio/copyright-free/search/trending
- * @desc    Get trending searches (Public)
- * @access  Public (No authentication required)
- */
-router.get(
-  "/copyright-free/search/trending",
-  apiRateLimiter,
-  cacheMiddleware(60),
-  getTrendingSearchesCopyrightFree
-);
-
-/**
- * @route   GET /api/audio/copyright-free/categories
- * @desc    Get categories for copyright-free songs (Public)
- * @access  Public (No authentication required)
- */
-router.get(
-  "/copyright-free/categories",
-  apiRateLimiter,
-  cacheMiddleware(120),
-  getCopyrightFreeCategories
 );
 
 /**
@@ -160,6 +151,7 @@ router.delete(
 router.post(
   "/copyright-free/:songId/like",
   verifyToken,
+  likeRateLimiter,
   apiRateLimiter,
   toggleLikeCopyrightFreeSongNew
 );
@@ -172,6 +164,7 @@ router.post(
 router.post(
   "/copyright-free/:songId/share",
   verifyToken,
+  shareRateLimiter,
   apiRateLimiter,
   shareCopyrightFreeSongNew
 );
@@ -198,6 +191,7 @@ router.post(
   "/copyright-free/:songId/playback/track",
   deprecatedEndpoint("POST /api/audio/copyright-free/:songId/view"),
   verifyToken,
+  viewRateLimiter,
   apiRateLimiter,
   trackCopyrightFreeSongPlayback
 );
@@ -210,6 +204,7 @@ router.post(
 router.post(
   "/copyright-free/:songId/view",
   verifyToken,
+  viewRateLimiter,
   apiRateLimiter,
   recordViewCopyrightFreeSong
 );
@@ -233,6 +228,7 @@ router.post(
 router.post(
   "/copyright-free/:songId/save",
   verifyToken,
+  bookmarkRateLimiter,
   apiRateLimiter,
   toggleSaveCopyrightFreeSong
 );

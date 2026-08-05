@@ -67,15 +67,11 @@ const swaggerOptions = {
       servers: [
         {
           url: process.env.API_BASE_URL || "http://localhost:4000",
-          description: "Development server",
+          description: "API (local or Contabo — set API_BASE_URL)",
         },
         {
-          url: "https://jevahapp-backend.onrender.com",
-          description: "Production server (Render)",
-        },
-        {
-          url: "https://api.jevah.com",
-          description: "Production server (Custom domain)",
+          url: "https://api.jevahapp.com",
+          description: "Production (custom domain, if configured)",
         },
       ],
     },

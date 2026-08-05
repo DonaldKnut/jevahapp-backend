@@ -14,6 +14,7 @@ import { enqueueMediaPostUpload, enqueueAnalyticsEvent } from "../../../queues/e
 import { invalidateFeedCaches } from "../../../lib/invalidateFeedCaches";
 import { UPLOAD_LIMITS } from "../../../controllers/media/constants";
 import logger from "../../../utils/logger";
+import { enrichMediaPlaybackFields } from "../playbackFields";
 
 const STAGING_PREFIX = "staging/uploads";
 const INTENT_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -318,7 +319,7 @@ export async function abortUploadIntent(userId: string, mediaId: string) {
 export async function getUploadStatus(userId: string, mediaId: string) {
   const media = await Media.findById(mediaId)
     .select(
-      "title contentType moderationStatus isHidden processing uploadIntent createdAt updatedAt fileUrl thumbnailUrl hlsUrl playbackUrl"
+      "title contentType moderationStatus isHidden processing processingMetadata uploadIntent createdAt updatedAt fileUrl thumbnailUrl hlsUrl playbackUrl duration"
     )
     .lean();
   if (!media) throw new Error("Media not found");
@@ -333,17 +334,24 @@ export async function getUploadStatus(userId: string, mediaId: string) {
     .lean();
   if (!owned) throw new Error("Not authorized");
 
+  const enriched = enrichMediaPlaybackFields(media as any);
+  const ready = enriched.processingStatus === "ready";
+
   return {
     mediaId,
+    _id: mediaId,
     title: (media as any).title,
     contentType: (media as any).contentType,
     moderationStatus: (media as any).moderationStatus,
     isHidden: (media as any).isHidden,
     processing: (media as any).processing,
-    fileUrl: (media as any).isHidden ? undefined : (media as any).fileUrl,
+    processingStatus: enriched.processingStatus,
+    duration: enriched.duration,
+    // Owner status: expose seekable URLs once processing is ready (even if still hidden for review)
+    fileUrl: ready ? (media as any).fileUrl : undefined,
+    playbackUrl: ready ? (media as any).playbackUrl : undefined,
+    hlsUrl: ready ? (media as any).hlsUrl : undefined,
     thumbnailUrl: (media as any).thumbnailUrl,
-    hlsUrl: (media as any).hlsUrl,
-    playbackUrl: (media as any).playbackUrl,
   };
 }
 

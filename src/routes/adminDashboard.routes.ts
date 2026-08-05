@@ -1,17 +1,20 @@
 import { Router } from "express";
 import {
   getPlatformAnalytics,
-  getUsers,
-  getUserDetails,
-  banUser,
-  unbanUser,
-  warnUser,
-  updateUserRole,
   getModerationQueue,
   updateModerationStatus,
   bulkUpdateModerationStatus,
   getAdminActivityLog,
 } from "../controllers/adminDashboard.controller";
+import {
+  getUsers,
+  getUserDetails,
+  banUser,
+  unbanUser,
+  warnUser,
+  adminResetUserPassword,
+  updateUserRole,
+} from "../controllers/adminUsers.controller";
 import {
   listAdminReports,
   getAdminMediaReportDetail,
@@ -23,6 +26,7 @@ import {
   hideAdminComment,
   unhideAdminComment,
   dismissAdminCommentReports,
+  adminReportActionAlias,
 } from "../controllers/adminReports.controller";
 import {
   updateUserVerification,
@@ -59,6 +63,12 @@ import {
   listAdminCopyrightFreeAudio,
 } from "../controllers/adminOps.controller";
 import {
+  sendMarketingEmail,
+  previewMarketingEmailCount,
+  sendArtistOnboardEmail,
+  previewArtistOnboardEmailCount,
+} from "../controllers/marketingEmail.controller";
+import {
   listAdminTracks,
   getAdminTrack,
   createAdminTrackUploadIntent,
@@ -77,6 +87,7 @@ import {
   patchAdminArtist,
   verifyAdminArtist,
 } from "../controllers/adminArtists.controller";
+import { listAdminReleasesHandler } from "../controllers/creatorReleases.controller";
 import {
   listAdminAnnouncements,
   createAdminAnnouncement,
@@ -187,6 +198,14 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   warnUser
+);
+
+router.post(
+  "/users/:id/reset-password",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  adminResetUserPassword
 );
 
 router.patch(
@@ -440,6 +459,14 @@ router.patch(
 );
 
 router.get(
+  "/releases",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  listAdminReleasesHandler
+);
+
+router.get(
   "/announcements",
   verifyToken,
   requireAdmin,
@@ -509,6 +536,38 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   sendAdminEmail
+);
+
+router.post(
+  "/email/marketing",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  sendMarketingEmail
+);
+
+router.get(
+  "/email/marketing/preview-count",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  previewMarketingEmailCount
+);
+
+router.post(
+  "/email/artist-onboard",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  sendArtistOnboardEmail
+);
+
+router.get(
+  "/email/artist-onboard/preview-count",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  previewArtistOnboardEmailCount
 );
 
 router.get(
@@ -586,6 +645,14 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   dismissAdminCommentReports
+);
+/** Next-compat — keep after /reports/media/* and /reports/comments/* */
+router.post(
+  "/reports/:id/:action",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  adminReportActionAlias
 );
 
 router.get(

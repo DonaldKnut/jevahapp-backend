@@ -38,6 +38,9 @@ describe("SaveService — bookmark contract", () => {
     );
     expect(mapBookmarkContentType("videos")).toBe("media");
     expect(mapBookmarkContentType("sermon")).toBe("media");
+    expect(mapBookmarkContentType("video")).toBe("media");
+    expect(mapBookmarkContentType("devotional")).toBe("media");
+    expect(mapBookmarkContentType("teachings")).toBe("media");
     expect(mapBookmarkContentType("copyright_free_song")).toBe(
       "copyright_free_song"
     );

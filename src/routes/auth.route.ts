@@ -127,12 +127,26 @@ router.post(
   asyncHandler(authController.resetPassword)
 );
 
+// POST /change-password — authenticated (admin, creators, artists, learners)
+router.post(
+  "/change-password",
+  verifyToken,
+  sensitiveEndpointRateLimiter,
+  asyncHandler(authController.changePassword)
+);
+
 // POST /resend-verification-email
 // Resends a verification email to a user
 // - Uses emailRateLimiter to limit email requests
 // - Calls authController.resendVerificationEmail to generate and send new code
 router.post(
   "/resend-verification-email",
+  emailRateLimiter,
+  asyncHandler(authController.resendVerificationEmail)
+);
+// Alias for Next / web clients that call /api/auth/resend-verification
+router.post(
+  "/resend-verification",
   emailRateLimiter,
   asyncHandler(authController.resendVerificationEmail)
 );

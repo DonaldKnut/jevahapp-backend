@@ -61,20 +61,21 @@ export class MediaUploadService {
         );
       }
 
-      if (!data.thumbnail || !data.thumbnailMimeType) {
-        throw new Error(
-          `Thumbnail and thumbnail MIME type are required for ${data.contentType} content type`
-        );
-      }
-
-      if (!validThumbnailMimeTypes.includes(data.thumbnailMimeType)) {
-        throw new Error(
-          `Invalid thumbnail MIME type: ${data.thumbnailMimeType}. Must be JPEG, PNG, or WebP`
-        );
-      }
-
-      if (data.thumbnail.length > 5 * 1024 * 1024) {
-        throw new Error("Thumbnail size must be less than 5MB");
+      // Thumbnail optional (FE may omit; worker can extract later)
+      if (data.thumbnail || data.thumbnailMimeType) {
+        if (!data.thumbnail || !data.thumbnailMimeType) {
+          throw new Error(
+            "Both thumbnail and thumbnail MIME type are required when providing a cover image"
+          );
+        }
+        if (!validThumbnailMimeTypes.includes(data.thumbnailMimeType)) {
+          throw new Error(
+            `Invalid thumbnail MIME type: ${data.thumbnailMimeType}. Must be JPEG, PNG, or WebP`
+          );
+        }
+        if (data.thumbnail.length > 5 * 1024 * 1024) {
+          throw new Error("Thumbnail size must be less than 5MB");
+        }
       }
     }
 

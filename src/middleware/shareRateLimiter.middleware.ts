@@ -29,10 +29,15 @@ export async function shareRateLimiter(
     return;
   }
 
-  const contentId = (req.params.contentId || "").toString();
-  const contentType = normalizeContentType(
-    (req.params.contentType || "media").toString()
-  );
+  const contentId = (
+    req.params.contentId ||
+    req.params.songId ||
+    req.params.mediaId ||
+    ""
+  ).toString();
+  const contentType = req.params.songId
+    ? "copyright_free_song"
+    : normalizeContentType((req.params.contentType || "media").toString());
 
   const perContent = await redisRateLimit({
     key: `share:${userId}:${contentType}:${contentId}`,

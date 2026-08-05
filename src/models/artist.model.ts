@@ -26,6 +26,8 @@ export interface IArtist extends Document {
   applicationNote?: string | null;
   reviewedByAdminId?: mongoose.Types.ObjectId | null;
   reviewedAt?: Date | null;
+  /** Last time admin sent an artist onboard / welcome email for this profile. */
+  onboardEmailSentAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +77,7 @@ const artistSchema = new Schema<IArtist>(
       default: null,
     },
     reviewedAt: { type: Date, default: null },
+    onboardEmailSentAt: { type: Date, default: null, index: true },
   },
   { timestamps: true }
 );

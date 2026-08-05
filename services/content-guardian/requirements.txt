@@ -1,0 +1,16 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+pydantic==2.10.3
+Pillow==11.0.0
+numpy==2.1.3
+
+# STT (CPU-friendly)
+faster-whisper==1.1.0
+
+# Vision (torch/torchvision installed separately in Dockerfile via CPU wheel index)
+nudenet==3.4.2
+open-clip-torch==2.29.0
+
+# Tests
+pytest==8.3.4

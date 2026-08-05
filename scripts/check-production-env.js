@@ -2,9 +2,8 @@
 
 /**
  * Production Environment Variables Checker
- * 
- * This script helps verify that all required environment variables are set
- * for production deployment on Render.com
+ *
+ * Verifies required env vars for Contabo (API + worker) deployment.
  */
 
 const fs = require('fs');
@@ -93,47 +92,11 @@ if (fs.existsSync('.env')) {
   console.log('❌ No .env file found in current directory');
 }
 
-// Check render.yaml configuration
-console.log('\n🔍 Checking render.yaml configuration...');
-
-if (fs.existsSync('render.yaml')) {
-  const renderConfig = fs.readFileSync('render.yaml', 'utf8');
-  console.log('✅ render.yaml file found');
-  
-  const configuredInRender = [];
-  const missingInRender = [];
-  
-  for (const varName of Object.keys(requiredEnvVars)) {
-    if (renderConfig.includes(`- key: ${varName}`)) {
-      configuredInRender.push(varName);
-    } else {
-      missingInRender.push(varName);
-    }
-  }
-  
-  console.log(`\n📊 Render.yaml: ${configuredInRender.length}/${Object.keys(requiredEnvVars).length} variables configured`);
-  
-  if (missingInRender.length > 0) {
-    console.log('\n❌ Variables missing from render.yaml:');
-    missingInRender.forEach(varName => {
-      console.log(`   - ${varName}: ${requiredEnvVars[varName]}`);
-    });
-  } else {
-    console.log('\n✅ All required variables are configured in render.yaml');
-  }
-  
-} else {
-  console.log('❌ render.yaml file not found');
-}
-
-console.log('\n🎯 Next Steps for Production Deployment:');
-console.log('1. Ensure all environment variables are set in your Render dashboard');
-console.log('2. Go to your Render service → Environment tab');
-console.log('3. Add each missing variable with its corresponding value from .env');
-console.log('4. Pay special attention to R2 variables - they are CRITICAL for avatar uploads');
-console.log('5. Deploy and test avatar upload functionality');
-
-console.log('\n💡 Pro Tip: You can copy values from your local .env file to Render dashboard');
-console.log('   The values should be exactly the same for consistency');
-
-console.log('\n🔗 Render Dashboard: https://dashboard.render.com/');
+console.log("\n🎯 Next steps for Contabo production:");
+console.log("1. Set required variables in the Contabo server .env (never commit secrets)");
+console.log("2. REDIS_URL=redis://127.0.0.1:6379 (local Redis on the VPS)");
+console.log("3. API_BASE_URL=https://your-contabo-api-host (public HTTPS)");
+console.log("4. SELF_PING_ENABLED=false unless you intentionally want keepalive");
+console.log("5. npm run build && pm2 start ecosystem.config.cjs (API + worker)");
+console.log("6. See docs/CONTABO_SMOKE.md after deploy");
+console.log("\n❌ Render.com is no longer used — ignore any old onrender.com URLs.");

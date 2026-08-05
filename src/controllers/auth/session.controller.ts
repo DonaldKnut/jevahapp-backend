@@ -401,9 +401,15 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
     res.json({
       success: true,
       message: "Token refreshed successfully",
+      token: result.accessToken,
+      accessToken: result.accessToken,
+      tokenType: result.tokenType || "bearer",
+      expiresIn: result.expiresIn,
+      user: result.user,
       data: {
         token: result.accessToken,
         accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
         user: result.user,
       },
     });

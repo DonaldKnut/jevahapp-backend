@@ -17,6 +17,7 @@ import {
   markMediaLive,
 } from "../service/media/delivery/publishLive";
 import logger from "../utils/logger";
+import { probeMediaFile } from "../utils/mediaTools";
 
 const execFileAsync = promisify(execFile);
 
@@ -117,40 +118,24 @@ export async function processVideoTranscode(params: {
       fs.copyFileSync(inputUrl, inputPath);
     }
 
-    // Probe duration + size
+    // Probe source for dimensions / codecs (duration re-probed on output MP4)
     let duration = 0;
     let width = 0;
     let height = 0;
     let sourceVideoCodec = "";
     let sourceAudioCodec = "";
     try {
-      const { stdout } = await execFileAsync(
-        "ffprobe",
-        [
-          "-v",
-          "error",
-          "-show_entries",
-          "format=duration:stream=index,codec_type,codec_name,width,height,bit_rate",
-          "-of",
-          "json",
-          inputPath,
-        ],
-        { timeout: 60_000 }
-      );
-      const parsed = JSON.parse(stdout);
-      duration = Math.round(parseFloat(parsed?.format?.duration || "0")) || 0;
-      const videoStream = (parsed?.streams || []).find(
-        (s: any) => s.codec_type === "video" || s.width
-      );
-      const audioStream = (parsed?.streams || []).find(
-        (s: any) => s.codec_type === "audio"
-      );
-      width = Number(videoStream?.width || 0);
-      height = Number(videoStream?.height || 0);
-      sourceVideoCodec = String(videoStream?.codec_name || "");
-      sourceAudioCodec = String(audioStream?.codec_name || "");
+      const sourceProbe = await probeMediaFile(inputPath);
+      duration = sourceProbe.durationSeconds ?? 0;
+      width = sourceProbe.width;
+      height = sourceProbe.height;
+      sourceVideoCodec = sourceProbe.videoCodec;
+      sourceAudioCodec = sourceProbe.audioCodec;
     } catch (err: any) {
-      logger.warn("ffprobe failed during transcode", { mediaId, error: err?.message });
+      logger.warn("ffprobe failed during transcode (source)", {
+        mediaId,
+        error: err?.message,
+      });
     }
 
     // Do not upscale small mobile uploads — cap scale at source width
@@ -187,6 +172,24 @@ export async function processVideoTranscode(params: {
       ],
       { timeout: 600_000 }
     );
+
+    // Authoritative duration from seekable progressive MP4 (moov at start)
+    try {
+      const outProbe = await probeMediaFile(mp4Path);
+      if (outProbe.durationSeconds != null) {
+        duration = outProbe.durationSeconds;
+      }
+      if (!width && outProbe.width) width = outProbe.width;
+      if (!height && outProbe.height) height = outProbe.height;
+    } catch (err: any) {
+      logger.warn("ffprobe failed during transcode (output MP4)", {
+        mediaId,
+        error: err?.message,
+      });
+    }
+    if (!(duration > 0)) {
+      logger.warn("Transcode finished without known duration", { mediaId });
+    }
 
     // Poster frame
     try {
@@ -389,7 +392,7 @@ export async function processVideoTranscode(params: {
       processingMetadata: {
         sourceWidth: width || undefined,
         sourceHeight: height || undefined,
-        durationSeconds: duration || undefined,
+        durationSeconds: duration > 0 ? duration : undefined,
         videoCodec: sourceVideoCodec || undefined,
         audioCodec: sourceAudioCodec || undefined,
         verifiedAt: new Date(),
@@ -401,7 +404,12 @@ export async function processVideoTranscode(params: {
         progress: 100,
       },
     };
-    if (duration > 0) extra.duration = duration;
+    // Persist top-level duration for feed/detail scrubbers (seconds)
+    if (duration > 0) {
+      extra.duration = duration;
+    }
+    if (width > 0) extra.width = width;
+    if (height > 0) extra.height = height;
 
     const approved = (prior as any)?.moderationStatus === "approved";
     const userId = String((prior as any)?.uploadedBy || "");

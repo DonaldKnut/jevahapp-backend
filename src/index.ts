@@ -58,6 +58,12 @@ mongoose
       minPoolSize: mongooseConfig.minPoolSize,
     });
     logger.info("✅ Server ready for requests!");
+    // Runs on API process so scheduled releases publish without a separate worker.
+    void import("./modules/audio/releaseScheduler")
+      .then(({ startReleaseScheduler }) => startReleaseScheduler())
+      .catch((err) =>
+        logger.warn("Release scheduler not started", { error: err?.message })
+      );
   })
   .catch(err => {
     logger.error("❌ MongoDB connection failed:", err);

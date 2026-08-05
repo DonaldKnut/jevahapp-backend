@@ -6,7 +6,7 @@ import {
   shapeArtistCard,
   shapeCreatorMePayload,
 } from "../modules/creators/creator.presenter";
-import { shapeTrackCard, shapeUploadIntentResponse, publicArtistReadyFilter, publicCuratedReadyFilter } from "../modules/audio/track.formatter";
+import { shapeTrackCardsWithRelease, shapeUploadIntentResponse, publicArtistReadyFilter, publicCuratedReadyFilter } from "../modules/audio/track.formatter";
 import {
   decodeCatalogCursor,
   catalogCursorFilter,
@@ -17,6 +17,11 @@ import {
   finalizeTrackUpload,
   hardDeleteTrack,
   patchTrack,
+  getTrackUploadStatus,
+  signTrackMultipartParts,
+  completeTrackMultipartUpload,
+  abortTrackMultipartUpload,
+  createReplaceAudioIntent,
   TrackUploadError,
 } from "../modules/audio/trackUpload.service";
 import logger from "../utils/logger";
@@ -104,8 +109,8 @@ export const listPublicArtistTracks = async (req: Request, res: Response) => {
         .lean(),
       CopyrightFreeSong.countDocuments(filter),
     ]);
-    const cards = rows.map((r) =>
-      shapeTrackCard({ ...r, artistSlug: artistDoc.slug })
+    const cards = await shapeTrackCardsWithRelease(
+      rows.map((r) => ({ ...r, artistSlug: artistDoc.slug }))
     );
     res.status(200).json({
       success: true,
@@ -144,6 +149,7 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
     const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
     const search = String(req.query.search || "").trim();
     const genre = String(req.query.genre || "").trim();
+    const releaseId = String(req.query.releaseId || req.query.albumId || "").trim();
     const cursor = decodeCatalogCursor(String(req.query.cursor || ""));
 
     const filter: Record<string, unknown> =
@@ -152,6 +158,14 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
         : publicCuratedReadyFilter();
 
     const andExtra: Record<string, unknown>[] = [];
+    if (releaseId && Types.ObjectId.isValid(releaseId)) {
+      andExtra.push({
+        $or: [
+          { releaseId: new Types.ObjectId(releaseId) },
+          { albumId: new Types.ObjectId(releaseId) },
+        ],
+      });
+    }
     if (genre) {
       andExtra.push({ genre: new RegExp(`^${genre}$`, "i") });
     }
@@ -192,7 +206,7 @@ export const browseMusicTracks = async (req: Request, res: Response) => {
 
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
-    const cards = pageRows.map((r: any) => shapeTrackCard(r));
+    const cards = await shapeTrackCardsWithRelease(pageRows);
     const nextCursor =
       hasMore && pageRows.length
         ? nextCatalogCursorFromDoc(pageRows[pageRows.length - 1], "publishedAt")
@@ -259,8 +273,8 @@ export const listMyCreatorTracks = async (req: Request, res: Response) => {
         .lean(),
       CopyrightFreeSong.countDocuments(filter),
     ]);
-    const cards = rows.map((r: any) =>
-      shapeTrackCard({ ...r, artistSlug: artist.slug })
+    const cards = await shapeTrackCardsWithRelease(
+      rows.map((r: any) => ({ ...r, artistSlug: artist.slug }))
     );
     res.status(200).json({
       success: true,
@@ -326,6 +340,14 @@ export const createCreatorTrackUploadIntent = async (
       coverFileSizeBytes: body.coverFileSizeBytes
         ? Number(body.coverFileSizeBytes)
         : undefined,
+      releaseId: body.releaseId || body.albumId || null,
+      trackNumber:
+        body.trackNumber != null ? Number(body.trackNumber) : undefined,
+      discNumber: body.discNumber != null ? Number(body.discNumber) : undefined,
+      multipart:
+        body.multipart === true ||
+        body.multipart === "true" ||
+        body.mode === "multipart",
     });
     res.status(201).json({
       success: true,
@@ -391,6 +413,199 @@ export const finalizeCreatorTrack = async (req: Request, res: Response) => {
       return;
     }
     res.status(500).json({ success: false, message: "Failed to finalize track" });
+  }
+};
+
+export const getCreatorTrackStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const gate = await requireActiveArtist(userId);
+    if ("error" in gate && gate.error) {
+      res.status(gate.error.status).json({
+        success: false,
+        message: gate.error.message,
+      });
+      return;
+    }
+    const track = await CopyrightFreeSong.findById(req.params.trackId)
+      .select("artistId")
+      .lean();
+    if (!track || String((track as any).artistId) !== String(gate.artist!._id)) {
+      res.status(404).json({ success: false, message: "Track not found" });
+      return;
+    }
+    const data = await getTrackUploadStatus(req.params.trackId, userId);
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    if (error instanceof TrackUploadError) {
+      res.status(error.status).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    logger.error("Creator track status error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to get track status" });
+  }
+};
+
+async function assertCreatorOwnsTrack(userId: string, trackId: string) {
+  const gate = await requireActiveArtist(userId);
+  if ("error" in gate && gate.error) return { error: gate.error };
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track || String(track.artistId) !== String(gate.artist!._id)) {
+    return { error: { status: 404, message: "Track not found" } as const };
+  }
+  return { artist: gate.artist!, track };
+}
+
+export const signCreatorTrackMultipartParts = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const owned = await assertCreatorOwnsTrack(req.userId!, req.params.trackId);
+    if ("error" in owned && owned.error) {
+      res.status(owned.error.status).json({
+        success: false,
+        message: owned.error.message,
+      });
+      return;
+    }
+    const partNumbers = Array.isArray(req.body?.partNumbers)
+      ? req.body.partNumbers
+      : [];
+    const data = await signTrackMultipartParts(req.params.trackId, partNumbers);
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    if (error instanceof TrackUploadError) {
+      res.status(error.status).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    logger.error("Creator multipart sign error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to sign parts" });
+  }
+};
+
+export const completeCreatorTrackMultipart = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const owned = await assertCreatorOwnsTrack(req.userId!, req.params.trackId);
+    if ("error" in owned && owned.error) {
+      res.status(owned.error.status).json({
+        success: false,
+        message: owned.error.message,
+      });
+      return;
+    }
+    const data = await completeTrackMultipartUpload(
+      req.params.trackId,
+      req.body?.parts || []
+    );
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    if (error instanceof TrackUploadError) {
+      res.status(error.status).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    logger.error("Creator multipart complete error", { error: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to complete multipart upload" });
+  }
+};
+
+export const abortCreatorTrackMultipart = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const owned = await assertCreatorOwnsTrack(req.userId!, req.params.trackId);
+    if ("error" in owned && owned.error) {
+      res.status(owned.error.status).json({
+        success: false,
+        message: owned.error.message,
+      });
+      return;
+    }
+    const data = await abortTrackMultipartUpload(req.params.trackId);
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    if (error instanceof TrackUploadError) {
+      res.status(error.status).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    logger.error("Creator multipart abort error", { error: error.message });
+    res.status(500).json({ success: false, message: "Failed to abort multipart" });
+  }
+};
+
+/** POST /api/creators/tracks/:trackId/replace-upload-intent */
+export const replaceCreatorTrackUploadIntent = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const owned = await assertCreatorOwnsTrack(req.userId!, req.params.trackId);
+    if ("error" in owned && owned.error) {
+      res.status(owned.error.status).json({
+        success: false,
+        message: owned.error.message,
+      });
+      return;
+    }
+    const body = req.body || {};
+    const data = await createReplaceAudioIntent(
+      req.params.trackId,
+      req.userId!,
+      {
+        contentType: body.contentType,
+        fileName: body.fileName || "audio.mp3",
+        fileSizeBytes: Number(body.fileSizeBytes),
+      }
+    );
+    // Keep release membership — replace intent only swaps audio key
+    res.status(201).json({
+      success: true,
+      data: {
+        ...data,
+        releaseId: (owned as any).track?.releaseId?.toString?.() || null,
+        uploadUrl: data.audio.putUrl,
+        putUrl: data.audio.putUrl,
+        uploadHeaders: data.audio.headers,
+        expiresInSeconds: data.audio.expiresInSeconds,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof TrackUploadError) {
+      res.status(error.status).json({
+        success: false,
+        message: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    logger.error("Creator replace upload intent error", {
+      error: error.message,
+    });
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to create replace upload intent" });
   }
 };
 

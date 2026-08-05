@@ -5,6 +5,10 @@ import {
   DeleteObjectCommand,
   CopyObjectCommand,
   HeadObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -444,6 +448,77 @@ class FileUploadService {
         ...(sizeBytes ? { ContentLength: sizeBytes } : {}),
       }),
       { expiresIn: expiresInSeconds }
+    );
+  }
+
+  /** Start R2 multipart upload (large masters). */
+  async createMultipartUpload(
+    objectKey: string,
+    mimeType: string
+  ): Promise<{ uploadId: string; key: string }> {
+    const out = await s3Client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        ContentType: mimeType,
+      })
+    );
+    if (!out.UploadId) {
+      throw new Error("R2 CreateMultipartUpload did not return UploadId");
+    }
+    return { uploadId: out.UploadId, key: objectKey };
+  }
+
+  /** Presigned URL for one multipart part (PUT binary body). */
+  async getPresignedUploadPartUrl(
+    objectKey: string,
+    uploadId: string,
+    partNumber: number,
+    expiresInSeconds = 3600
+  ): Promise<string> {
+    return getSignedUrl(
+      s3Client,
+      new UploadPartCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      }),
+      { expiresIn: expiresInSeconds }
+    );
+  }
+
+  async completeMultipartUpload(
+    objectKey: string,
+    uploadId: string,
+    parts: Array<{ PartNumber: number; ETag: string }>
+  ): Promise<void> {
+    const sorted = [...parts].sort((a, b) => a.PartNumber - b.PartNumber);
+    await s3Client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: sorted.map((p) => ({
+            PartNumber: p.PartNumber,
+            ETag: p.ETag,
+          })),
+        },
+      })
+    );
+  }
+
+  async abortMultipartUpload(
+    objectKey: string,
+    uploadId: string
+  ): Promise<void> {
+    await s3Client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: objectKey,
+        UploadId: uploadId,
+      })
     );
   }
 

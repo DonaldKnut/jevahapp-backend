@@ -121,7 +121,30 @@ export const getStagedUploadStatus = async (req: Request, res: Response): Promis
       res.status(401).json({ success: false, message: "Unauthorized" });
       return;
     }
-    const result = await getUploadStatus(userId, req.params.mediaId);
+
+    const id = req.params.mediaId;
+
+    // FE poll: GET /api/media/upload/:uploadId/status (X-Upload-ID correlation)
+    const { uploadProgressService } = await import(
+      "../../../service/uploadProgress.service"
+    );
+    const progress = uploadProgressService.getProgressStatus(id, userId);
+    if (progress) {
+      res.status(200).json({
+        success: true,
+        data: {
+          uploadId: progress.uploadId,
+          progress: progress.progress,
+          stage: progress.stage,
+          message: progress.message,
+          mediaId: progress.mediaId ?? null,
+          timestamp: progress.timestamp,
+        },
+      });
+      return;
+    }
+
+    const result = await getUploadStatus(userId, id);
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
     const status = error.message.includes("authorized")

@@ -1,4 +1,4 @@
-import { Types, ClientSession } from "mongoose";
+import { Types, ClientSession, Model } from "mongoose";
 import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
 import { Devotional } from "../../../models/devotional.model";
@@ -17,7 +17,7 @@ import {
  * ebook/podcast remain transitional Media mappings (separate collections out of core scope).
  * Exact "devotional" stays on the Devotional collection path — do not map it to media here.
  */
-const MEDIA_LIKE_ALIASES = new Set([
+export const MEDIA_LIKE_ALIASES = new Set([
   "media",
   "video",
   "videos",
@@ -43,6 +43,31 @@ export function normalizeContentType(contentType: string): string {
   const t = (contentType || "").trim().toLowerCase();
   if (MEDIA_LIKE_ALIASES.has(t)) return "media";
   return t;
+}
+
+/**
+ * Resolve the Mongoose model for an engagement content type.
+ * Same mapping likes/share/view use after {@link normalizeContentType}.
+ */
+export function getContentModel(contentType: string): Model<any> | null {
+  const raw = (contentType || "").trim().toLowerCase();
+  if (raw === "devotional") return Devotional;
+  const normalized = normalizeContentType(contentType);
+  switch (normalized) {
+    case "media":
+    case "merch":
+      return Media;
+    case "artist":
+      return User;
+    case "devotional":
+      return Devotional;
+    case "copyright_free_song":
+      return CopyrightFreeSong;
+    default:
+      if (raw === "prayer") return PrayerPost;
+      if (raw === "forum_post") return ForumPost;
+      return null;
+  }
 }
 
 export type CommentableContentType = "media" | "devotional";
@@ -99,16 +124,19 @@ export async function verifyContentExists(
 ): Promise<boolean> {
   if (!Types.ObjectId.isValid(contentId)) return false;
 
-  const normalized = normalizeContentType(contentType);
+  const raw = (contentType || "").trim().toLowerCase();
+  const normalized = raw === "devotional" ? "devotional" : normalizeContentType(contentType);
   const query = session ? { session } : {};
 
   try {
     switch (normalized) {
       case "media":
       case "merch": {
+        // Same as views: allow pending / under_review / processing playable rows.
+        // Public feed filter is for listing only — not engagement mutations.
         const media = await Media.findOne({
           _id: contentId,
-          ...PUBLIC_MEDIA_FILTER,
+          $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
         })
           .select("_id")
           .setOptions(query);
@@ -126,7 +154,7 @@ export async function verifyContentExists(
         break;
     }
 
-    switch (contentType) {
+    switch (raw) {
       case "prayer": {
         const prayer = await PrayerPost.findById(contentId).select("_id").setOptions(query);
         return !!prayer;
@@ -152,6 +180,50 @@ export async function verifyContentExists(
   } catch {
     return false;
   }
+}
+
+export type EngageableMediaDoc = {
+  _id: Types.ObjectId;
+  moderationStatus?: string | null;
+  processingStatus?: string | null;
+  deletedAt?: Date | string | null;
+};
+
+/**
+ * Resolve Media for bookmark/save/like — same collection as feed cards.
+ * Do **not** require approved/ready. Soft-deleted rows → null.
+ * DB errors propagate (never mapped to a false "not found").
+ */
+export async function resolveBookmarkableMedia(
+  contentId: string
+): Promise<EngageableMediaDoc | null> {
+  if (!Types.ObjectId.isValid(contentId)) return null;
+
+  const ContentModel = getContentModel("media");
+  if (!ContentModel) return null;
+
+  const doc = await ContentModel.findById(contentId)
+    .select("_id moderationStatus processingStatus deletedAt")
+    .lean();
+  if (!doc) return null;
+  if ((doc as EngageableMediaDoc).deletedAt) return null;
+  return doc as EngageableMediaDoc;
+}
+
+/** @deprecated Prefer resolveBookmarkableMedia — PUBLIC filter is listing-only. */
+export async function resolvePublicBookmarkableMedia(
+  contentId: string
+): Promise<{ _id: Types.ObjectId } | null> {
+  if (!Types.ObjectId.isValid(contentId)) return null;
+  const ContentModel = getContentModel("media");
+  if (!ContentModel) return null;
+  const publicDoc = await ContentModel.findOne({
+    _id: contentId,
+    ...PUBLIC_MEDIA_FILTER,
+  })
+    .select("_id")
+    .lean();
+  return (publicDoc as { _id: Types.ObjectId } | null) || null;
 }
 
 export async function isUserOwnContent(

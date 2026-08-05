@@ -30,7 +30,7 @@
   "bugs": {
     "url": "https://github.com/DonaldKnut/jevahapp-backend/issues"
   },
-  "homepage": "https://jevahapp-backend.onrender.com/api-docs",
+  "homepage": "https://jevahapp.com",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",

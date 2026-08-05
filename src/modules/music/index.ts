@@ -10,6 +10,10 @@ import {
   recordMusicTrackPlay,
 } from "../../controllers/publicMusic.controller";
 import {
+  getPublicReleaseHandler,
+  listPublicArtistReleasesHandler,
+} from "../../controllers/creatorReleases.controller";
+import {
   toggleLike as toggleLikeCopyrightFreeSongNew,
   recordView as recordViewCopyrightFreeSong,
   shareSong as shareCopyrightFreeSongNew,
@@ -25,11 +29,21 @@ export interface Mount {
 
 const artistsRouter = Router();
 artistsRouter.get("/", apiRateLimiter, listPublicArtists);
+artistsRouter.get(
+  "/:slug/releases",
+  apiRateLimiter,
+  listPublicArtistReleasesHandler
+);
 artistsRouter.get("/:slug/tracks", apiRateLimiter, listPublicArtistTracks);
 artistsRouter.get("/:slug", apiRateLimiter, getPublicArtistBySlug);
 
 const musicRouter = Router();
 musicRouter.get("/tracks", apiRateLimiter, browseMusicTracks);
+musicRouter.get(
+  "/releases/:idOrSlug",
+  apiRateLimiter,
+  getPublicReleaseHandler
+);
 musicRouter.post(
   "/tracks/:songId/like",
   verifyToken,

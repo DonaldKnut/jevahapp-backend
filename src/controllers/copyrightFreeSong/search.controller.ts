@@ -60,6 +60,7 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
     });
 
     let enrichedSongs = result.songs;
+    const { shapePublicSong } = await import("../../modules/audio/track.formatter");
     if (userId) {
       const songIds = result.songs.map((s: any) => s._id.toString());
 
@@ -78,9 +79,7 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
         const songObj = song as any;
         const viewCount = CopyrightFreeSongService.normalizedViewCount(songObj);
         const likeCount = songObj.likeCount ?? songObj.likes ?? 0;
-        return {
-          ...songObj,
-          id: songObj._id?.toString() || songObj.id,
+        return shapePublicSong(songObj, {
           viewCount,
           views: viewCount,
           likeCount,
@@ -89,19 +88,15 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
           isInLibrary: userSaves[index] || false,
           isPublicDomain: true,
           contentType: "copyright-free-music",
-          audioUrl: songObj.fileUrl,
-          artist: songObj.singer,
           uploadedBy: songObj.uploadedBy?._id?.toString() || "system",
-        };
+        });
       });
     } else {
       enrichedSongs = result.songs.map((song: any) => {
         const songObj = song as any;
         const viewCount = CopyrightFreeSongService.normalizedViewCount(songObj);
         const likeCount = songObj.likeCount ?? songObj.likes ?? 0;
-        return {
-          ...songObj,
-          id: songObj._id?.toString() || songObj.id,
+        return shapePublicSong(songObj, {
           viewCount,
           views: viewCount,
           likeCount,
@@ -110,10 +105,8 @@ export const searchSongs = async (req: Request, res: Response): Promise<void> =>
           isInLibrary: false,
           isPublicDomain: true,
           contentType: "copyright-free-music",
-          audioUrl: songObj.fileUrl,
-          artist: songObj.singer,
           uploadedBy: songObj.uploadedBy?._id?.toString() || "system",
-        };
+        });
       });
     }
 

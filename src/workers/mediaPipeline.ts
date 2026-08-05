@@ -1,5 +1,3 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
@@ -15,8 +13,7 @@ import {
   publishApprovedStagedOriginal,
 } from "./publishStagedOriginal";
 import { cleanupExpiredUploadIntents } from "../service/media/upload/stagedUpload.service";
-
-const execFileAsync = promisify(execFile);
+import { probeMediaFile } from "../utils/mediaTools";
 
 async function markMediaProcessing(
   mediaId: string,
@@ -158,19 +155,14 @@ export async function processMediaJob(
     } else if (job.data.type === "waveform") {
       if (options.ffprobeAvailable) {
         try {
-          const { stdout } = await execFileAsync("ffprobe", [
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            localPath,
-          ]);
-          const durationSeconds = Math.round(parseFloat(String(stdout).trim()));
-          if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+          const probed = await probeMediaFile(localPath);
+          const durationSeconds = probed.durationSeconds;
+          if (durationSeconds != null) {
             await Media.findByIdAndUpdate(job.data.mediaId, {
-              $set: { duration: durationSeconds },
+              $set: {
+                duration: durationSeconds,
+                "processingMetadata.durationSeconds": durationSeconds,
+              },
             });
           }
         } catch (err: any) {

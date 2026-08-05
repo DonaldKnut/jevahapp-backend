@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { Media } from "../../models/media.model";
 import { CopyrightFreeSong } from "../../models/copyrightFreeSong.model";
+import { enrichMediaPlaybackFields } from "../../service/media/playbackFields";
 
 export interface CreatePlaylistBody {
   name: string;
@@ -98,12 +99,15 @@ export async function populatePlaylistTracks(playlist: any) {
     if (trackData.trackType === "media" && trackData.mediaId) {
       const media = mediaMap.get(String(trackData.mediaId));
       if (media) {
+        const enriched = enrichMediaPlaybackFields(media);
         content = {
           _id: media._id,
           title: media.title,
           thumbnailUrl: media.thumbnailUrl,
           fileUrl: media.fileUrl,
-          duration: media.duration,
+          audioUrl: media.fileUrl,
+          duration: enriched.duration,
+          processingStatus: enriched.processingStatus,
           artistName:
             media.speaker ||
             (media.uploadedBy
@@ -117,15 +121,32 @@ export async function populatePlaylistTracks(playlist: any) {
     } else if (trackData.trackType === "copyrightFree" && trackData.copyrightFreeSongId) {
       const song = copyrightFreeMap.get(String(trackData.copyrightFreeSongId));
       if (song) {
+        const durationSec =
+          song.durationSec != null
+            ? Number(song.durationSec)
+            : song.duration != null
+              ? Number(song.duration)
+              : null;
+        const playbackRaw =
+          (song as any).audio?.playbackUrl || song.fileUrl || null;
         content = {
           _id: song._id,
           title: song.title,
           thumbnailUrl: song.thumbnailUrl,
-          fileUrl: song.fileUrl,
-          duration: song.duration,
-          artistName: song.singer || "Unknown",
-          contentType: "music",
+          fileUrl: playbackRaw,
+          audioUrl: playbackRaw,
+          duration: durationSec,
+          durationSec,
+          processingStatus:
+            (song as any).processing?.status ||
+            (playbackRaw && !String(playbackRaw).startsWith("pending://")
+              ? "ready"
+              : "pending"),
+          artistName: song.singer || song.artistName || "Unknown",
+          contentType: "copyright-free-music",
           uploadedBy: song.uploadedBy,
+          viewCount: Math.max(song.viewCount ?? 0, song.likeCount ?? 0),
+          likeCount: song.likeCount ?? 0,
         };
       }
     }

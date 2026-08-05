@@ -42,3 +42,7 @@ These are deleted — do not reference:
 - `src/routes/interaction.routes.ts` (orphan duplicate; engagement owns `/api/interactions` via `modules/engagement/routes.ts`)
 
 Engagement mounts via `src/modules/engagement/index.ts` → `routes.ts` + `shared/routeAdapters.ts` at `/api/content`.
+
+## Hosting
+
+**Render.com is retired.** Do not point clients or docs at `*.onrender.com`. Production is **Contabo** (`API_BASE_URL`). The old `render.yaml` blueprint has been removed.

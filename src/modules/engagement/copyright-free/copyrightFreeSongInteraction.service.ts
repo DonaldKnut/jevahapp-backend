@@ -24,9 +24,17 @@ export class CopyrightFreeSongInteractionService {
 
   async shareSong(
     userId: string,
-    songId: string
-  ): Promise<{ shareCount: number; likeCount: number; viewCount: number }> {
-    return share.shareSong(this.deps, userId, songId);
+    songId: string,
+    opts: { platform?: string } = {}
+  ): Promise<{
+    shared: true;
+    shareCount: number;
+    likeCount: number;
+    viewCount: number;
+    shareUrl: string;
+    platform?: string;
+  }> {
+    return share.shareSong(this.deps, userId, songId, opts);
   }
 
   async getInteraction(userId: string, songId: string) {

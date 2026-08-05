@@ -49,6 +49,9 @@ flowchart TD
 | GET | `/api/admin/activity` | Admin activity (`scope=all` master-only) |
 | GET | `/api/admin/media/recent` | Recent uploads (filter `moderationStatus`, `uploadedBy`) |
 | POST | `/api/admin/email` | Email users by `userIds` / `emails` / `churchIds` (`dryRun: true` supported) |
+| POST | `/api/admin/email/marketing` | Marketing blast (opted-in users; unsubscribe footer) |
+| POST | `/api/admin/email/artist-onboard` | Creator onboard / invite email (ops; segments + dryRun) |
+| GET | `/api/admin/email/artist-onboard/preview-count` | Preview artist onboard recipients |
 | GET | `/api/admin/email/log` | Recent admin email sends + dry runs |
 
 ### Analytics payload (key fields)
@@ -61,7 +64,24 @@ flowchart TD
     "content": { "total": 0 },
     "moderation": { "pending": 0, "rejected": 0 },
     "reports": { "total": 0, "pending": 0, "comments": 0 },
-    "verification": { "unverifiedArtists": 0 }
+    "verification": {
+      "unverifiedArtists": 0,
+      "pendingCreatorApplications": 0,
+      "activeArtistsMissingOnboardEmail": 0
+    },
+    "reminders": [
+      {
+        "id": "artist_onboard_email",
+        "severity": "high",
+        "title": "Send artist onboard emails",
+        "count": 3,
+        "action": {
+          "method": "POST",
+          "path": "/api/admin/email/artist-onboard",
+          "bodyHint": { "segment": "active_missing_onboard", "dryRun": true }
+        }
+      }
+    ]
   }
 }
 ```
@@ -200,6 +220,7 @@ Prefer `/api/admin/reports/*` for new UI:
 | GET/PATCH/DELETE | `/api/admin/audio/tracks/:id` | Detail / metadata / hard-delete + R2 purge |
 | POST | `/api/admin/audio/tracks/:id/replace-audio|cover/intent` | Replace media |
 | GET/POST | `/api/admin/artists` | Creator/artist registry |
+| GET | `/api/admin/releases` | Artist releases (albums/EPs) read-only |
 | PATCH | `/api/admin/artists/:id` | Activate / suspend / verify |
 | GET/POST/PATCH | `/api/admin/announcements` | Broadcast drafts/publish |
 | GET/POST/DELETE | `/api/admin/categories` | Content category registry |

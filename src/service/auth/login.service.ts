@@ -237,6 +237,10 @@ export async function loginUser(
       isEmailVerified: user.isEmailVerified || false,
       isBanned: false,
       isMasterAdmin: isMasterAdminEmail(user.email),
+      isVerifiedArtist: !!(user as any).isVerifiedArtist,
+      isVerifiedChurch: !!(user as any).isVerifiedChurch,
+      isVerifiedCreator: !!(user as any).isVerifiedCreator,
+      isVerifiedVendor: !!(user as any).isVerifiedVendor,
     },
   };
 }
@@ -244,7 +248,7 @@ export async function loginUser(
 export async function getCurrentUser(userId: string) {
   const user = (await User.findById(userId)
     .select(
-      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified isBanned banReason banUntil createdAt updatedAt"
+      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified isBanned banReason banUntil isVerifiedArtist isVerifiedChurch isVerifiedCreator isVerifiedVendor lastSeenAt lastLoginAt createdAt updatedAt"
     )
     .lean()) as any;
 
@@ -275,6 +279,11 @@ export async function getCurrentUser(userId: string) {
         }
       : {}),
     isMasterAdmin: isMasterAdminEmail(user.email),
+    isVerifiedArtist: !!user.isVerifiedArtist,
+    isVerifiedChurch: !!user.isVerifiedChurch,
+    isVerifiedCreator: !!user.isVerifiedCreator,
+    isVerifiedVendor: !!user.isVerifiedVendor,
+    lastSeenAt: user.lastSeenAt || user.lastLoginAt || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

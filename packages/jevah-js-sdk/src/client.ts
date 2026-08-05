@@ -46,7 +46,7 @@ export class JevahClient {
   private retries: number;
 
   constructor(config: JevahConfig = {}) {
-    this.baseURL = config.baseURL || "https://jevahapp-backend.onrender.com";
+    this.baseURL = config.baseURL || "http://localhost:4000";
     this.token = config.token || null;
     this.timeout = config.timeout || 30000;
     this.retries = config.retries || 3;

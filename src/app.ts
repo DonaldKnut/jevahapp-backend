@@ -10,6 +10,7 @@ import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { requestIdMiddleware } from "./middleware/requestId.middleware";
 import { sessionMiddleware } from "./config/session.config";
+import { corsOptions } from "./config/cors.config";
 
 // Modular route registration (see src/modules/)
 import { registerModules } from "./modules";
@@ -24,7 +25,7 @@ import socketManager from "./socket/socketManager";
 // Create Express app
 const app = express();
 
-// Running behind a reverse proxy (Render/nginx). Required so express-rate-limit
+// Running behind a reverse proxy (nginx / Contabo). Required so express-rate-limit
 // and req.ip use the real client IP from X-Forwarded-For instead of the proxy's,
 // and so rate-limit validation doesn't reject proxied requests in production.
 app.set("trust proxy", 1);
@@ -61,63 +62,10 @@ app.use(
   })
 );
 
-// CORS configuration - Allow all frontend origins
-const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:3000",
-  "http://localhost:19006", // Expo local dev server
-  "http://10.0.2.2:4000", // Android emulator
-  "http://localhost:4000", // iOS simulator
-  // Add network-based origins dynamically
-  ...(process.env.ALLOWED_ORIGINS?.split(",") || []),
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true);
-
-      // Check if origin is in allowed list
-      if (
-        allowedOrigins.some(allowed =>
-          origin.includes(allowed.replace(/^https?:\/\//, ""))
-        )
-      ) {
-        return callback(null, true);
-      }
-
-      // For development, allow any localhost/network origin
-      if (process.env.NODE_ENV === "development") {
-        if (
-          origin.includes("localhost") ||
-          origin.includes("127.0.0.1") ||
-          /^http:\/\/192\.168\.\d+\.\d+:19006$/.test(origin) || // Expo network
-          /^http:\/\/10\.\d+\.\d+\.\d+:4000$/.test(origin) // Network backend
-        ) {
-          return callback(null, true);
-        }
-      }
-
-      // Allow Render preview deployments
-      if (origin.includes(".onrender.com")) {
-        return callback(null, true);
-      }
-
-      callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "expo-platform",
-      "Idempotency-Key",
-      "X-Request-Id",
-    ],
-    exposedHeaders: ["Retry-After", "X-Request-Id"],
-  })
-);
+// CORS configuration — web admin / marketing / Expo web must send an allowed Origin.
+// Native mobile (okhttp) usually sends no Origin and is always allowed.
+// Policy lives in config/cors.config so Socket.IO uses the same rules.
+app.use(cors(corsOptions));
 
 // Compression middleware - Optimized for mobile data savings
 // Compresses JSON/text responses to reduce mobile data usage (airtime)
@@ -255,7 +203,10 @@ app.get("/", (req, res) => {
       "Ebook Text Extraction & TTS",
       "Complete Bible Access & Search",
     ],
-    documentation: "https://jevahapp-backend-rped.onrender.com/api-docs",
+    documentation:
+      process.env.API_BASE_URL
+        ? `${process.env.API_BASE_URL.replace(/\/$/, "")}/api-docs`
+        : "/api-docs",
   });
 });
 
@@ -340,19 +291,19 @@ app.use(
   }
 );
 
-// Lightweight self-ping to mitigate cold starts (configurable)
+// Optional keepalive ping (disable on Contabo if unused: SELF_PING_ENABLED=false)
 (() => {
   const enabled =
-    (process.env.SELF_PING_ENABLED || "true").toLowerCase() !== "false";
+    (process.env.SELF_PING_ENABLED || "false").toLowerCase() === "true";
   const intervalMinutes = parseInt(
     process.env.SELF_PING_INTERVAL_MIN || "10",
     10
   );
   const baseUrl =
     process.env.SELF_PING_URL ||
-    process.env.RENDER_EXTERNAL_URL ||
+    process.env.API_BASE_URL ||
     process.env.BACKEND_BASE_URL ||
-    "http://localhost:4000";
+    "http://127.0.0.1:4000";
 
   if (enabled && intervalMinutes > 0) {
     const ping = async () => {

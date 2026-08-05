@@ -164,6 +164,8 @@ export interface IMedia extends Document {
     | "live"
     | "tombstoned";
   publishedAt?: Date;
+  /** Soft-delete timestamp (admin/owner hide without cascade R2 wipe). */
+  deletedAt?: Date | null;
   /** Absolute R2 prefix for this live version, e.g. media/{id}/v3 */
   storagePrefix?: string;
   derivativeKeys?: string[];
@@ -609,6 +611,7 @@ const mediaSchema = new Schema<IMedia>(
       index: true,
     },
     publishedAt: { type: Date },
+    deletedAt: { type: Date, default: null, index: true },
     storagePrefix: { type: String },
     derivativeKeys: { type: [String], default: [] },
     moderationResult: {

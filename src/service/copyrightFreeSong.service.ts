@@ -215,9 +215,10 @@ export class CopyrightFreeSongService {
 
   async decrementLikeCount(songId: string): Promise<void> {
     try {
-      await CopyrightFreeSong.findByIdAndUpdate(songId, {
-        $inc: { likeCount: -1 },
-      });
+      await CopyrightFreeSong.findOneAndUpdate(
+        { _id: songId, likeCount: { $gt: 0 } },
+        { $inc: { likeCount: -1 } }
+      );
     } catch (error: any) {
       logger.error("Error decrementing like count:", error);
       throw error;
@@ -248,9 +249,10 @@ export class CopyrightFreeSongService {
 
   async decrementSaveCount(songId: string): Promise<void> {
     try {
-      await CopyrightFreeSong.findByIdAndUpdate(songId, {
-        $inc: { saveCount: -1 },
-      });
+      await CopyrightFreeSong.findOneAndUpdate(
+        { _id: songId, saveCount: { $gt: 0 } },
+        { $inc: { saveCount: -1 } }
+      );
     } catch (error: any) {
       logger.error("Error decrementing save count:", error);
       throw error;

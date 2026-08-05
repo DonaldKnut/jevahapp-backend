@@ -75,9 +75,12 @@ export async function refreshToken(refreshTokenString: string) {
       throw new Error("Account is banned");
     }
 
+    const { isMasterAdminEmail } = await import("../../config/superAdmin");
+
     const tokenPayload = {
       userId: user._id.toString(),
       email: user.email,
+      role: user.role,
       rememberMe: true,
     };
 
@@ -89,6 +92,7 @@ export async function refreshToken(refreshTokenString: string) {
     return {
       accessToken: newAccessToken,
       expiresIn: TOKEN_EXPIRATION.REMEMBER_ME,
+      tokenType: "bearer" as const,
       user: {
         id: user._id,
         email: user.email,
@@ -97,6 +101,13 @@ export async function refreshToken(refreshTokenString: string) {
         avatar: user.avatar,
         role: user.role,
         isProfileComplete: user.isProfileComplete,
+        isEmailVerified: user.isEmailVerified || false,
+        isBanned: false,
+        isMasterAdmin: isMasterAdminEmail(user.email),
+        isVerifiedArtist: !!(user as any).isVerifiedArtist,
+        isVerifiedChurch: !!(user as any).isVerifiedChurch,
+        isVerifiedCreator: !!(user as any).isVerifiedCreator,
+        isVerifiedVendor: !!(user as any).isVerifiedVendor,
       },
     };
   } catch (error: any) {

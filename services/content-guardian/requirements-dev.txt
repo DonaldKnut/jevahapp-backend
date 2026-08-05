@@ -1,0 +1,7 @@
+# Lightweight deps for CI / lexicon-only tests (no torch)
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+pydantic==2.10.3
+Pillow==11.0.0
+pytest==8.3.4

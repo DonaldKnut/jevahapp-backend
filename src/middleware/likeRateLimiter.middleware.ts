@@ -41,8 +41,16 @@ export async function likeRateLimiter(
   const contentType =
     rawType.trim().toLowerCase() === "devotional"
       ? "devotional"
-      : normalizeContentType(rawType);
-  const contentId = (req.params.contentId || "").toString();
+      : req.params.songId
+        ? "copyright_free_song"
+        : normalizeContentType(rawType);
+  // CF routes use :songId; media engagement uses :contentId
+  const contentId = (
+    req.params.contentId ||
+    req.params.songId ||
+    req.params.mediaId ||
+    ""
+  ).toString();
 
   const perContent = await redisRateLimit({
     key: `like:${userId}:${contentType}:${contentId}`,

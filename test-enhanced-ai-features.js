@@ -4,7 +4,7 @@ async function testEnhancedAIFeatures() {
   console.log("🤖 Testing Enhanced AI Features with Bible Verses...\n");
 
   const options = {
-    hostname: "jevahapp-backend.onrender.com",
+    hostname: "localhost",
     port: 443,
     path: "/api/media/public/all-content",
     method: "GET",

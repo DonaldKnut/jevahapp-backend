@@ -3,6 +3,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import { Server as HTTPServer } from "http";
 import Redis from "ioredis";
 import logger from "../utils/logger";
+import { socketCorsOptions } from "../config/cors.config";
 import { NotificationService } from "./notification.service";
 import { AuthenticatedUser, SocketContext } from "../socket/types";
 import { createSocketAuthMiddleware } from "../socket/middleware/auth.middleware";
@@ -19,11 +20,7 @@ class SocketService {
 
   constructor(server: HTTPServer) {
     this.io = new SocketIOServer(server, {
-      cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3000",
-        methods: ["GET", "POST"],
-        credentials: true,
-      },
+      cors: socketCorsOptions,
       transports: ["websocket", "polling"],
       path: "/socket.io/",
       pingTimeout: 60000,

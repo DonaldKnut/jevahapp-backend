@@ -31,7 +31,13 @@ export async function bookmarkRateLimiter(
     return;
   }
 
-  const mediaId = (req.params.mediaId || req.params.contentId || req.params.id || "").toString();
+  const mediaId = (
+    req.params.mediaId ||
+    req.params.contentId ||
+    req.params.songId ||
+    req.params.id ||
+    ""
+  ).toString();
 
   const perContent = await redisRateLimit({
     key: `bookmark:${userId}:${mediaId}`,

@@ -21,6 +21,7 @@ class AuthController {
   initiatePasswordReset = passwordController.initiatePasswordReset;
   verifyResetCode = passwordController.verifyResetCode;
   resetPasswordWithCode = passwordController.resetPasswordWithCode;
+  changePassword = passwordController.changePassword;
 
   completeUserProfile = sessionController.completeUserProfile;
   getCurrentUser = sessionController.getCurrentUser;

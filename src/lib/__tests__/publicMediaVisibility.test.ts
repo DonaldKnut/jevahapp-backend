@@ -58,4 +58,15 @@ describe("publicMediaVisibility contract", () => {
       ).toBe(false);
     }
   });
+
+  it("isPubliclyVisibleMedia rejects soft-deleted docs", () => {
+    expect(
+      isPubliclyVisibleMedia({
+        moderationStatus: "approved",
+        isHidden: false,
+        publicationState: "live",
+        deletedAt: new Date(),
+      })
+    ).toBe(false);
+  });
 });

@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const API_BASE_URL = "https://jevahapp-backend.onrender.com";
+const API_BASE_URL = "http://localhost:4000";
 
 async function testCommentEndpoints() {
   console.log("🧪 Testing Comment Endpoints...\n");

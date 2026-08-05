@@ -362,6 +362,63 @@ export const reviewAdminMediaReport = reviewReport;
 export const deleteAdminReportedMedia = deleteReportedMedia;
 export const bulkReviewAdminMediaReports = bulkReviewReports;
 
+/**
+ * Next-compat: POST /api/admin/reports/:id/:action
+ * action = resolve | dismiss | reviewed
+ * Prefer canonical POST /api/admin/reports/media/:reportId/review with body { status }.
+ */
+export const adminReportActionAlias = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id, action } = req.params;
+    const adminId = req.userId;
+    if (!adminId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    if (!Types.ObjectId.isValid(id)) {
+      res.status(400).json({ success: false, message: "Invalid report ID" });
+      return;
+    }
+
+    const actionKey = String(action || "")
+      .trim()
+      .toLowerCase();
+    const statusMap: Record<string, "resolved" | "dismissed" | "reviewed"> = {
+      resolve: "resolved",
+      resolved: "resolved",
+      dismiss: "dismissed",
+      dismissed: "dismissed",
+      reviewed: "reviewed",
+      review: "reviewed",
+    };
+    const status = statusMap[actionKey];
+    if (!status) {
+      res.status(400).json({
+        success: false,
+        message: "action must be resolve, dismiss, or reviewed",
+      });
+      return;
+    }
+
+    // Reuse reviewReport by shaping params/body
+    req.params.reportId = id;
+    req.body = {
+      ...(req.body || {}),
+      status,
+      adminNotes: req.body?.adminNotes || req.body?.resolutionNote,
+    };
+    await reviewReport(req, res);
+  } catch (error: any) {
+    logger.error("Admin report action alias error", { error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: "Failed to apply report action" });
+    }
+  }
+};
+
 /** GET /api/admin/reports/comments */
 export const listAdminCommentReports = async (
   req: Request,

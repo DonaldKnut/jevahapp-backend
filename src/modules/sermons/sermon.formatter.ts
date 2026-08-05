@@ -9,6 +9,8 @@ export type SermonCard = {
   description: string | null;
   scripture: string | null;
   series: string | null;
+  /** Seconds — alias of durationSec for feed scrub / seek parity */
+  duration: number | null;
   durationSec: number | null;
   thumbnailUrl: string | null;
   playbackUrl: string | null;
@@ -66,9 +68,15 @@ export function shapeSermonCard(doc: any): SermonCard {
   const durationSec =
     doc.duration != null
       ? Number(doc.duration)
-      : doc.durationSec != null
-        ? Number(doc.durationSec)
-        : null;
+      : doc.processingMetadata?.durationSeconds != null
+        ? Number(doc.processingMetadata.durationSeconds)
+        : doc.durationSec != null
+          ? Number(doc.durationSec)
+          : null;
+  const resolvedDuration =
+    Number.isFinite(durationSec as number) && (durationSec as number) > 0
+      ? (durationSec as number)
+      : null;
 
   return {
     id: doc._id?.toString?.() || doc.id,
@@ -78,7 +86,8 @@ export function shapeSermonCard(doc: any): SermonCard {
     description: doc.description || null,
     scripture: doc.scripture || null,
     series: doc.series || null,
-    durationSec: Number.isFinite(durationSec as number) ? durationSec : null,
+    duration: resolvedDuration,
+    durationSec: resolvedDuration,
     thumbnailUrl: thumbRaw ? normalizeUrl(thumbRaw) : null,
     playbackUrl: playbackRaw ? normalizeUrl(playbackRaw) : null,
     hlsUrl: doc.hlsUrl ? normalizeUrl(doc.hlsUrl) : null,

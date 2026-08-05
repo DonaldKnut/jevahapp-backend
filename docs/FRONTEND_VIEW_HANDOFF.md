@@ -78,7 +78,10 @@ Authorization: Bearer <optional>
 | Qualifies + new in hour window | 200 | `true` | +1 |
 | Qualifies + already counted this hour | 200 | `false` | unchanged |
 | Below threshold | 200 | `false` | unchanged |
-| Missing content | 404 | — | — |
+| `moderationStatus: under_review` / `pending` | **200** | `true` when qualified | +1 |
+| `rejected` / soft-deleted / missing | **200** | `false` | current or 0 |
+
+**Never 500** for under-review alone. Response also includes `isNewView` (alias of first counted view).
 
 **FE rule:** only bump local UI when `data.counted === true`. Never treat omitted `counted` as true on our API — we always send the boolean.
 

@@ -70,6 +70,12 @@ MODERATION_DAILY_UPLOADS_PER_USER=30
 MODERATION_MAX_VIDEO_FRAMES=10
 VERIFICATION_MAX_AUDIO_SEGMENTS=5
 
+# Content Guardian (primary gospel scoring; Gemini is gray-zone only)
+# See docs/CONTENT_GUARDIAN.md — docker compose service content-guardian
+CONTENT_GUARDIAN_URL=http://127.0.0.1:8091
+MODERATION_FUSION_MODE=guardian_first
+# Worker must also receive CONTENT_GUARDIAN_URL (+ GOOGLE_AI_API_KEY for gray-zone)
+
 # Object storage (Cloudflare R2)
 # Never use r2.dev in production. Set an R2 custom domain backed by Cloudflare CDN.
 # Add a Cloudflare WAF rule blocking public requests to /staging/*; API/worker

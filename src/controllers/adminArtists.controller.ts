@@ -189,14 +189,73 @@ export const patchAdminArtist = async (req: Request, res: Response) => {
       await User.findByIdAndUpdate(artist.userId, { $set: userPatch });
     }
 
+    let onboardEmail: Record<string, unknown> | undefined;
+    const shouldSendOnboard =
+      body.sendOnboardEmail === true || body.sendOnboardEmail === "true";
+    if (shouldSendOnboard && artist.userId) {
+      const { sendArtistOnboardCampaign } = await import(
+        "../service/artistOnboardEmail.service"
+      );
+      if (!adminId) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+      onboardEmail = await sendArtistOnboardCampaign({
+        adminId,
+        segment: "artistIds",
+        artistIds: [id],
+        message:
+          typeof body.onboardMessage === "string"
+            ? body.onboardMessage
+            : undefined,
+        subject:
+          typeof body.onboardSubject === "string"
+            ? body.onboardSubject
+            : undefined,
+        dryRun: false,
+      });
+      artist.onboardEmailSentAt = new Date();
+    }
+
     if (adminId) {
       await AuditService.logAdminAction(adminId, "update_artist", id, {
         status: artist.status,
         isVerified: artist.isVerified,
+        sendOnboardEmail: shouldSendOnboard,
       });
     }
 
-    res.status(200).json({ success: true, data: shapeArtist(artist) });
+    const justActivated = body.status === "active";
+    const needsOnboardReminder =
+      justActivated && !artist.onboardEmailSentAt && !shouldSendOnboard;
+
+    res.status(200).json({
+      success: true,
+      data: shapeArtist(artist),
+      ...(onboardEmail ? { onboardEmail } : {}),
+      ...(needsOnboardReminder
+        ? {
+            reminders: [
+              {
+                id: "send_artist_onboard_email",
+                severity: "high",
+                title: "Send onboard email",
+                message:
+                  "Artist activated. Send them the creator onboard email so they know how to upload to Music → Artists.",
+                action: {
+                  method: "POST",
+                  path: "/api/admin/email/artist-onboard",
+                  bodyHint: {
+                    segment: "artistIds",
+                    artistIds: [id],
+                    dryRun: false,
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    });
   } catch (error: any) {
     logger.error("Patch artist error", { error: error.message });
     res.status(500).json({ success: false, message: "Failed to update artist" });

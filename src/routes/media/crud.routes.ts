@@ -86,7 +86,10 @@ router.get(
   "/:id",
   verifyToken,
   apiRateLimiter,
-  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  cacheMiddleware(120, undefined, {
+    allowAuthenticated: true,
+    varyByUserId: true,
+  }),
   getMediaByIdentifier
 );
 

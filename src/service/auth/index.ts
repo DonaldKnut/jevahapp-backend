@@ -25,6 +25,9 @@ class AuthService {
   verifyResetCode = passwordService.verifyResetCode;
   resetPasswordWithCode = passwordService.resetPasswordWithCode;
   resetPassword = passwordService.resetPassword;
+  changePassword = passwordService.changePassword;
+  adminSetUserPassword = passwordService.adminSetUserPassword;
+  adminSendPasswordReset = passwordService.adminSendPasswordReset;
 
   logout = tokenService.logout;
   refreshToken = tokenService.refreshToken;

@@ -16,6 +16,8 @@ services:
       - LOG_LEVEL=debug
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_ENGAGEMENT_TOPIC=jevah.engagement.events
+      - CONTENT_GUARDIAN_URL=http://content-guardian:8091
+      - MODERATION_FUSION_MODE=guardian_first
     volumes:
       - ./logs:/app/logs
       - ./src:/app/src
@@ -23,6 +25,7 @@ services:
       - mongo
       - redis
       - kafka
+      - content-guardian
     restart: unless-stopped
     networks:
       - jevah-network
@@ -38,6 +41,8 @@ services:
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_ENGAGEMENT_TOPIC=jevah.engagement.events
       - LOG_LEVEL=debug
+      - CONTENT_GUARDIAN_URL=http://content-guardian:8091
+      - MODERATION_FUSION_MODE=guardian_first
     volumes:
       - ./logs:/app/logs
       - ./src:/app/src
@@ -45,6 +50,23 @@ services:
       - mongo
       - redis
       - kafka
+      - content-guardian
+    restart: unless-stopped
+    networks:
+      - jevah-network
+
+  # Local gospel scoring: Whisper STT + NudeNet + CLIP (CPU). Gemini stays optional gray-zone.
+  content-guardian:
+    build: ./services/content-guardian
+    ports:
+      - "8091:8091"
+    environment:
+      - GUARDIAN_ENABLE_WHISPER=true
+      - GUARDIAN_ENABLE_NUDENET=true
+      - GUARDIAN_ENABLE_CLIP=true
+      - GUARDIAN_WHISPER_MODEL=base
+      - GUARDIAN_WHISPER_DEVICE=cpu
+      - GUARDIAN_WHISPER_COMPUTE=int8
     restart: unless-stopped
     networks:
       - jevah-network

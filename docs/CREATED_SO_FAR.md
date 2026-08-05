@@ -22,6 +22,7 @@ Inventory of work shipped on this branch toward production launch (July 2026). U
 | [API.md](./API.md) | Full REST reference (incl. staged upload + admin) |
 | [SETUP.md](./SETUP.md) | Env vars, Redis, workers, R2, Gemini, Expo |
 | [PERFORMANCE.md](./PERFORMANCE.md) | Shareholder performance brief — latency, CPU/RAM, upload & verification |
+| [PROGRESS_PERFORMANCE_NEXT_BUILD.md](./PROGRESS_PERFORMANCE_NEXT_BUILD.md) | Achievements, hardenings, before/after performance, next-build plan |
 | [REDIS_OPS.md](./REDIS_OPS.md) | Contabo Redis binding, like hot path, Socket.IO adapter |
 | [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md) | Expo device register / unregister / deep-link payload |
 | [CONTABO_SMOKE.md](./CONTABO_SMOKE.md) | Post-deploy smoke checklist on Contabo |

@@ -33,7 +33,12 @@ export async function persistModerationDecision(params: {
     await ModerationCase.create({
       mediaId: params.mediaId,
       contentHash: params.contentHash,
-      provider: params.result.modelId ? "google-gemini" : "offline",
+      provider:
+        params.result.modelId === "content-guardian"
+          ? "content-guardian"
+          : params.result.modelId
+            ? "google-gemini"
+            : "offline",
       modelId: params.result.modelId,
       promptVersion: MODERATION_PROMPT_VERSION,
       policyVersion: MODERATION_POLICY_VERSION,

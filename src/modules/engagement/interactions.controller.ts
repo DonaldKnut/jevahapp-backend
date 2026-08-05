@@ -188,10 +188,19 @@ export const recordContentView = async (req: Request, res: Response): Promise<vo
   try {
     const { contentId, contentType: rawContentType } = req.params;
     const userId = req.userId;
-    const { durationMs, progressPct, isComplete, source, sessionId, deviceId } = req.body;
+    const { durationMs, progressPct, isComplete, source, sessionId, deviceId } =
+      req.body || {};
 
     if (!contentId || !Types.ObjectId.isValid(contentId)) {
-      res.status(400).json({ success: false, message: "Invalid content ID" });
+      res.status(200).json({
+        success: true,
+        data: {
+          viewCount: 0,
+          hasViewed: false,
+          counted: false,
+          isNewView: false,
+        },
+      });
       return;
     }
 
@@ -231,20 +240,27 @@ export const recordContentView = async (req: Request, res: Response): Promise<vo
         viewCount: result.viewCount,
         hasViewed: result.hasViewed,
         counted: result.counted,
+        isNewView: result.isNewView ?? result.counted,
       },
     });
   } catch (error: any) {
-    logger.error("Record content view error", { error: error.message });
-    if (error.message.includes("not found")) {
-      res.status(404).json({
-        success: false,
-        code: "CONTENT_NOT_FOUND",
-        message: error.message,
-        data: {},
-      });
-      return;
-    }
-    res.status(500).json({ success: false, message: "Failed to record view" });
+    const msg = String(error?.message || "");
+    logger.error("Record content view error", {
+      error: msg,
+      stack: error?.stack,
+      contentId: req.params?.contentId,
+      contentType: req.params?.contentType,
+    });
+    // Prefer soft 200 for view telemetry — never 500 solely for under_review / missing fields
+    res.status(200).json({
+      success: true,
+      data: {
+        viewCount: 0,
+        hasViewed: false,
+        counted: false,
+        isNewView: false,
+      },
+    });
   }
 };
 

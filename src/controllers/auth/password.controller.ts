@@ -16,11 +16,18 @@ export async function resetPassword(
       });
     }
 
+    if (String(newPassword).length < 6) {
+      return response.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
     await authService.resetPassword(email, token, newPassword);
 
     return response.status(200).json({
       success: true,
-      message: "Password reset successfully",
+      message: "Password reset successfully. Please sign in again.",
     });
   } catch (error) {
     if (
@@ -51,19 +58,14 @@ export async function initiatePasswordReset(
       });
     }
 
-    await authService.initiatePasswordReset(email);
+    const result = await authService.initiatePasswordReset(email);
 
+    // Same 200 for all roles (admin, content_creator, artist, …) — no email enumeration
     return response.status(200).json({
       success: true,
-      message: "Password reset code sent to your email",
+      message: result.message,
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "User not found") {
-      return response.status(404).json({
-        success: false,
-        message: error.message,
-      });
-    }
     return next(error);
   }
 }
@@ -129,7 +131,7 @@ export async function resetPasswordWithCode(
 
     return response.status(200).json({
       success: true,
-      message: "Password reset successfully",
+      message: "Password reset successfully. Please sign in again.",
     });
   } catch (error) {
     if (
@@ -140,6 +142,68 @@ export async function resetPasswordWithCode(
         success: false,
         message: error.message,
       });
+    }
+    return next(error);
+  }
+}
+
+/**
+ * POST /api/auth/change-password
+ * Logged-in users (admin, creators, artists, …) change their own password.
+ */
+export async function changePassword(
+  request: Request,
+  response: Response,
+  next: NextFunction
+) {
+  try {
+    const userId = request.userId;
+    const { currentPassword, newPassword } = request.body || {};
+
+    if (!userId) {
+      return response.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return response.status(400).json({
+        success: false,
+        message: "currentPassword and newPassword are required",
+      });
+    }
+
+    if (String(newPassword).length < 6) {
+      return response.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    await authService.changePassword(userId, currentPassword, newPassword);
+
+    return response.status(200).json({
+      success: true,
+      message: "Password changed successfully. Please sign in again.",
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "Current password is incorrect" ||
+        error.message.includes("no password set")
+      ) {
+        return response.status(400).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      if (error.message === "User not found") {
+        return response.status(404).json({
+          success: false,
+          message: error.message,
+        });
+      }
     }
     return next(error);
   }

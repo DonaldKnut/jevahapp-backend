@@ -100,6 +100,20 @@ export const addTrackToPlaylist = async (
     } else {
       const song = await CopyrightFreeSong.findById(trackId);
       contentExists = !!song;
+      if (song) {
+        const url = String(
+          (song as any).audio?.playbackUrl || (song as any).fileUrl || ""
+        );
+        const status = String((song as any).processing?.status || "").toLowerCase();
+        if (url.startsWith("pending://") || status === "pending" || status === "failed") {
+          response.status(400).json({
+            success: false,
+            error: "Song is not ready to add to a playlist yet",
+            code: "TRACK_NOT_READY",
+          });
+          return;
+        }
+      }
     }
 
     if (!contentExists) {

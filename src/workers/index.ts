@@ -211,6 +211,18 @@ async function hasBinary(cmd: string): Promise<boolean> {
     })();
   }, cleanupMs).unref?.();
 
+  // Scheduled artist releases (also started on API; safe if both run)
+  try {
+    const { startReleaseScheduler } = await import(
+      "../modules/audio/releaseScheduler"
+    );
+    startReleaseScheduler();
+  } catch (err: any) {
+    logger.warn("Release scheduler not started on worker", {
+      error: err?.message,
+    });
+  }
+
   // Expo receipt reconciliation (DeviceNotRegistered → deactivate tokens)
   try {
     const { startExpoReceiptPoller } = await import(

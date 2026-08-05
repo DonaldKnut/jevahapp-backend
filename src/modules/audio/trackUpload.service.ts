@@ -10,7 +10,10 @@ import {
   ALLOWED_AUDIO_MIME,
   ALLOWED_COVER_MIME,
   TRACK_AUDIO_MAX_BYTES,
+  TRACK_AUDIO_MULTIPART_MAX_BYTES,
   TRACK_COVER_MAX_BYTES,
+  TRACK_MULTIPART_PART_SIZE_BYTES,
+  TRACK_MULTIPART_THRESHOLD_BYTES,
   TRACK_PRESIGN_EXPIRES_SEC,
   extFromMime,
   normalizeCategory,
@@ -21,7 +24,8 @@ import {
   shouldAutoApproveVerifiedArtist,
 } from "./trackReview.service";
 import { Artist } from "../../models/artist.model";
-import { shapeTrackCard, fromFeVisibility } from "./track.formatter";
+import { shapeTrackCard, fromFeVisibility, shapeTrackCardWithRelease } from "./track.formatter";
+import { uploadProgressService } from "../../service/uploadProgress.service";
 
 const execFileAsync = promisify(execFile);
 
@@ -54,33 +58,72 @@ export interface UploadIntentInput {
   coverContentType?: string;
   coverFileName?: string;
   coverFileSizeBytes?: number;
+  /** Optional release attachment (artist lane) */
+  releaseId?: string | null;
+  trackNumber?: number | null;
+  discNumber?: number | null;
+  /** Force R2 multipart (also auto when size ≥ threshold) */
+  multipart?: boolean;
+}
+
+function trackUploadId(trackId: string): string {
+  return `track_${trackId}`;
+}
+
+function emitTrackFinalizeProgress(
+  userId: string,
+  trackId: string,
+  progress: number,
+  stage: string,
+  message: string
+): void {
+  const uploadId = trackUploadId(trackId);
+  uploadProgressService.registerUploadSession(uploadId, userId);
+  uploadProgressService.setMediaId(uploadId, trackId);
+  uploadProgressService.sendProgress(
+    {
+      uploadId,
+      progress,
+      stage,
+      message,
+      timestamp: new Date().toISOString(),
+    },
+    userId
+  );
 }
 
 async function probeDurationSec(url: string): Promise<number | null> {
   if (!(await hasFfprobe())) return null;
-  try {
-    const { stdout } = await execFileAsync(
-      "ffprobe",
-      [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        url,
-      ],
-      { timeout: 90_000 }
-    );
-    const n = parseFloat(String(stdout).trim());
-    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-  } catch (err: any) {
-    logger.warn("ffprobe duration failed for track", {
-      error: err?.message,
-      url: url.slice(0, 120),
-    });
-    return null;
+  const attempts = 3;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const { stdout } = await execFileAsync(
+        "ffprobe",
+        [
+          "-v",
+          "error",
+          "-show_entries",
+          "format=duration",
+          "-of",
+          "default=noprint_wrappers=1:nokey=1",
+          url,
+        ],
+        { timeout: 90_000 }
+      );
+      const n = parseFloat(String(stdout).trim());
+      if (Number.isFinite(n) && n > 0) return Math.round(n);
+    } catch (err: any) {
+      logger.warn("ffprobe duration attempt failed for track", {
+        attempt: i + 1,
+        error: err?.message,
+        url: url.slice(0, 120),
+      });
+    }
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
   }
+  return null;
 }
 
 function assertAudioMime(mime: string) {
@@ -123,9 +166,16 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
   if (!fileSizeBytes || fileSizeBytes <= 0) {
     throw new TrackUploadError("fileSizeBytes is required");
   }
-  if (fileSizeBytes > TRACK_AUDIO_MAX_BYTES) {
+
+  const useMultipart =
+    input.multipart === true ||
+    fileSizeBytes >= TRACK_MULTIPART_THRESHOLD_BYTES;
+  const maxBytes = useMultipart
+    ? TRACK_AUDIO_MULTIPART_MAX_BYTES
+    : TRACK_AUDIO_MAX_BYTES;
+  if (fileSizeBytes > maxBytes) {
     throw new TrackUploadError(
-      `Audio exceeds ${TRACK_AUDIO_MAX_BYTES / (1024 * 1024)}MB limit`,
+      `Audio exceeds ${maxBytes / (1024 * 1024)}MB limit`,
       400,
       "FILE_TOO_LARGE"
     );
@@ -134,6 +184,38 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
   const lane = input.lane === "artist" ? "artist" : "curated";
   if (lane === "artist" && input.artistId && !Types.ObjectId.isValid(input.artistId)) {
     throw new TrackUploadError("Invalid artistId");
+  }
+
+  let releaseIdObj: Types.ObjectId | null = null;
+  let trackNumber: number | null =
+    typeof input.trackNumber === "number" && input.trackNumber > 0
+      ? Math.floor(input.trackNumber)
+      : null;
+  const discNumber =
+    typeof input.discNumber === "number" && input.discNumber > 0
+      ? Math.floor(input.discNumber)
+      : 1;
+
+  if (input.releaseId) {
+    if (lane !== "artist") {
+      throw new TrackUploadError(
+        "releaseId is only supported for artist-lane tracks",
+        400,
+        "INVALID_RELEASE"
+      );
+    }
+    const {
+      assertReleaseOwnedByArtist,
+      nextTrackNumber,
+    } = await import("./release.service");
+    if (!input.artistId) {
+      throw new TrackUploadError("artistId required when attaching to a release");
+    }
+    await assertReleaseOwnedByArtist(input.releaseId, input.artistId);
+    releaseIdObj = new Types.ObjectId(input.releaseId);
+    if (trackNumber == null) {
+      trackNumber = await nextTrackNumber(input.releaseId);
+    }
   }
 
   const trackId = new Types.ObjectId();
@@ -165,12 +247,22 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     );
   }
 
-  const audioPutUrl = await fileUploadService.getPresignedPutUrl(
-    audioKey,
-    contentType,
-    fileSizeBytes,
-    TRACK_PRESIGN_EXPIRES_SEC
-  );
+  let audioPutUrl: string | null = null;
+  let multipartUploadId: string | null = null;
+  if (useMultipart) {
+    const mp = await fileUploadService.createMultipartUpload(
+      audioKey,
+      contentType
+    );
+    multipartUploadId = mp.uploadId;
+  } else {
+    audioPutUrl = await fileUploadService.getPresignedPutUrl(
+      audioKey,
+      contentType,
+      fileSizeBytes,
+      TRACK_PRESIGN_EXPIRES_SEC
+    );
+  }
 
   const pendingUrl = `pending://${audioKey}`;
   const now = new Date();
@@ -199,6 +291,10 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
       lane === "artist" && input.artistSlug
         ? String(input.artistSlug).toLowerCase()
         : null,
+    releaseId: releaseIdObj,
+    albumId: releaseIdObj,
+    trackNumber,
+    discNumber: releaseIdObj ? discNumber : null,
     audio: {
       originalKey: audioKey,
       originalUrl: null,
@@ -206,6 +302,7 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
       format: contentType,
       fileSizeBytes,
       signed: false,
+      multipartUploadId,
     },
     artwork: coverKey ? { key: coverKey, url: null } : null,
     processing: {
@@ -231,15 +328,23 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     lane,
     title: title.trim(),
     stage: "upload_intent",
+    multipart: useMultipart,
   });
 
   return {
     trackId: trackId.toString(),
+    releaseId: releaseIdObj?.toString() || null,
+    trackNumber,
+    discNumber: releaseIdObj ? discNumber : null,
+    mode: useMultipart ? ("multipart" as const) : ("single" as const),
     audio: {
       putUrl: audioPutUrl,
       key: audioKey,
       headers: { "Content-Type": contentType },
       expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+      mode: useMultipart ? ("multipart" as const) : ("single" as const),
+      multipartUploadId,
+      partSizeHint: useMultipart ? TRACK_MULTIPART_PART_SIZE_BYTES : null,
     },
     cover: coverKey
       ? {
@@ -269,6 +374,22 @@ export async function finalizeTrackUpload(
     throw new TrackUploadError("Track has no audio key — create via upload-intent");
   }
 
+  if (track.audio?.multipartUploadId) {
+    throw new TrackUploadError(
+      "Multipart upload still open — complete or abort it before finalize",
+      400,
+      "MULTIPART_INCOMPLETE"
+    );
+  }
+
+  emitTrackFinalizeProgress(
+    adminId,
+    trackId,
+    5,
+    "processing",
+    "Finalize started"
+  );
+
   track.processing = {
     ...(track.processing || { status: "pending" }),
     status: "processing",
@@ -278,6 +399,13 @@ export async function finalizeTrackUpload(
   await track.save();
 
   try {
+    emitTrackFinalizeProgress(
+      adminId,
+      trackId,
+      25,
+      "processing",
+      "Verifying audio in storage"
+    );
     const head = await fileUploadService.headObject(audioKey);
     const size = Number(head.ContentLength || track.audio?.fileSizeBytes || 0);
     const playbackUrl = fileUploadService.generatePublicUrl(audioKey);
@@ -293,6 +421,13 @@ export async function finalizeTrackUpload(
       }
     }
 
+    emitTrackFinalizeProgress(
+      adminId,
+      trackId,
+      55,
+      "processing",
+      "Probing duration"
+    );
     const durationSec = await probeDurationSec(playbackUrl);
 
     track.fileUrl = playbackUrl;
@@ -308,6 +443,7 @@ export async function finalizeTrackUpload(
       fileSizeBytes: size || track.audio?.fileSizeBytes || null,
       signed: false,
       expiresInSeconds: null,
+      multipartUploadId: null,
     };
     if (coverKey) {
       track.artwork = { key: coverKey, url: coverUrl };
@@ -324,6 +460,13 @@ export async function finalizeTrackUpload(
 
     // Curated admin uploads: auto-approved. Artist lane: AI + admin gate.
     if (track.lane === "artist") {
+      emitTrackFinalizeProgress(
+        adminId,
+        trackId,
+        75,
+        "verifying",
+        "Running content review"
+      );
       let decision: "approved" | "under_review" | "rejected" = "under_review";
       let reason = "Queued for admin review";
       let source: string = "fail_open";
@@ -390,6 +533,13 @@ export async function finalizeTrackUpload(
       }
     }
 
+    emitTrackFinalizeProgress(
+      adminId,
+      trackId,
+      95,
+      "finalizing",
+      "Saving track"
+    );
     await track.save();
 
     await AuditService.logAdminAction(adminId, "finalize_track", trackId, {
@@ -400,7 +550,16 @@ export async function finalizeTrackUpload(
       lane: track.lane,
     });
 
-    return shapeTrackCard(track.toObject());
+    emitTrackFinalizeProgress(
+      adminId,
+      trackId,
+      100,
+      "complete",
+      "Track ready"
+    );
+    uploadProgressService.clearUploadSession(trackUploadId(trackId), 120_000);
+
+    return shapeTrackCardWithRelease(track.toObject());
   } catch (err: any) {
     track.processing = {
       status: "failed",
@@ -408,6 +567,15 @@ export async function finalizeTrackUpload(
       updatedAt: new Date(),
     };
     await track.save().catch(() => undefined);
+
+    emitTrackFinalizeProgress(
+      adminId,
+      trackId,
+      0,
+      "error",
+      err?.message || "Finalize failed"
+    );
+    uploadProgressService.clearUploadSession(trackUploadId(trackId), 60_000);
 
     if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) {
       throw new TrackUploadError(
@@ -618,7 +786,191 @@ export async function patchTrack(
   await AuditService.logAdminAction(adminId, "update_track", trackId, {
     fields: Object.keys(body),
   });
-  return shapeTrackCard(track.toObject());
+  return shapeTrackCardWithRelease(track.toObject());
+}
+
+/** Poll finalize / processing state (socket fallback). */
+export async function getTrackUploadStatus(trackId: string, userId: string) {
+  if (!Types.ObjectId.isValid(trackId)) {
+    throw new TrackUploadError("Invalid track id");
+  }
+  const track = await CopyrightFreeSong.findById(trackId)
+    .select(
+      "processing moderationStatus moderationResult visibility audio.multipartUploadId audio.originalKey"
+    )
+    .lean();
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const processingStatus = (track as any).processing?.status || "pending";
+  const socket = uploadProgressService.getProgressStatus(
+    trackUploadId(trackId),
+    userId
+  );
+
+  return {
+    trackId,
+    uploadId: trackUploadId(trackId),
+    processingStatus,
+    processingError: (track as any).processing?.error || null,
+    processingUpdatedAt: (track as any).processing?.updatedAt || null,
+    moderationStatus: (track as any).moderationStatus || null,
+    visibility: (track as any).visibility || null,
+    multipartOpen: Boolean((track as any).audio?.multipartUploadId),
+    multipartUploadId: (track as any).audio?.multipartUploadId || null,
+    progress: socket
+      ? {
+          progress: socket.progress,
+          stage: socket.stage,
+          message: socket.message,
+          timestamp: socket.timestamp,
+        }
+      : null,
+  };
+}
+
+export async function signTrackMultipartParts(
+  trackId: string,
+  partNumbers: number[]
+) {
+  if (!Types.ObjectId.isValid(trackId)) {
+    throw new TrackUploadError("Invalid track id");
+  }
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const key = track.audio?.originalKey;
+  const uploadId = track.audio?.multipartUploadId;
+  if (!key || !uploadId) {
+    throw new TrackUploadError(
+      "No open multipart upload for this track",
+      400,
+      "MULTIPART_MISSING"
+    );
+  }
+
+  const nums = [
+    ...new Set(
+      (partNumbers || [])
+        .map((n) => Math.floor(Number(n)))
+        .filter((n) => Number.isFinite(n) && n >= 1 && n <= 10_000)
+    ),
+  ].sort((a, b) => a - b);
+
+  if (!nums.length) {
+    throw new TrackUploadError("partNumbers required", 400, "INVALID_PARTS");
+  }
+  if (nums.length > 100) {
+    throw new TrackUploadError("Request at most 100 parts at a time", 400);
+  }
+
+  const parts = await Promise.all(
+    nums.map(async (partNumber) => ({
+      partNumber,
+      putUrl: await fileUploadService.getPresignedUploadPartUrl(
+        key,
+        uploadId,
+        partNumber,
+        TRACK_PRESIGN_EXPIRES_SEC
+      ),
+      headers: {},
+      expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
+    }))
+  );
+
+  return {
+    trackId,
+    key,
+    multipartUploadId: uploadId,
+    partSizeHint: TRACK_MULTIPART_PART_SIZE_BYTES,
+    parts,
+  };
+}
+
+export async function completeTrackMultipartUpload(
+  trackId: string,
+  parts: Array<{ PartNumber?: number; partNumber?: number; ETag?: string; etag?: string }>
+) {
+  if (!Types.ObjectId.isValid(trackId)) {
+    throw new TrackUploadError("Invalid track id");
+  }
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const key = track.audio?.originalKey;
+  const uploadId = track.audio?.multipartUploadId;
+  if (!key || !uploadId) {
+    throw new TrackUploadError(
+      "No open multipart upload for this track",
+      400,
+      "MULTIPART_MISSING"
+    );
+  }
+
+  const normalized = (parts || [])
+    .map((p) => ({
+      PartNumber: Math.floor(Number(p.PartNumber ?? p.partNumber)),
+      ETag: String(p.ETag ?? p.etag ?? "").trim(),
+    }))
+    .filter((p) => p.PartNumber >= 1 && p.ETag);
+
+  if (!normalized.length) {
+    throw new TrackUploadError(
+      "parts with PartNumber + ETag required",
+      400,
+      "INVALID_PARTS"
+    );
+  }
+
+  try {
+    await fileUploadService.completeMultipartUpload(key, uploadId, normalized);
+  } catch (err: any) {
+    throw new TrackUploadError(
+      err?.message || "Failed to complete multipart upload",
+      400,
+      "MULTIPART_COMPLETE_FAILED"
+    );
+  }
+
+  track.audio = {
+    ...(track.audio || {}),
+    multipartUploadId: null,
+  };
+  await track.save();
+
+  return {
+    trackId,
+    key,
+    readyForFinalize: true,
+  };
+}
+
+export async function abortTrackMultipartUpload(trackId: string) {
+  if (!Types.ObjectId.isValid(trackId)) {
+    throw new TrackUploadError("Invalid track id");
+  }
+  const track = await CopyrightFreeSong.findById(trackId);
+  if (!track) throw new TrackUploadError("Track not found", 404);
+
+  const key = track.audio?.originalKey;
+  const uploadId = track.audio?.multipartUploadId;
+  if (key && uploadId) {
+    try {
+      await fileUploadService.abortMultipartUpload(key, uploadId);
+    } catch (err: any) {
+      logger.warn("Abort multipart failed", {
+        trackId,
+        error: err?.message,
+      });
+    }
+  }
+
+  track.audio = {
+    ...(track.audio || {}),
+    multipartUploadId: null,
+  };
+  await track.save();
+
+  return { trackId, aborted: true };
 }
 
 export type { ICopyrightFreeSong };

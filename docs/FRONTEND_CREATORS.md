@@ -172,7 +172,8 @@ Response uses the same `CreatorMe` shape (`201` new, `200` if already applied).
 | Method | Path | Notes |
 |--------|------|--------|
 | GET | `/api/creators/me/tracks` | Own tracks incl. drafts |
-| POST | `/api/creators/tracks/upload-intent` | Presign R2 (same as admin audio) |
+| GET/POST | `/api/creators/releases` | Studio releases (see [FRONTEND_ARTIST_RELEASES_HANDOFF.md](./FRONTEND_ARTIST_RELEASES_HANDOFF.md)) |
+| POST | `/api/creators/tracks/upload-intent` | Presign R2; optional `releaseId` + `trackNumber` |
 | POST | `/api/creators/tracks/:trackId/finalize` | `{ publish?: true }` |
 | PATCH | `/api/creators/tracks/:id` | Metadata / visibility |
 | DELETE | `/api/creators/tracks/:id` | Hard delete + R2 purge |
@@ -359,10 +360,12 @@ Admin stays on `/admin/artists`, `/admin/audio` — **not** under `/creators`.
 |--------|----------|
 | **Artists → Pending** | Table from `GET /api/admin/artists?status=pending` |
 | **Row actions** | Activate / Suspend / Verify |
+| **On activate** | Prefer `sendOnboardEmail: true` **or** toast from response `reminders[]` → `POST /api/admin/email/artist-onboard` |
+| **Dashboard banner** | Render `GET …/dashboard/analytics` → `data.reminders` (artist onboard) |
 | **Audio library** | Tabs: Curated \| Artist catalog (`lane` query) |
 | **Do not** | Show “Become a creator” for admins as the apply path |
 
-On activate, mobile/web `GET /me` flips `canUploadTracks: true`.
+On activate, mobile/web `GET /me` flips `canUploadTracks: true`. Always remind admins to send the **artist onboard email** ([FRONTEND_MARKETING_EMAIL_HANDOFF.md](./FRONTEND_MARKETING_EMAIL_HANDOFF.md) §4).
 
 ---
 

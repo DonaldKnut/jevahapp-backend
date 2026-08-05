@@ -59,7 +59,13 @@ export function handleJoinContent(
   socket.join(roomId);
 
   const viewerCount = ctx.io.sockets.adapter.rooms.get(roomId)?.size || 0;
-  ctx.io.to(roomId).emit("viewer-count-update", { contentId, contentType, viewerCount });
+  // Live presence only — NEVER confuse with durable Mongo viewCount.
+  ctx.io.to(roomId).emit("viewer-count-update", {
+    contentId,
+    contentType,
+    viewerCount,
+    kind: "live_presence",
+  });
 
   logger.debug("User joined content room", {
     userId: user.userId,
@@ -80,7 +86,13 @@ export function handleLeaveContent(
   socket.leave(roomId);
 
   const viewerCount = ctx.io.sockets.adapter.rooms.get(roomId)?.size || 0;
-  ctx.io.to(roomId).emit("viewer-count-update", { contentId, contentType, viewerCount });
+  // Live presence only — NEVER confuse with durable Mongo viewCount.
+  ctx.io.to(roomId).emit("viewer-count-update", {
+    contentId,
+    contentType,
+    viewerCount,
+    kind: "live_presence",
+  });
 
   logger.debug("User left content room", {
     userId: socket.data.user.userId,

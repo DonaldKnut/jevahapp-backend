@@ -163,7 +163,8 @@ export const updateChurchVerification = async (
 
 /**
  * DELETE /api/admin/media/:id
- * Admin force-delete any media (not only reported)
+ * Soft-delete by default (isHidden + tombstoned + deletedAt).
+ * Pass ?hard=true to permanently remove DB row + R2 objects.
  */
 export const adminDeleteMedia = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -179,13 +180,24 @@ export const adminDeleteMedia = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const media = await Media.findById(id).select("title contentType uploadedBy");
+    const media = await Media.findById(id).select(
+      "title contentType uploadedBy deletedAt isHidden publicationState"
+    );
     if (!media) {
       res.status(404).json({ success: false, message: "Media not found" });
       return;
     }
 
-    await mediaService.deleteMedia(id, adminId, "admin");
+    const hard =
+      req.query.hard === "true" ||
+      req.query.hard === "1" ||
+      (req.body && req.body.hard === true);
+
+    if (hard) {
+      await mediaService.deleteMedia(id, adminId, "admin");
+    } else {
+      await mediaService.softDeleteMedia(id, adminId, "admin");
+    }
 
     await MediaReport.updateMany(
       { mediaId: new Types.ObjectId(id), status: "pending" },
@@ -194,7 +206,9 @@ export const adminDeleteMedia = async (req: Request, res: Response): Promise<voi
           status: "resolved",
           reviewedBy: new Types.ObjectId(adminId),
           reviewedAt: new Date(),
-          adminNotes: "Content deleted by admin",
+          adminNotes: hard
+            ? "Content hard-deleted by admin"
+            : "Content soft-deleted by admin",
         },
       }
     );
@@ -208,15 +222,18 @@ export const adminDeleteMedia = async (req: Request, res: Response): Promise<voi
       mediaId: id,
       title: media.title,
       contentType: media.contentType,
+      hard: !!hard,
     });
 
     res.status(200).json({
       success: true,
-      message: "Media deleted",
+      message: hard ? "Media permanently deleted" : "Media soft-deleted",
       data: {
         mediaId: id,
         mediaTitle: media.title,
         contentType: media.contentType,
+        softDeleted: !hard,
+        deletedAt: hard ? null : new Date().toISOString(),
       },
     });
   } catch (error: any) {

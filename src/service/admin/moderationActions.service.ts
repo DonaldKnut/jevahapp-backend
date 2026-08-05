@@ -15,8 +15,22 @@ export const MODERATION_STATUSES = [
   "approved",
   "rejected",
   "under_review",
+  "pending",
 ] as const;
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
+
+/** Map Next/UI aliases onto canonical moderation statuses. */
+export function normalizeModerationStatusInput(
+  raw: unknown
+): ModerationStatus | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim().toLowerCase();
+  if (s === "flagged") return "under_review";
+  if ((MODERATION_STATUSES as readonly string[]).includes(s)) {
+    return s as ModerationStatus;
+  }
+  return null;
+}
 
 export const REPORT_REVIEW_STATUSES = [
   "reviewed",
@@ -65,17 +79,22 @@ export async function applyModerationStatus(params: {
     publicationState:
       status === "rejected"
         ? "tombstoned"
-        : status === "under_review"
-          ? "staged"
-          : needsProcessing
+        : status === "approved"
+          ? needsProcessing
             ? "publishing"
-            : "live",
+            : "live"
+          : "staged", // pending | under_review
   };
 
   if (status === "approved" && !needsProcessing) {
     updateData.isHidden = false;
     updateData.publicationState = "live";
     updateData.publishedAt = new Date();
+  }
+
+  if (status === "pending" || status === "under_review") {
+    updateData.isHidden = true;
+    updateData.publicationState = "staged";
   }
 
   if (adminNotes) {

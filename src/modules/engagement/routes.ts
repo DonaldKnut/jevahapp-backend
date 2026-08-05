@@ -74,6 +74,9 @@ bindContentComments(contentRouter);
 
 // ─── Save / Bookmark ─────────────────────────────────────────────────────────
 const saveRouter = express.Router();
+// Static paths before /:mediaId/* so /user and /bulk are never captured as ids
+saveRouter.get("/user", verifyToken, getUserBookmarks);
+saveRouter.post("/bulk", verifyToken, apiRateLimiter, bulkBookmark);
 saveRouter.post(
   "/:mediaId/toggle",
   verifyToken,
@@ -82,9 +85,7 @@ saveRouter.post(
   toggleBookmark
 );
 saveRouter.get("/:mediaId/status", verifyToken, getBookmarkStatus);
-saveRouter.get("/user", verifyToken, getUserBookmarks);
 saveRouter.get("/:mediaId/stats", getBookmarkStats);
-saveRouter.post("/bulk", verifyToken, apiRateLimiter, bulkBookmark);
 
 // ─── Legacy interaction routes (comment aliases, share URLs, messaging) ─────
 const legacyRouter = express.Router();

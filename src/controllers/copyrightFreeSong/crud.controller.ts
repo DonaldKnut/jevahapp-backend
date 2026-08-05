@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { CopyrightFreeSongService } from "../../service/copyrightFreeSong.service";
 import likeService from "../../modules/engagement/like/like.service";
 import logger from "../../utils/logger";
-import { normalizeUrl, songService } from "./shared";
+import { interactionService, normalizeUrl, songService } from "./shared";
 
 export const getAllSongs = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -11,6 +11,7 @@ export const getAllSongs = async (req: Request, res: Response): Promise<void> =>
     const category = req.query.category as string | undefined;
     const search = (req.query.search as string) || undefined;
     const updatedSince = (req.query.updatedSince as string) || undefined;
+    const userId = req.userId;
 
     // Enforce maximum limit for mobile-friendly payloads
     limit = Math.min(Math.max(limit, 1), 100);
@@ -25,7 +26,24 @@ export const getAllSongs = async (req: Request, res: Response): Promise<void> =>
       "../../service/copyrightFreeSong.service"
     );
 
-    const songs = (result.songs || []).map((s: any) => {
+    const songIds = (result.songs || []).map((s: any) => String(s._id || s.id));
+    let likedFlags: boolean[] = songIds.map(() => false);
+    let savedFlags: boolean[] = songIds.map(() => false);
+
+    if (userId && songIds.length) {
+      const [likes, saves] = await Promise.all([
+        Promise.all(
+          songIds.map((id) =>
+            likeService.hasUserLiked(userId, id, "copyright_free_song")
+          )
+        ),
+        Promise.all(songIds.map((id) => interactionService.isSaved(userId, id))),
+      ]);
+      likedFlags = likes;
+      savedFlags = saves;
+    }
+
+    const songs = (result.songs || []).map((s: any, index: number) => {
       const viewCount = CopyrightFreeSongService.normalizedViewCount(s);
       const likeCount = s.likeCount ?? s.likes ?? 0;
       return shapePublicSong(s, {
@@ -33,6 +51,10 @@ export const getAllSongs = async (req: Request, res: Response): Promise<void> =>
         views: viewCount,
         likeCount,
         likes: likeCount,
+        isLiked: likedFlags[index] || false,
+        isInLibrary: savedFlags[index] || false,
+        isSaved: savedFlags[index] || false,
+        saved: savedFlags[index] || false,
       });
     });
 
@@ -84,30 +106,34 @@ export const getSongById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    // Don't increment view count on GET - only count on actual playback (≥30 seconds)
-    // View count is now tracked via playback sessions (POST /playback/track)
-
     let isLiked = false;
+    let isInLibrary = false;
     if (userId) {
-      isLiked = await likeService.hasUserLiked(userId, songId, "copyright_free_song");
+      [isLiked, isInLibrary] = await Promise.all([
+        likeService.hasUserLiked(userId, songId, "copyright_free_song"),
+        interactionService.isSaved(userId, songId),
+      ]);
     }
 
     const viewCount = CopyrightFreeSongService.normalizedViewCount(song as any);
     const likeCount = (song as any).likeCount ?? (song as any).likes ?? 0;
+    const { shapePublicSong } = await import("../../modules/audio/track.formatter");
+    const { buildCopyrightFreeShareUrl } = await import(
+      "../../modules/engagement/copyright-free/share"
+    );
     res.status(200).json({
       success: true,
-      data: {
-        ...(song as any),
-        id: (song as any)._id?.toString?.() || (song as any).id,
-        artist: (song as any).singer,
-        audioUrl: normalizeUrl((song as any).fileUrl),
-        fileUrl: normalizeUrl((song as any).fileUrl),
+      data: shapePublicSong(song as any, {
         viewCount,
         views: viewCount,
         likeCount,
         likes: likeCount,
         isLiked,
-      },
+        isInLibrary,
+        isSaved: isInLibrary,
+        saved: isInLibrary,
+        shareUrl: buildCopyrightFreeShareUrl(songId),
+      }),
     });
   } catch (error: any) {
     logger.error("Error getting song:", error);
