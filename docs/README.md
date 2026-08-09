@@ -39,6 +39,7 @@ Last updated: July 2026 (post-modularization refactor)
 12e. **[FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md](./FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md)** — Fix www login 404: API base must include `/api`
 12f. **[FEED_RANKER.md](./FEED_RANKER.md)** — Algorithmic For You + music For You (Contabo-safe, no Torch)
 12g. **[FRONTEND_FOR_YOU_HANDOFF.md](./FRONTEND_FOR_YOU_HANDOFF.md)** — FE: for-you + Artists music algorithm, events queue, premium UI
+12h. **[FRONTEND_AUTH_SESSION_HANDOFF.md](./FRONTEND_AUTH_SESSION_HANDOFF.md)** — Backend JWT is the only session; Clerk is OAuth shell only
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
 15. **[PERFORMANCE.md](./PERFORMANCE.md)** — Shareholder performance brief (API latency, CPU/RAM, upload & verification)
@@ -62,6 +63,8 @@ Authorization: Bearer <access_token>
 ```
 
 Obtain tokens via `POST /api/auth/login`, `POST /api/auth/clerk-login`, or `POST /api/auth/oauth-login`.
+
+**Session rule:** backend JWT is the only app session. Clerk is an OAuth shell only — see [FRONTEND_AUTH_SESSION_HANDOFF.md](./FRONTEND_AUTH_SESSION_HANDOFF.md).
 
 Optional auth (`verifyTokenOptional`) is used on some read endpoints (metadata, public feed) — pass a token when available for personalized `isLiked` / `hasViewed` fields.
 

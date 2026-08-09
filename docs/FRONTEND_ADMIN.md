@@ -11,7 +11,9 @@ Same users collection powers **mobile app** and **admin web** — an account wit
 
 ## 1. Login flow (use our backend auth)
 
-Admin UI must use the **email/password JWT** path against MongoDB (or OAuth that returns an app JWT). Do **not** rely on Clerk-only login for the dashboard — `POST /api/auth/clerk-login` returns a user object but **no** `accessToken` for Bearer `/api/admin/*` calls.
+Admin UI must use the **email/password JWT** path against MongoDB (or OAuth/`clerk-login` that returns an app JWT). Store `accessToken` / `token` from the response as Bearer for `/api/admin/*`. Clerk `isSignedIn` alone is not enough — every admin call needs the **backend** JWT.
+
+See [FRONTEND_AUTH_SESSION_HANDOFF.md](./FRONTEND_AUTH_SESSION_HANDOFF.md).
 
 ### 1.1 Sign-in screen
 

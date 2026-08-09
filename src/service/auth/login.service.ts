@@ -65,12 +65,20 @@ export async function oauthLogin(
       }
     }
 
-    const jwtToken = jwt.sign({ userId: user._id }, JWT_SECRET_ASSERTED, {
-      expiresIn: "7d",
-    });
+    await assertUserNotBanned(user);
+
+    const jwtToken = jwt.sign(
+      { userId: user._id.toString(), email: user.email },
+      JWT_SECRET_ASSERTED,
+      { expiresIn: TOKEN_EXPIRATION.STANDARD, algorithm: "HS256" }
+    );
+
+    await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
 
     return {
       token: jwtToken,
+      accessToken: jwtToken,
+      expiresIn: TOKEN_EXPIRATION.STANDARD,
       user: {
         id: user._id,
         email: user.email,
@@ -134,7 +142,20 @@ export async function clerkLogin(token: string, userInfo: any) {
       }
     }
 
+    await assertUserNotBanned(user);
+
+    const accessToken = jwt.sign(
+      { userId: user._id.toString(), email: user.email },
+      JWT_SECRET_ASSERTED,
+      { expiresIn: TOKEN_EXPIRATION.STANDARD, algorithm: "HS256" }
+    );
+
+    await User.findByIdAndUpdate(user._id, { lastLoginAt: new Date() });
+
     return {
+      accessToken,
+      token: accessToken,
+      expiresIn: TOKEN_EXPIRATION.STANDARD,
       user: {
         id: user._id,
         email: user.email,
@@ -143,6 +164,8 @@ export async function clerkLogin(token: string, userInfo: any) {
         avatar: user.avatar,
         isProfileComplete: user.isProfileComplete,
         role: user.role,
+        isEmailVerified: user.isEmailVerified || false,
+        isMasterAdmin: isMasterAdminEmail(user.email),
       },
       needsAgeSelection: !user.age,
       isNewUser,
