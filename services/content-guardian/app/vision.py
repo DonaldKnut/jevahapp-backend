@@ -208,6 +208,11 @@ def score_vision(
 
     nsfw = score_nsfw(images)
     christian, secular = score_scenes(images)
+    nudenet_ok = _load_nudenet() is not None
+    clip_ok = _load_clip() is not None
+    vision_ok = nudenet_ok or clip_ok
+    if not vision_ok:
+        signals.append("vision_unavailable")
     if nsfw > 0.3:
         signals.append("nsfw_signal")
     if christian > secular and christian > 0.4:
@@ -221,7 +226,7 @@ def score_vision(
         "secular_scene_score": secular,
         "frame_count_scored": len(images),
         "signals": signals,
-        "vision_available": True,
+        "vision_available": vision_ok,
     }
 
 

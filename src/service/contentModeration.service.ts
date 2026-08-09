@@ -161,6 +161,33 @@ export class ContentModerationService {
     }
 
     const outcome = fuseGuardianScores(scored, input.contentType);
+
+    // Fail-soft: vision requested but Guardian couldn't score images → never auto-approve
+    const wantsVision =
+      !!(input.thumbnail || (input.videoFrames && input.videoFrames.length)) &&
+      !["music", "audio", "podcast", "books", "ebook"].includes(
+        (input.contentType || "").toLowerCase()
+      );
+    if (
+      wantsVision &&
+      scored.vision_available === false &&
+      outcome.decision === "approve"
+    ) {
+      outcome.decision = "review";
+      outcome.confidence = Math.min(outcome.confidence, 0.4);
+      outcome.signals = [
+        ...outcome.signals,
+        "vision_soft_fail_quarantine",
+      ];
+    }
+
+    // Soft blocklist must not auto-publish
+    if (softSignal && outcome.decision === "approve") {
+      outcome.decision = "review";
+      outcome.confidence = Math.min(outcome.confidence, 0.5);
+      outcome.signals = [...outcome.signals, "soft_blocklist_force_review"];
+    }
+
     const result = fusionToModerationResult(outcome, input);
     result.languageCandidates = languages;
 

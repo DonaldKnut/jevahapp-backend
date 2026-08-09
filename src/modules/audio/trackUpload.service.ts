@@ -21,6 +21,7 @@ import {
 } from "./track.constants";
 import {
   reviewTrackMetadata,
+  reviewTrackAudioWithGuardian,
   shouldAutoApproveVerifiedArtist,
 } from "./trackReview.service";
 import { Artist } from "../../models/artist.model";
@@ -481,19 +482,34 @@ export async function finalizeTrackUpload(
 
       if (shouldAutoApproveVerifiedArtist(isVerified)) {
         decision = "approved";
-        reason = "Auto-approved verified artist";
+        reason = "Auto-approved verified artist (TRACK_VERIFIED_SKIP_AUDIO)";
         source = "auto_verified";
       } else {
-        const ai = await reviewTrackMetadata({
+        const guardianAudio = await reviewTrackAudioWithGuardian({
           title: track.title,
           artistName: track.artistName || track.singer,
           genre: track.genre,
           category: track.category,
           licenseNote: track.licenseNote,
+          audioUrl: playbackUrl,
+          mimeType: track.audio?.format || head.ContentType || "audio/mpeg",
         });
-        decision = ai.decision;
-        reason = ai.reason;
-        source = ai.source;
+        if (guardianAudio) {
+          decision = guardianAudio.decision;
+          reason = guardianAudio.reason;
+          source = guardianAudio.source;
+        } else {
+          const ai = await reviewTrackMetadata({
+            title: track.title,
+            artistName: track.artistName || track.singer,
+            genre: track.genre,
+            category: track.category,
+            licenseNote: track.licenseNote,
+          });
+          decision = ai.decision;
+          reason = ai.reason;
+          source = ai.source;
+        }
       }
 
       track.moderationStatus = decision;

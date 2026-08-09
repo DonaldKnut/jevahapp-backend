@@ -16,10 +16,10 @@ export async function processBookContent(
     const profile = getEvidenceProfile("books", fileMimeType);
     let fullText = "";
     if (fileMimeType === "application/pdf") {
-      reportProgress(30, "analyzing", "Extracting text from PDF...");
+      reportProgress(30, "analyzing", "Extracting text from PDF (full book)…");
       fullText = await extractTextFromPDF(fileBuffer);
     } else if (fileMimeType === "application/epub+zip") {
-      reportProgress(30, "analyzing", "Extracting text from EPUB...");
+      reportProgress(30, "analyzing", "Extracting text from EPUB (full book)…");
       fullText = await extractTextFromEPUB(fileBuffer);
     } else {
       logger.warn("Unsupported book file type", { fileMimeType, uploadId });
@@ -30,13 +30,22 @@ export async function processBookContent(
     logger.info("Book text sampling completed", {
       textLength: text.length,
       fullLength: fullText.length,
+      windows: profile.textWindows,
       uploadId,
     });
+
+    if (!text || text.length < profile.minTextChars) {
+      logger.warn("Book text below min evidence — may quarantine", {
+        uploadId,
+        textLength: text.length,
+        minTextChars: profile.minTextChars,
+      });
+    }
   } catch (error: any) {
     logger.warn("Book text extraction failed:", error);
   }
 
-  reportProgress(70, "analyzing", "Processing complete!");
+  reportProgress(70, "analyzing", "Book text ready for gospel verification");
 
   onComplete(text);
 }
@@ -61,7 +70,6 @@ export function sampleDistributedText(
 
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
   try {
-    // Dynamic import for pdf-parse
     const pdfParseModule = await new Function('return import("pdf-parse")')();
     const { PDFParse } = pdfParseModule;
 
@@ -78,8 +86,13 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
       fullText = textResult.text;
     }
 
+    // Cap raw extract for Contabo RAM (~400k chars ≈ full mid-size book sample)
+    const maxRaw = Math.min(
+      parseInt(process.env.BOOK_EXTRACT_MAX_CHARS || "", 10) || 400_000,
+      600_000
+    );
     fullText = fullText.replace(/\s+/g, " ").trim();
-    return fullText.substring(0, 10000);
+    return fullText.substring(0, maxRaw);
   } catch (error: any) {
     logger.error("Failed to extract text from PDF", { error: error.message });
     return "";
@@ -113,8 +126,12 @@ export async function extractTextFromEPUB(epubBuffer: Buffer): Promise<string> {
       }
     });
 
-    // Limit to first 5 files for speed
-    for (const filePath of contentFiles.slice(0, 5)) {
+    // Walk most of the book (cap for Contabo) — distributed later by sampleDistributedText
+    const fileCap = Math.min(
+      parseInt(process.env.BOOK_EPUB_MAX_FILES || "", 10) || 40,
+      80
+    );
+    for (const filePath of contentFiles.slice(0, fileCap)) {
       try {
         const fileContent = await zipData.file(filePath)?.async("string");
         if (fileContent) {
@@ -134,8 +151,12 @@ export async function extractTextFromEPUB(epubBuffer: Buffer): Promise<string> {
       }
     }
 
+    const maxRaw = Math.min(
+      parseInt(process.env.BOOK_EXTRACT_MAX_CHARS || "", 10) || 400_000,
+      600_000
+    );
     fullText = fullText.trim();
-    return fullText ? fullText.substring(0, 10000) : "";
+    return fullText ? fullText.substring(0, maxRaw) : "";
   } catch (error: any) {
     logger.error("Failed to extract text from EPUB", { error: error.message });
     return "";

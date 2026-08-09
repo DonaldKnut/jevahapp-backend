@@ -36,6 +36,7 @@ Last updated: July 2026 (post-modularization refactor)
 11k. **[FRONTEND_MARKETING_EMAIL_HANDOFF.md](./FRONTEND_MARKETING_EMAIL_HANDOFF.md)** — Admin marketing blasts, opt-out, public unsubscribe
 12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Moderation + reports handoff for the web admin team (card shapes, P1 wiring)
 12b. **[CONTENT_GUARDIAN.md](./CONTENT_GUARDIAN.md)** — Python Content Guardian (Whisper/NudeNet/CLIP) + Node fusion; Gemini gray-zone only
+12b2. **[CONTENT_VERIFICATION_ADVANCED.md](./CONTENT_VERIFICATION_ADVANCED.md)** — Fail-soft harden + ebook full-sample + creator audio STT
 12c. **[ENGAGEMENT_TIKTOK_STANDARD.md](./ENGAGEMENT_TIKTOK_STANDARD.md)** — Lifetime vs live counts, CF view/like rate limits, FE fire-and-forget rules
 12d. **[FRONTEND_CF_MUSIC_PLAYER_HANDOFF.md](./FRONTEND_CF_MUSIC_PLAYER_HANDOFF.md)** — CF player: views (`counted`), likes, share, library, sockets
 12e. **[FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md](./FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md)** — Fix www login 404: API base must include `/api`

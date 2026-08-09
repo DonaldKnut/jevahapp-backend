@@ -50,6 +50,8 @@ class ScoreResponse(BaseModel):
     anti_hits: List[str] = Field(default_factory=list)
     frame_count_scored: int = 0
     provider: str = "content-guardian"
+    vision_available: bool = True
+    stt_available: bool = True
 
 
 @app.get("/health")
@@ -82,6 +84,53 @@ async def transcribe(
     return result
 
 
+@app.post("/v1/score-audio")
+async def score_audio(
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    description: str = Form(""),
+    content_type: str = Form("music"),
+    language: Optional[str] = Form(None),
+):
+    """
+    Creator / CF audio path: Whisper STT + gospel lexicon (no vision).
+    Contabo-safe — Node should cap upload size (~8MB sample).
+    """
+    max_bytes = int(getattr(config, "MAX_AUDIO_SCORE_BYTES", 8 * 1024 * 1024))
+    data = await file.read()
+    if len(data) > max_bytes:
+        data = data[:max_bytes]
+
+    tr = whisper_stt.transcribe_bytes(
+        data,
+        filename=file.filename or "audio.mp3",
+        language=language or None,
+    )
+    transcript = (tr.get("transcript") or "").strip()
+    stt_ok = bool(tr.get("available", True)) and len(transcript) > 0
+
+    body = ScoreRequest(
+        title=title or "",
+        description=description or "",
+        transcript=transcript,
+        content_type=content_type or "music",
+        run_vision=False,
+    )
+    scored = score(body)
+    # Attach STT metadata
+    scored.transcript = transcript
+    scored.stt_available = stt_ok
+    scored.vision_available = False
+    if not stt_ok:
+        scored.signals = list(
+            dict.fromkeys(list(scored.signals) + ["stt_unavailable_or_empty"])
+        )
+        if scored.decision_hint == "approve":
+            scored.decision_hint = "review"
+            scored.confidence = min(scored.confidence, 0.45)
+    return scored
+
+
 @app.post("/v1/score", response_model=ScoreResponse)
 def score(body: ScoreRequest):
     text = text_score.score_text(body.title, body.description, body.transcript)
@@ -90,6 +139,7 @@ def score(body: ScoreRequest):
     secular_scene = 0.0
     frame_count = 0
     vision_signals: list[str] = []
+    vision_available = True
 
     if body.run_vision and (body.thumbnail or body.frames):
         v = vision.score_vision(body.thumbnail, body.frames or None)
@@ -98,6 +148,15 @@ def score(body: ScoreRequest):
         secular_scene = float(v["secular_scene_score"])
         frame_count = int(v["frame_count_scored"])
         vision_signals = list(v.get("signals") or [])
+        vision_available = bool(v.get("vision_available", True))
+        if not vision_available:
+            vision_signals.append("vision_unavailable")
+    elif body.run_vision:
+        # Caller expected vision but sent no frames — mark unavailable for Node quarantine rules
+        status = vision.vision_status()
+        vision_available = bool(status.get("nudenet") or status.get("clip"))
+        if not vision_available:
+            vision_signals.append("vision_unavailable")
 
     # Combine secular text into scene-ish signal for fusion
     secular_combined = max(
@@ -123,11 +182,21 @@ def score(body: ScoreRequest):
         anti_gospel_reject=config.ANTI_GOSPEL_REJECT,
     )
 
+    # Fail-soft: if vision was requested but unavailable, never auto-approve
+    if body.run_vision and (body.thumbnail or body.frames) and not vision_available:
+        if hint == "approve":
+            hint = "review"
+            confidence = min(confidence, 0.4)
+        fuse_signals = list(fuse_signals) + ["vision_soft_fail_quarantine"]
+
     signals = list(
         dict.fromkeys(
             list(text["signals"]) + vision_signals + fuse_signals
         )
     )
+
+    stt_status = whisper_stt.whisper_status()
+    stt_available = bool(stt_status.get("available", True))
 
     return ScoreResponse(
         gospel_score=float(text["gospel_score"]),
@@ -143,6 +212,8 @@ def score(body: ScoreRequest):
         gospel_hits=list(text.get("gospel_hits") or []),
         anti_hits=list(text.get("anti_hits") or []),
         frame_count_scored=frame_count,
+        vision_available=vision_available,
+        stt_available=stt_available,
     )
 
 

@@ -121,8 +121,9 @@ export function offlineModeration(
   }
 
   if (flags.includes("possible_gospel") || hasStrongGospelSignal(input)) {
+    // Opt-in only — default is quarantine until AI/human reviews (safer for Contabo ops)
     const allowOfflineApprove =
-      process.env.MODERATION_OFFLINE_PROVISIONAL_APPROVE !== "false";
+      process.env.MODERATION_OFFLINE_PROVISIONAL_APPROVE === "true";
     if (
       allowOfflineApprove &&
       hasStrongGospelSignal(input) &&
@@ -132,7 +133,7 @@ export function offlineModeration(
         isApproved: true,
         confidence: 0.55,
         reason:
-          "Provisionally approved offline (strong gospel signals). Queued for AI re-check when available.",
+          "Provisionally approved offline (strong gospel signals). Flagged needs_ai_recheck — keep MODERATION_OFFLINE_PROVISIONAL_APPROVE=true only if ops re-scan the queue.",
         flags: [
           ...flags.filter(f => f !== "requires_human_review"),
           "offline_provisional_approve",

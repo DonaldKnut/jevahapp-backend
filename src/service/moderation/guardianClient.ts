@@ -30,6 +30,8 @@ export interface GuardianScoreResult {
   anti_hits?: string[];
   frame_count_scored?: number;
   provider?: string;
+  vision_available?: boolean;
+  stt_available?: boolean;
 }
 
 export interface GuardianTranscribeResult {
@@ -146,6 +148,53 @@ export async function scoreWithGuardian(
   } catch (err: any) {
     recordFailure();
     logger.warn("Guardian /v1/score error", { error: String(err?.message || err) });
+    return null;
+  }
+}
+
+export async function scoreAudioWithGuardian(input: {
+  audio: Buffer;
+  filename?: string;
+  mimeType?: string;
+  title?: string;
+  description?: string;
+  contentType?: string;
+  language?: string;
+}): Promise<GuardianScoreResult | null> {
+  const base = guardianBaseUrl();
+  if (!base || circuitOpen()) return null;
+
+  try {
+    const form = new FormData();
+    const mime = input.mimeType || "audio/mpeg";
+    const blob = new Blob([new Uint8Array(input.audio)], { type: mime });
+    form.append("file", blob, input.filename || "audio.mp3");
+    form.append("title", input.title || "");
+    form.append("description", input.description || "");
+    form.append("content_type", input.contentType || "music");
+    if (input.language) form.append("language", input.language);
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs());
+    const res = await fetch(`${base}/v1/score-audio`, {
+      method: "POST",
+      body: form,
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) {
+      recordFailure();
+      logger.warn("Guardian /v1/score-audio failed", { status: res.status });
+      return null;
+    }
+    const data = (await res.json()) as GuardianScoreResult;
+    recordSuccess();
+    return data;
+  } catch (err: any) {
+    recordFailure();
+    logger.warn("Guardian /v1/score-audio error", {
+      error: String(err?.message || err),
+    });
     return null;
   }
 }

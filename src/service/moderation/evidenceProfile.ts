@@ -95,9 +95,10 @@ export function getEvidenceProfile(
       minAudioClips: 0,
       clipSeconds: 0,
       maxTranscribedSeconds: 0,
-      maxTextChars: escalate ? 16000 : 12000,
+      // Deeper ebook verification — still Contabo-capped via sampling windows
+      maxTextChars: escalate ? 24000 : 18000,
       minTextChars: 400,
-      textWindows: escalate ? 7 : 5,
+      textWindows: escalate ? 9 : 7,
       thumbnailMaxPx: 512,
       requireTranscriptOrFrames: true,
     };
