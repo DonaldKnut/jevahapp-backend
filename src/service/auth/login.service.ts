@@ -55,7 +55,8 @@ export async function oauthLogin(
       if (tokenData.emailVerified) {
         await emailService.sendWelcomeEmail(
           user.email,
-          user.firstName || "User"
+          user.firstName || "User",
+          "default"
         );
       }
     } else {
@@ -139,7 +140,8 @@ export async function clerkLogin(token: string, userInfo: any) {
       if (tokenData.emailVerified) {
         await emailService.sendWelcomeEmail(
           user.email,
-          user.firstName || "User"
+          user.firstName || "User",
+          "default"
         );
       }
     } else {

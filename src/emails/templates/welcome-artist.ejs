@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <%- include('partials/head', { title: 'Welcome to Jevah Creators' }) %>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #0a1f1c;">
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #0a1f1c; background: linear-gradient(160deg, #112e2a 0%, #0a1f1c 100%);"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table
+            role="presentation"
+            class="email-shell"
+            width="560"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="
+              width: 560px;
+              max-width: 560px;
+              background-color: #0a1f1c;
+              border: 1px solid rgba(255, 107, 53, 0.22);
+              border-radius: 16px;
+              overflow: hidden;
+            "
+          >
+            <tr>
+              <td
+                style="
+                  height: 3px;
+                  line-height: 3px;
+                  font-size: 0;
+                  background-color: #ff6b35;
+                  background: linear-gradient(90deg, #ff6b35 0%, #ff8c42 50%, #f9c833 100%);
+                "
+              >
+                &nbsp;
+              </td>
+            </tr>
+
+            <%- include('partials/header', {
+              title: 'Welcome, ' + firstName + '!',
+              subtitle: 'Your creator journey on Jevah starts here'
+            }) %>
+
+            <tr>
+              <td
+                class="email-pad"
+                style="
+                  padding: 16px 48px 8px 48px;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 15px;
+                  line-height: 1.7;
+                  color: #b8c4c1;
+                  text-align: center;
+                "
+              >
+                <p style="margin: 0;">
+                  Your email is verified. You’re ready to join the
+                  <span style="color: #ff6b35; font-weight: 600;">Jevah Artists</span>
+                  catalog — share gospel music, connect with listeners, and grow your ministry through sound.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-pad" style="padding: 28px 48px 8px 48px;">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                >
+                  <tr>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="
+                        padding: 16px 10px;
+                        text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                      "
+                    >
+                      <div
+                        style="
+                          background-color: rgba(255, 107, 53, 0.08);
+                          border: 1px solid rgba(255, 107, 53, 0.2);
+                          border-radius: 12px;
+                          padding: 18px 12px;
+                        "
+                      >
+                        <p
+                          style="
+                            margin: 0 0 6px 0;
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #ff6b35;
+                          "
+                        >
+                          Apply
+                        </p>
+                        <p style="margin: 0; font-size: 12px; color: #9aa8a4; line-height: 1.45;">
+                          Submit your creator profile for review
+                        </p>
+                      </div>
+                    </td>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="
+                        padding: 16px 10px;
+                        text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                      "
+                    >
+                      <div
+                        style="
+                          background-color: rgba(255, 107, 53, 0.08);
+                          border: 1px solid rgba(255, 107, 53, 0.2);
+                          border-radius: 12px;
+                          padding: 18px 12px;
+                        "
+                      >
+                        <p
+                          style="
+                            margin: 0 0 6px 0;
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #ff6b35;
+                          "
+                        >
+                          Studio
+                        </p>
+                        <p style="margin: 0; font-size: 12px; color: #9aa8a4; line-height: 1.45;">
+                          Upload tracks once you’re approved
+                        </p>
+                      </div>
+                    </td>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="
+                        padding: 16px 10px;
+                        text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                      "
+                    >
+                      <div
+                        style="
+                          background-color: rgba(255, 107, 53, 0.08);
+                          border: 1px solid rgba(255, 107, 53, 0.2);
+                          border-radius: 12px;
+                          padding: 18px 12px;
+                        "
+                      >
+                        <p
+                          style="
+                            margin: 0 0 6px 0;
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: #ff6b35;
+                          "
+                        >
+                          Reach
+                        </p>
+                        <p style="margin: 0; font-size: 12px; color: #9aa8a4; line-height: 1.45;">
+                          Be discovered on For You &amp; Artists
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-pad" style="padding: 12px 48px 8px 48px;" align="center">
+                <a
+                  href="<%= studioUrl %>"
+                  style="
+                    display: inline-block;
+                    background-color: #ff6b35;
+                    color: #0a1f1c;
+                    padding: 14px 28px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    font-size: 15px;
+                    font-weight: 700;
+                  "
+                >
+                  Open creator hub
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-pad" style="padding: 20px 48px 8px 48px;">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="
+                    background-color: rgba(249, 200, 51, 0.06);
+                    border: 1px solid rgba(249, 200, 51, 0.18);
+                    border-radius: 12px;
+                  "
+                >
+                  <tr>
+                    <td
+                      style="
+                        padding: 22px 24px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                        text-align: center;
+                      "
+                    >
+                      <p
+                        style="
+                          margin: 0 0 6px 0;
+                          font-size: 15px;
+                          font-weight: 600;
+                          color: #f9c833;
+                        "
+                      >
+                        Next step
+                      </p>
+                      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #b8c4c1;">
+                        Finish your application if you haven’t already. Our team reviews every creator before publishing to the Artists shelf.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <%- include('partials/footer') %>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

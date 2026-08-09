@@ -359,10 +359,12 @@ export async function verifyEmail(email: string, code: string) {
 
   // Non-blocking: verification already succeeded; a failed welcome email
   // must not turn this into an error response.
+  const welcomeVariant = user.role === "artist" ? "artist" : "default";
   emailService
     .sendWelcomeEmail(
       user.email,
-      user.firstName || (user.role === "artist" ? "Artist" : "User")
+      user.firstName || (user.role === "artist" ? "Artist" : "User"),
+      welcomeVariant
     )
     .catch(emailError => {
       console.error("Failed to send welcome email:", emailError);

@@ -21,8 +21,8 @@ Admin ops email / artist-onboard / marketing ──► reach by email regardless
 ## Artist account create (`POST /api/auth/artist/register`)
 
 1. Creates user `role: artist`, `isEmailVerified: false` + OTP (10 min).  
-2. Sends **verification** email (not welcome).  
-3. `POST /api/auth/verify-email` → sets verified → **welcome** email.  
+2. Sends **verification** email (`verify.ejs`).  
+3. `POST /api/auth/verify-email` → sets verified → **welcome** via `welcome-artist.ejs` (subject: “Welcome to Jevah Creators”). Learners get `welcome.ejs`.  
 4. Resend: `POST /api/auth/resend-verification-email`.  
 5. Login: blocked until verified (same as learners).
 

@@ -202,22 +202,26 @@ class EmailService {
 
   /**
    * Send welcome email with fallback
+   * @param variant "artist" uses welcome-artist.ejs (creators); default uses welcome.ejs
    */
   async sendWelcomeEmail(
     email: string,
-    firstName: string
+    firstName: string,
+    variant: "default" | "artist" = "default"
   ): Promise<EmailResult> {
     if (this.useResend) {
       try {
-        logger.info("Sending welcome email via Resend...", { email });
+        logger.info("Sending welcome email via Resend...", { email, variant });
         const result = await resendEmailService.sendWelcomeEmail(
           email,
-          firstName
+          firstName,
+          variant
         );
 
         logger.info("✅ Welcome email sent via Resend", {
           email,
           messageId: result.data?.id,
+          variant,
         });
 
         return {
@@ -229,14 +233,14 @@ class EmailService {
         logger.error("❌ Resend welcome email failed:", error);
         if (this.fallbackEnabled) {
           logger.warn("Retrying welcome email via SMTP fallback...", { email });
-          return this.sendWelcomeEmailSMTP(email, firstName);
+          return this.sendWelcomeEmailSMTP(email, firstName, variant);
         }
         throw error;
       }
     }
 
     if (this.fallbackEnabled) {
-      return this.sendWelcomeEmailSMTP(email, firstName);
+      return this.sendWelcomeEmailSMTP(email, firstName, variant);
     }
 
     throw new Error("No email provider configured");
@@ -247,18 +251,24 @@ class EmailService {
    */
   private async sendWelcomeEmailSMTP(
     email: string,
-    firstName: string
+    firstName: string,
+    variant: "default" | "artist" = "default"
   ): Promise<EmailResult> {
-    const html = resendEmailService.generateWelcomeEmail(firstName);
+    const html = resendEmailService.generateWelcomeEmail(firstName, variant);
+    const subject =
+      variant === "artist"
+        ? "Welcome to Jevah Creators"
+        : "Welcome to Jevah! 🎉";
     const info = await this.smtpTransporter.sendMail({
       from: `"${this.smtpFromName}" <${this.smtpFromEmail}>`,
       to: email,
-      subject: "Welcome to Jevah! 🎉",
+      subject,
       html,
     });
     logger.info("✅ Welcome email sent via SMTP", {
       email,
       messageId: info.messageId,
+      variant,
     });
     return {
       success: true,

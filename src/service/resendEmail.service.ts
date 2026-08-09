@@ -7,6 +7,7 @@ import {
   generateVerificationEmail as genVerify,
   generatePasswordResetEmail as genReset,
   generateWelcomeEmail as genWelcome,
+  type WelcomeEmailVariant,
 } from "./email/templates/authEmails";
 import {
   generateContentRemovedEmail as genRemoved,
@@ -36,8 +37,11 @@ class ResendEmailService {
     return genReset(firstName, resetCode);
   }
 
-  generateWelcomeEmail(firstName: string): string {
-    return genWelcome(firstName);
+  generateWelcomeEmail(
+    firstName: string,
+    variant: WelcomeEmailVariant = "default"
+  ): string {
+    return genWelcome(firstName, variant);
   }
 
   async sendVerificationEmail(email: string, firstName: string, code: string) {
@@ -62,11 +66,19 @@ class ResendEmailService {
     });
   }
 
-  async sendWelcomeEmail(email: string, firstName: string) {
-    const html = this.generateWelcomeEmail(firstName);
+  async sendWelcomeEmail(
+    email: string,
+    firstName: string,
+    variant: WelcomeEmailVariant = "default"
+  ) {
+    const html = this.generateWelcomeEmail(firstName, variant);
+    const subject =
+      variant === "artist"
+        ? "Welcome to Jevah Creators"
+        : "Welcome to Jevah! 🎉";
     return this.sendEmail({
       to: email,
-      subject: "Welcome to Jevah! 🎉",
+      subject,
       html,
     });
   }
