@@ -24,6 +24,7 @@ Last updated: July 2026 (post-modularization refactor)
 11d. **[FRONTEND_CREATORS.md](./FRONTEND_CREATORS.md)** — Mobile + web creator UI, apply/studio, gospel catalog shelves
 11d0. **[FRONTEND_CREATOR_APPLY_HANDOFF.md](./FRONTEND_CREATOR_APPLY_HANDOFF.md)** — Spotify-for-Artists apply UI + Zod + `POST /creators/apply`
 11d0b. **[FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md](./FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md)** — Artists verify email; welcome after verify; admin mail always reaches
+11d0c. **[FRONTEND_CREATOR_ANALYTICS_HANDOFF.md](./FRONTEND_CREATOR_ANALYTICS_HANDOFF.md)** — Studio analytics `GET /creators/me/analytics`
 11d2. **[FRONTEND_ARTIST_RELEASES_HANDOFF.md](./FRONTEND_ARTIST_RELEASES_HANDOFF.md)** — Albums/EPs/mixtapes/singles (Release + Track on R2)
 11e. **[BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md](./BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md)** — Mobile FE contract corroboration
 11f. **[R2_CORS.md](./R2_CORS.md)** — Bucket CORS for presigned Track uploads

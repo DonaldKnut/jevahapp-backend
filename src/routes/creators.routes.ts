@@ -3,6 +3,7 @@ import {
   applyAsCreator,
   getMyCreatorProfile,
 } from "../controllers/adminArtists.controller";
+import { getMyCreatorAnalytics } from "../controllers/creatorAnalytics.controller";
 import {
   listMyCreatorTracks,
   createCreatorTrackUploadIntent,
@@ -42,6 +43,7 @@ router.post(
   applyAsCreator
 );
 router.get("/me", verifyToken, apiRateLimiter, getMyCreatorProfile);
+router.get("/me/analytics", verifyToken, apiRateLimiter, getMyCreatorAnalytics);
 router.get("/me/tracks", verifyToken, apiRateLimiter, listMyCreatorTracks);
 
 router.get("/releases", verifyToken, apiRateLimiter, listCreatorReleasesHandler);

@@ -13,6 +13,8 @@ export interface ICopyrightFreeSongInteraction extends Document {
   isComplete?: boolean; // Whether song was played to completion
   viewedAt?: Date; // First view timestamp
   lastViewedAt?: Date; // Last view timestamp (for analytics)
+  /** ISO-3166-1 alpha-2 from edge (CF-IPCountry); never store raw IP */
+  countryCode?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +69,12 @@ const interactionSchema = new Schema<ICopyrightFreeSongInteraction>(
     },
     lastViewedAt: {
       type: Date,
+    },
+    countryCode: {
+      type: String,
+      default: null,
+      maxlength: 2,
+      index: true,
     },
   },
   {

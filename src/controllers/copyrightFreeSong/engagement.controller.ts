@@ -315,6 +315,18 @@ export const recordView = async (req: Request, res: Response): Promise<void> => 
       isComplete: isComplete === true || isComplete === "true",
     });
 
+    // Soft-fail geo stamp for Studio topRegions (CF-IPCountry / edge headers only)
+    if (result.hasViewed) {
+      const { countryCodeFromRequest, stampInteractionCountryCode } = await import(
+        "../../modules/creators/creatorAnalytics.service"
+      );
+      void stampInteractionCountryCode(
+        userId,
+        songId,
+        countryCodeFromRequest(req.headers as Record<string, unknown>)
+      );
+    }
+
     // Get updated song for real-time updates
     const updatedSong = await songService.getSongByIdAdmin(songId);
 
