@@ -8,10 +8,110 @@ import {
   shapeArtistCard,
   shapeCreatorMePayload,
 } from "../modules/creators/creator.presenter";
+import { TRACK_GENRES } from "../modules/audio/track.constants";
 import logger from "../utils/logger";
+
+const CREATOR_TYPES = new Set(["artist", "minister", "podcaster"]);
+const ALLOWED_GENRES = new Set<string>(TRACK_GENRES);
 
 function shapeArtist(doc: any) {
   return shapeArtistCard(doc);
+}
+
+function trimStr(v: unknown, max: number): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  return t.slice(0, max);
+}
+
+function normalizeSocials(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const src = raw as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const key of ["instagram", "youtube", "spotify", "twitter"] as const) {
+    const v = trimStr(src[key], 200);
+    if (v) out[key] = v;
+  }
+  return out;
+}
+
+/** Spotify-for-Artists style apply validation (mirrors FE Zod). */
+function validateCreatorApply(body: any): {
+  ok: true;
+  data: {
+    displayName: string;
+    creatorTypes: string[];
+    genres: string[];
+    bio: string | null;
+    socials: Record<string, string>;
+    avatarUrl: string | null;
+    applicationNote: string | null;
+  };
+} | {
+  ok: false;
+  fieldErrors: Record<string, string>;
+  message: string;
+} {
+  const fieldErrors: Record<string, string> = {};
+
+  const displayName = trimStr(body?.displayName, 80);
+  if (!displayName || displayName.length < 2) {
+    fieldErrors.displayName = "Display name must be 2–80 characters";
+  }
+
+  const rawTypes = Array.isArray(body?.creatorTypes) ? body.creatorTypes : [];
+  const creatorTypes = [
+    ...new Set(
+      rawTypes
+        .map((t: unknown) => String(t || "").trim().toLowerCase())
+        .filter((t: string) => CREATOR_TYPES.has(t))
+    ),
+  ];
+  if (creatorTypes.length < 1) {
+    fieldErrors.creatorTypes = "Select at least one creator type";
+  }
+
+  const rawGenres = Array.isArray(body?.genres) ? body.genres : [];
+  const genres = [
+    ...new Set(
+      rawGenres
+        .map((g: unknown) => String(g || "").trim().toLowerCase())
+        .filter((g: string) => ALLOWED_GENRES.has(g))
+    ),
+  ];
+  if (genres.length < 1) {
+    fieldErrors.genres = `Select at least one genre (${TRACK_GENRES.join(", ")})`;
+  }
+
+  const bio = trimStr(body?.bio, 500);
+  const applicationNote = trimStr(body?.applicationNote, 1000);
+  let avatarUrl = trimStr(body?.avatarUrl, 500);
+  if (avatarUrl && !/^https?:\/\//i.test(avatarUrl)) {
+    fieldErrors.avatarUrl = "Avatar URL must start with http:// or https://";
+    avatarUrl = null;
+  }
+
+  if (Object.keys(fieldErrors).length) {
+    return {
+      ok: false,
+      fieldErrors,
+      message: Object.values(fieldErrors)[0],
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      displayName: displayName!,
+      creatorTypes,
+      genres,
+      bio,
+      socials: normalizeSocials(body?.socials),
+      avatarUrl,
+      applicationNote,
+    },
+  };
 }
 
 async function uniqueSlug(base: string): Promise<string> {
@@ -298,40 +398,31 @@ export const applyAsCreator = async (req: Request, res: Response) => {
       return;
     }
 
-    const {
+    const parsed = validateCreatorApply(req.body || {});
+    if (!parsed.ok) {
+      res.status(400).json({
+        success: false,
+        message: parsed.message,
+        code: "VALIDATION_ERROR",
+        fieldErrors: parsed.fieldErrors,
+      });
+      return;
+    }
+
+    const { displayName, creatorTypes, genres, bio, socials, avatarUrl, applicationNote } =
+      parsed.data;
+
+    const slug = await uniqueSlug(displayName);
+    const doc = await Artist.create({
+      userId,
       displayName,
+      slug,
       bio,
       genres,
       creatorTypes,
       socials,
       applicationNote,
       avatarUrl,
-    } = req.body || {};
-
-    const user = await User.findById(userId).select("firstName lastName artistProfile");
-    const name =
-      (typeof displayName === "string" && displayName.trim()) ||
-      user?.artistProfile?.artistName ||
-      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-      "Creator";
-
-    const types = Array.isArray(creatorTypes) && creatorTypes.length
-      ? creatorTypes.filter((t: string) =>
-          ["artist", "minister", "podcaster"].includes(t)
-        )
-      : ["artist"];
-
-    const slug = await uniqueSlug(name);
-    const doc = await Artist.create({
-      userId,
-      displayName: name,
-      slug,
-      bio: bio || null,
-      genres: Array.isArray(genres) ? genres : [],
-      creatorTypes: types.length ? types : ["artist"],
-      socials: socials || {},
-      applicationNote: applicationNote || null,
-      avatarUrl: avatarUrl || null,
       status: "pending",
       isVerified: false,
     });
