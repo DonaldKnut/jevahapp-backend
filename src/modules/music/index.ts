@@ -40,6 +40,20 @@ artistsRouter.get("/:slug", apiRateLimiter, getPublicArtistBySlug);
 const musicRouter = Router();
 musicRouter.get("/tracks", apiRateLimiter, browseMusicTracks);
 musicRouter.get(
+  "/for-you",
+  verifyToken,
+  apiRateLimiter,
+  async (req, res, next) => {
+    // Alias → same handler as /api/feed/music-for-you
+    try {
+      const { getMusicForYou } = await import("../feed/feed.controller");
+      return getMusicForYou(req, res);
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+musicRouter.get(
   "/releases/:idOrSlug",
   apiRateLimiter,
   getPublicReleaseHandler

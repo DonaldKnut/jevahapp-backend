@@ -20,18 +20,27 @@
 
 **Do this first**
 
-1. Set `NEXT_PUBLIC_API_URL` to the shared API origin (e.g. `https://api.jevahapp.com` or `http://localhost:5000`).
+1. Set `NEXT_PUBLIC_API_URL` so login hits `/api/auth/login`.
+   - **Recommended:** `NEXT_PUBLIC_API_URL=https://api.jevahapp.com/api` and call `${API}/auth/login`
+   - **Alt:** `NEXT_PUBLIC_API_URL=https://api.jevahapp.com` and call `${API}/api/auth/login`
+   - Do **not** use origin-only base with paths that omit `/api` (that produces `https://api.jevahapp.com/auth/login` → 404 “Route not found”).
 2. Ensure backend `JWT_SECRET` + `MONGODB_URI` match the Next app (same User collection).
-3. Add your Next origin to backend `ALLOWED_ORIGINS` (e.g. `http://localhost:3000`).
+3. Add your Next origin to backend `ALLOWED_ORIGINS` (e.g. `https://www.jevahapp.com`, `http://localhost:3000`).
 4. Remap `lib/admin/api.ts` using the tables below — **do not reimplement** Media/Report on Next.
+
+See also: [FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md](./FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md) (incident fix for www login).
 
 ---
 
 ## 1. Env contract
 
 ```env
-# Next (.env)
-NEXT_PUBLIC_API_URL=https://api.jevahapp.com
+# Next (.env) — pick ONE style
+# A) base includes /api  → fetch(`${API}/auth/login`)
+NEXT_PUBLIC_API_URL=https://api.jevahapp.com/api
+# B) origin only         → fetch(`${API}/api/auth/login`)
+# NEXT_PUBLIC_API_URL=https://api.jevahapp.com
+
 # empty NEXT_PUBLIC_API_URL = keep calling Next /api stubs (wrong for production)
 
 # Backend (must match mobile + Next)

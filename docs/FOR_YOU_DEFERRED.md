@@ -1,24 +1,31 @@
 # For You ranking
 
-## Status (2026-08-02)
+## Status (2026-08-09)
 
-**MVP shipped** (additive):
+**Algorithmic For You shipped** (Contabo-safe — no Torch/TF on the API host):
 
 | Piece | Endpoint / module |
 |-------|-------------------|
 | Events ingest | `POST /api/feed/events` → `FeedEvent` |
-| For You list | `GET /api/feed/for-you` → same card shape as all-content |
-| Fatigue | Demote impression / watch_time / skip from last 24h |
-| Scoring | Engagement + recency + light exploration + type diversification |
+| Video / mixed For You | `GET /api/feed/for-you` |
+| Artist music For You | `GET /api/feed/music-for-you` · alias `GET /api/music/for-you` |
+| Affinity | Genres, artists, topics, likes/skips/watch from FeedEvent + CF interactions |
+| Scoring | Engagement + recency + affinity + fatigue + diversification |
+| Optional sidecar | `FEED_RANKER_URL` (lite FastAPI, **off by default**) |
 
-Chronological feed **`GET /api/media/all-content` remains the stable default**. FE may keep `rankFeedForYou` until events are wired and For You is feature-flagged.
+Chronological feeds remain available:
 
-## Not yet (next iterations)
+- `GET /api/media/all-content`
+- `GET /api/music/tracks?lane=artist`
 
-- Heavy candidate generation / embeddings
-- Dual Kafka + BullMQ analytics paths (avoid on Contabo)
-- Treating Redis counters as ranking authority
+## Still deferred (heavy ML)
+
+- Sentence-transformers / TensorFlow / large embedding models on Contabo  
+- Dual Kafka analytics paths  
+- Redis counters as ranking authority  
+
+See [FEED_RANKER.md](./FEED_RANKER.md).
 
 ## FE contract
 
-See [FRONTEND_TIKTOK_FEED_HANDOFF.md](./FRONTEND_TIKTOK_FEED_HANDOFF.md).
+See [FRONTEND_TIKTOK_FEED_HANDOFF.md](./FRONTEND_TIKTOK_FEED_HANDOFF.md) · [FEED_RANKER.md](./FEED_RANKER.md).

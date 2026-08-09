@@ -35,6 +35,9 @@ Last updated: July 2026 (post-modularization refactor)
 12b. **[CONTENT_GUARDIAN.md](./CONTENT_GUARDIAN.md)** — Python Content Guardian (Whisper/NudeNet/CLIP) + Node fusion; Gemini gray-zone only
 12c. **[ENGAGEMENT_TIKTOK_STANDARD.md](./ENGAGEMENT_TIKTOK_STANDARD.md)** — Lifetime vs live counts, CF view/like rate limits, FE fire-and-forget rules
 12d. **[FRONTEND_CF_MUSIC_PLAYER_HANDOFF.md](./FRONTEND_CF_MUSIC_PLAYER_HANDOFF.md)** — CF player: views (`counted`), likes, share, library, sockets
+12e. **[FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md](./FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md)** — Fix www login 404: API base must include `/api`
+12f. **[FEED_RANKER.md](./FEED_RANKER.md)** — Algorithmic For You + music For You (Contabo-safe, no Torch)
+12g. **[FRONTEND_FOR_YOU_HANDOFF.md](./FRONTEND_FOR_YOU_HANDOFF.md)** — FE: for-you + Artists music algorithm, events queue, premium UI
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
 15. **[PERFORMANCE.md](./PERFORMANCE.md)** — Shareholder performance brief (API latency, CPU/RAM, upload & verification)

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { ingestFeedEvents } from "./feedEvents.service";
 import { getForYouFeed } from "./forYou.service";
+import { getMusicForYouFeed } from "./musicForYou.service";
 import logger from "../../utils/logger";
 
 /**
@@ -99,6 +100,60 @@ export async function getForYou(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       success: false,
       message: "Failed to load For You feed",
+    });
+  }
+}
+
+/**
+ * GET /api/feed/music-for-you?cursor=&limit=20&lane=artist|curated
+ * Personalized artist-lane (default) gospel tracks.
+ */
+export async function getMusicForYou(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId || !Types.ObjectId.isValid(userId)) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required",
+        code: "AUTHENTICATION_REQUIRED",
+      });
+      return;
+    }
+
+    const limit = req.query.limit
+      ? parseInt(String(req.query.limit), 10)
+      : 20;
+    const cursor =
+      (req.query.cursor as string) || (req.query.page as string) || null;
+    const laneRaw = String(req.query.lane || "artist");
+    const lane =
+      laneRaw === "curated" ? "curated" : ("artist" as const);
+
+    const result = await getMusicForYouFeed({
+      userId,
+      limit: Number.isFinite(limit) ? limit : 20,
+      cursor,
+      lane,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        tracks: result.tracks,
+        items: result.items,
+        cursor: result.cursor,
+        hasMore: result.hasMore,
+        lane,
+      },
+    });
+  } catch (error: any) {
+    logger.error("get_music_for_you_failed", { error: error?.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to load music For You",
     });
   }
 }
