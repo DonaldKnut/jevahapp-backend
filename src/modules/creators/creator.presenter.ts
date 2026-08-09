@@ -6,6 +6,7 @@ export type CreatorType = "artist" | "minister" | "podcaster";
 export type ArtistStatus = "pending" | "active" | "suspended";
 
 export type CreatorNextStep =
+  | "verify_email"
   | "apply"
   | "wait_review"
   | "upload_first_track"
@@ -43,6 +44,8 @@ export interface CreatorCapabilities {
   nextStep: CreatorNextStep;
   /** Human copy for banners / empty states */
   statusMessage: string;
+  emailVerified: boolean;
+  needsEmailVerification: boolean;
 }
 
 export function shapeArtistCard(doc: any): ArtistCard {
@@ -68,8 +71,28 @@ export function shapeArtistCard(doc: any): ArtistCard {
 
 export function buildCreatorCapabilities(
   artist: ArtistCard | null,
-  opts: { trackCount?: number } = {}
+  opts: { trackCount?: number; emailVerified?: boolean } = {}
 ): CreatorCapabilities {
+  const emailVerified = opts.emailVerified !== false;
+
+  if (!emailVerified) {
+    return {
+      canApply: false,
+      canEditProfile: false,
+      canUploadTracks: false,
+      canPublishTracks: false,
+      showPendingBanner: false,
+      showCreatorHub: Boolean(artist),
+      showPublicProfile: false,
+      publicProfilePath: null,
+      nextStep: "verify_email",
+      statusMessage:
+        "Verify your email to apply as a creator and receive studio updates. Check your inbox or resend the verification code.",
+      emailVerified: false,
+      needsEmailVerification: true,
+    };
+  }
+
   if (!artist) {
     return {
       canApply: true,
@@ -82,6 +105,8 @@ export function buildCreatorCapabilities(
       publicProfilePath: null,
       nextStep: "apply",
       statusMessage: "Apply to share gospel music, sermons beds, or podcasts on Jevah.",
+      emailVerified: true,
+      needsEmailVerification: false,
     };
   }
 
@@ -98,6 +123,8 @@ export function buildCreatorCapabilities(
       nextStep: "wait_review",
       statusMessage:
         "Your creator application is under review. We’ll notify you when you’re approved.",
+      emailVerified: true,
+      needsEmailVerification: false,
     };
   }
 
@@ -114,10 +141,11 @@ export function buildCreatorCapabilities(
       nextStep: "contact_support",
       statusMessage:
         "Your creator account is suspended. Contact support if you believe this is a mistake.",
+      emailVerified: true,
+      needsEmailVerification: false,
     };
   }
 
-  // active
   const trackCount = opts.trackCount ?? 0;
   const publicPath = `/artists/${artist.slug}`;
   return {
@@ -133,22 +161,25 @@ export function buildCreatorCapabilities(
     statusMessage: artist.isVerified
       ? "You’re a verified Jevah creator. Upload and publish to the artist catalog."
       : "You’re an active creator. Upload tracks — verification badge may follow.",
+    emailVerified: true,
+    needsEmailVerification: false,
   };
 }
 
 /** Full payload for mobile + web creator hub */
 export function shapeCreatorMePayload(
   doc: any | null,
-  opts: { trackCount?: number } = {}
+  opts: { trackCount?: number; emailVerified?: boolean } = {}
 ) {
   const artist = doc ? shapeArtistCard(doc) : null;
   const capabilities = buildCreatorCapabilities(artist, opts);
   return {
     artist,
     capabilities,
-    /** Convenience mirrors for simpler clients */
     status: artist?.status ?? null,
     canUpload: capabilities.canUploadTracks,
     nextStep: capabilities.nextStep,
+    emailVerified: capabilities.emailVerified,
+    needsEmailVerification: capabilities.needsEmailVerification,
   };
 }

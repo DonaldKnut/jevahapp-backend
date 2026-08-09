@@ -63,6 +63,11 @@ export async function oauthLogin(
         user.clerkId = tokenData.clerkId;
         await user.save();
       }
+      // Keep Mongo in sync when Clerk later reports email verified
+      if (tokenData.emailVerified && !user.isEmailVerified) {
+        user.isEmailVerified = true;
+        await user.save();
+      }
     }
 
     await assertUserNotBanned(user);
@@ -87,8 +92,10 @@ export async function oauthLogin(
         avatar: user.avatar,
         isProfileComplete: user.isProfileComplete,
         role: user.role,
+        isEmailVerified: Boolean(user.isEmailVerified),
       },
       isNewUser,
+      needsEmailVerification: !user.isEmailVerified,
     };
   } catch (error) {
     console.error("OAuth login error:", error);
@@ -140,6 +147,10 @@ export async function clerkLogin(token: string, userInfo: any) {
         user.clerkId = tokenData.clerkId;
         await user.save();
       }
+      if (tokenData.emailVerified && !user.isEmailVerified) {
+        user.isEmailVerified = true;
+        await user.save();
+      }
     }
 
     await assertUserNotBanned(user);
@@ -164,11 +175,12 @@ export async function clerkLogin(token: string, userInfo: any) {
         avatar: user.avatar,
         isProfileComplete: user.isProfileComplete,
         role: user.role,
-        isEmailVerified: user.isEmailVerified || false,
+        isEmailVerified: Boolean(user.isEmailVerified),
         isMasterAdmin: isMasterAdminEmail(user.email),
       },
       needsAgeSelection: !user.age,
       isNewUser,
+      needsEmailVerification: !user.isEmailVerified,
     };
   } catch (error) {
     console.error("Clerk login error:", error);

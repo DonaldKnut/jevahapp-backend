@@ -178,12 +178,13 @@ Apply **never** auto-approves. Admin Artists queue activates the profile.
 
 ## 8. Backend expectations (corroborated 2026-08-09)
 
-1. Auth gate: `verifyToken` on `POST /api/creators/apply` (same as mobile).  
+1. Auth gate: `verifyToken` + **email verified** on `POST /api/creators/apply` (same as mobile).  
 2. Persists `creatorTypes`, `genres`, `socials`, `applicationNote`, optional `bio` / `avatarUrl`.  
 3. Required fields enforced server-side (no silent default to empty genres / fake name).  
 4. Empty optional strings normalized away; social keys omitted when blank.  
 5. Pending surfaces via `capabilities.showPendingBanner` + `statusMessage` on Studio and re-entry.  
-6. Admin Artists queue remains the only approval path.
+6. Unverified email → `capabilities.nextStep: "verify_email"` / `403 EMAIL_NOT_VERIFIED`.  
+7. Admin Artists queue remains the only approval path; admin ops email still reaches unverified applicants.
 
 ---
 

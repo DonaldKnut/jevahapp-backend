@@ -122,8 +122,10 @@ export async function registerArtist(
 
     return response.status(201).json({
       success: true,
-      message: "Artist registered successfully. Please verify your email.",
+      message:
+        "Artist registered successfully. Please verify your email — a code was sent to your inbox. Welcome email arrives after verification.",
       artist,
+      needsEmailVerification: true,
     });
   } catch (error) {
     if (error instanceof Error) {

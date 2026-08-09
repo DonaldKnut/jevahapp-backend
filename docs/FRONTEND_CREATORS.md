@@ -169,7 +169,8 @@ type CreatorMe = {
 `displayName`: required, 2–80 chars. Optional empties omitted.  
 Validation errors: `400` + `fieldErrors`. Response uses the same `CreatorMe` shape (`201` new, `200` if already applied).
 
-See [FRONTEND_CREATOR_APPLY_HANDOFF.md](./FRONTEND_CREATOR_APPLY_HANDOFF.md) for Spotify-style web apply UX.
+See [FRONTEND_CREATOR_APPLY_HANDOFF.md](./FRONTEND_CREATOR_APPLY_HANDOFF.md) for Spotify-style web apply UX.  
+Email must be verified before apply — see [FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md](./FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md).
 
 ### 2.2 Creator studio (active only)
 

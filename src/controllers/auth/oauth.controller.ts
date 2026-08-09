@@ -36,6 +36,7 @@ export async function clerkLogin(
       user: result.user,
       needsAgeSelection: result.needsAgeSelection,
       isNewUser: result.isNewUser,
+      needsEmailVerification: result.needsEmailVerification,
     });
   } catch (error: any) {
     console.error("Clerk login error:", error);
@@ -110,6 +111,7 @@ export async function oauthLogin(
       tokenType: "bearer",
       user: result.user,
       isNewUser: result.isNewUser,
+      needsEmailVerification: result.needsEmailVerification,
     });
   } catch (error: any) {
     console.error("OAuth login error:", error);

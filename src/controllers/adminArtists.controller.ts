@@ -390,10 +390,29 @@ export const applyAsCreator = async (req: Request, res: Response) => {
         artistId: existing._id,
         lane: "artist",
       });
+      const user = await User.findById(userId).select("isEmailVerified").lean();
       res.status(200).json({
         success: true,
-        data: shapeCreatorMePayload(existing, { trackCount }),
+        data: shapeCreatorMePayload(existing, {
+          trackCount,
+          emailVerified: Boolean((user as any)?.isEmailVerified),
+        }),
         message: "Application already exists",
+      });
+      return;
+    }
+
+    const applicant = await User.findById(userId).select("isEmailVerified email").lean();
+    if (!applicant || !(applicant as any).isEmailVerified) {
+      res.status(403).json({
+        success: false,
+        message:
+          "Verify your email before applying as a creator. Check your inbox or use resend verification.",
+        code: "EMAIL_NOT_VERIFIED",
+        data: {
+          email: (applicant as any)?.email || null,
+          needsEmailVerification: true,
+        },
       });
       return;
     }
@@ -429,7 +448,7 @@ export const applyAsCreator = async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      data: shapeCreatorMePayload(doc, { trackCount: 0 }),
+      data: shapeCreatorMePayload(doc, { trackCount: 0, emailVerified: true }),
       message:
         "Application received. You can upload to the artist catalog after an admin activates your profile.",
     });
@@ -457,9 +476,13 @@ export const getMyCreatorProfile = async (req: Request, res: Response) => {
         lane: "artist",
       });
     }
+    const user = await User.findById(userId).select("isEmailVerified").lean();
     res.status(200).json({
       success: true,
-      data: shapeCreatorMePayload(doc as any, { trackCount }),
+      data: shapeCreatorMePayload(doc as any, {
+        trackCount,
+        emailVerified: Boolean((user as any)?.isEmailVerified),
+      }),
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: "Failed to load creator profile" });

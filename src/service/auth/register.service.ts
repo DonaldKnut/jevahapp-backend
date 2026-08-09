@@ -168,6 +168,11 @@ export async function registerArtist(
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
+  const verificationCode = crypto
+    .randomBytes(3)
+    .toString("hex")
+    .toUpperCase();
+  const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
   let avatarUrl: string | undefined;
 
   if (avatarBuffer && avatarMimeType) {
@@ -192,6 +197,8 @@ export async function registerArtist(
       avatar: avatarUrl,
       provider: "email",
       password: hashedPassword,
+      verificationCode,
+      verificationCodeExpires,
       isEmailVerified: false,
       isProfileComplete: false,
       age: 0,
@@ -217,10 +224,11 @@ export async function registerArtist(
     throw error;
   }
 
+  // Same as learner register: verify first, welcome after POST /verify-email.
   emailService
-    .sendWelcomeEmail(normalizedEmail, firstName || "Artist")
+    .sendVerificationEmail(normalizedEmail, firstName || "Artist", verificationCode)
     .catch(emailError => {
-      console.error("Failed to send welcome email:", emailError);
+      console.error("Failed to send artist verification email:", emailError);
     });
 
   return {
@@ -231,6 +239,7 @@ export async function registerArtist(
     avatar: newArtist.avatar,
     role: newArtist.role,
     artistProfile: newArtist.artistProfile,
+    needsEmailVerification: true,
   };
 }
 
@@ -351,7 +360,10 @@ export async function verifyEmail(email: string, code: string) {
   // Non-blocking: verification already succeeded; a failed welcome email
   // must not turn this into an error response.
   emailService
-    .sendWelcomeEmail(user.email, user.firstName || "User")
+    .sendWelcomeEmail(
+      user.email,
+      user.firstName || (user.role === "artist" ? "Artist" : "User")
+    )
     .catch(emailError => {
       console.error("Failed to send welcome email:", emailError);
     });
