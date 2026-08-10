@@ -333,6 +333,183 @@ export async function getCreatorStudioAnalytics(
   return { ok: true, data };
 }
 
+/**
+ * Per-track Studio breakdown — GET /api/creators/me/analytics/tracks/:trackId
+ */
+export async function getCreatorTrackAnalytics(
+  userId: string,
+  trackId: string,
+  rangeDaysRaw?: unknown
+): Promise<
+  | {
+      ok: true;
+      data: {
+        rangeDays: number;
+        trackId: string;
+        title: string;
+        listens: number;
+        uniqueListeners: number;
+        completes: number;
+        likes: number;
+        saves: number;
+        avgWatchPct: number;
+        topRegions: CreatorAnalyticsResult["topRegions"];
+        timeseries: CreatorAnalyticsResult["timeseries"];
+        focusHint: string;
+      };
+    }
+  | { ok: false; status: 403 | 404; message: string; code: string }
+> {
+  if (!Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(trackId)) {
+    return { ok: false, status: 404, message: "Track not found", code: "TRACK_NOT_FOUND" };
+  }
+
+  const user = await User.findById(userId).select("isBanned").lean();
+  if (!user || (user as any).isBanned) {
+    return {
+      ok: false,
+      status: 403,
+      message: (user as any)?.isBanned ? "Account is banned" : "Unauthorized",
+      code: (user as any)?.isBanned ? "ACCOUNT_BANNED" : "AUTHENTICATION_REQUIRED",
+    };
+  }
+
+  const artist = await Artist.findOne({ userId }).select("_id").lean();
+  if (!artist) {
+    return {
+      ok: false,
+      status: 404,
+      message: "No creator profile yet",
+      code: "ARTIST_NOT_FOUND",
+    };
+  }
+
+  const track = await CopyrightFreeSong.findOne({
+    _id: trackId,
+    artistId: artist._id,
+    lane: "artist",
+  })
+    .select("title playCount viewCount likeCount saveCount")
+    .lean();
+
+  if (!track) {
+    return { ok: false, status: 404, message: "Track not found", code: "TRACK_NOT_FOUND" };
+  }
+
+  const rangeDays = clampRangeDays(rangeDaysRaw);
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - rangeDays);
+  since.setUTCHours(0, 0, 0, 0);
+  const songObj = new Types.ObjectId(trackId);
+
+  const [uniqueAgg, qualityAgg, regionAgg, feedDayAgg] = await Promise.all([
+    CopyrightFreeSongInteraction.aggregate([
+      { $match: { songId: songObj, hasViewed: true } },
+      { $group: { _id: "$userId" } },
+      { $count: "n" },
+    ]),
+    CopyrightFreeSongInteraction.aggregate([
+      { $match: { songId: songObj, hasViewed: true } },
+      {
+        $group: {
+          _id: null,
+          completes: { $sum: { $cond: ["$isComplete", 1, 0] } },
+          avgWatchPct: { $avg: "$progressPct" },
+        },
+      },
+    ]),
+    CopyrightFreeSongInteraction.aggregate([
+      {
+        $match: {
+          songId: songObj,
+          hasViewed: true,
+          countryCode: { $type: "string", $ne: "" },
+        },
+      },
+      { $group: { _id: "$countryCode", listens: { $sum: 1 } } },
+      { $sort: { listens: -1 } },
+      { $limit: 10 },
+    ]),
+    FeedEvent.aggregate([
+      {
+        $match: {
+          contentId: songObj,
+          eventType: { $in: ["watch_time", "impression"] },
+          createdAt: { $gte: since },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" },
+          },
+          listens: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
+
+  const catalogListens = (track.playCount || 0) + (track.viewCount || 0);
+  const rangeListens = (feedDayAgg as any[]).reduce((s, r) => s + (r.listens || 0), 0);
+  const listens = rangeListens > 0 ? rangeListens : catalogListens;
+  const uniqueListeners = uniqueAgg[0]?.n ?? 0;
+  const completes = qualityAgg[0]?.completes ?? 0;
+  const avgWatchPct = Math.round(((qualityAgg[0]?.avgWatchPct as number) || 0) * 10) / 10;
+  const regionTotal =
+    (regionAgg as any[]).reduce((s, r) => s + (r.listens || 0), 0) || 1;
+  const topRegions = (regionAgg as any[]).map(r => {
+    const code = String(r._id || "").toUpperCase();
+    const n = r.listens || 0;
+    return {
+      region: regionLabel(code),
+      countryCode: code,
+      listens: n,
+      sharePct: Math.round((n / regionTotal) * 1000) / 10,
+    };
+  });
+
+  const seriesMap = new Map<string, number>();
+  for (const row of feedDayAgg as any[]) {
+    seriesMap.set(row._id, row.listens || 0);
+  }
+  const timeseries = emptySeries(rangeDays).map(p => ({
+    date: p.date,
+    listens: seriesMap.get(p.date) || 0,
+  }));
+
+  const title = track.title || "Untitled";
+  const focusHint = buildFocusHint(topRegions, [
+    {
+      trackId,
+      title,
+      listens,
+      completes,
+      likes: track.likeCount || 0,
+      saves: track.saveCount || 0,
+      avgWatchPct,
+    },
+  ]);
+
+  return {
+    ok: true,
+    data: {
+      rangeDays,
+      trackId,
+      title,
+      listens,
+      uniqueListeners,
+      completes,
+      likes: track.likeCount || 0,
+      saves: track.saveCount || 0,
+      avgWatchPct,
+      topRegions,
+      timeseries,
+      focusHint,
+    },
+  };
+}
+
 /** Cloudflare / proxy country header → ISO alpha-2 */
 export function countryCodeFromRequest(headers: Record<string, unknown>): string | null {
   const raw =

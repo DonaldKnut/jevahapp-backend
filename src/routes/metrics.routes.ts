@@ -100,7 +100,19 @@ router.get(
         guardianOk: guardian.ok,
         guardianCircuitOpen: isGuardianCircuitOpen(),
         guardian: guardian.detail,
+        /** Ops: if vision false while configured, uploads should quarantine not auto-approve */
+        visionHint:
+          guardian.ok && guardian.detail?.vision
+            ? {
+                nudenet: Boolean(guardian.detail.vision.nudenet),
+                clip: Boolean(guardian.detail.vision.clip),
+                softFailRisk:
+                  !guardian.detail.vision.nudenet && !guardian.detail.vision.clip,
+              }
+            : null,
         fusionMode: process.env.MODERATION_FUSION_MODE || "guardian_first",
+        offlineProvisionalApprove:
+          process.env.MODERATION_OFFLINE_PROVISIONAL_APPROVE === "true",
         aiBudget: await getAiBudgetSnapshot(),
       },
       mediaTools: { ffmpeg, ffprobe },

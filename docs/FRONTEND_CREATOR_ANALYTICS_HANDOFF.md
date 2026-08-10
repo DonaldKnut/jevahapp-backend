@@ -13,6 +13,12 @@ GET /api/creators/me/analytics?rangeDays=30
 Authorization: Bearer <creator JWT>
 ```
 
+Per-track:
+
+```http
+GET /api/creators/me/analytics/tracks/:trackId?rangeDays=30
+```
+
 `rangeDays`: `7` | `30` | `90` (clamped 1–90, default 30).
 
 | Status | When |

@@ -11,6 +11,11 @@ import logger from "../../utils/logger";
 import { extractObjectKeyFromUrl, mapContentType } from "./shared";
 import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
 import { enrichMediaPlaybackFields } from "../../service/media/playbackFields";
+import {
+  compactFeedItems,
+  liteDefaultLimit,
+  resolveClientProfile,
+} from "../../modules/clientProfile/liteProfile";
 
 export const getPublicMedia = async (
   request: Request,
@@ -54,12 +59,15 @@ export const getPublicAllContent = async (
   const startTime = Date.now();
   try {
     // Validate pagination parameters
+    const profile = resolveClientProfile(request);
     const pageParam = request.query.page
       ? parseInt(request.query.page as string, 10)
       : 1;
     const limitParam = request.query.limit
       ? parseInt(request.query.limit as string, 10)
-      : 50;
+      : profile === "lite"
+        ? 8
+        : 50;
 
     if (
       (request.query.page && isNaN(pageParam)) ||
@@ -73,9 +81,12 @@ export const getPublicAllContent = async (
       return;
     }
 
-    // Validate and clamp limit (min 10, max 100)
+    // Validate and clamp limit (lite: 1–12; full: 10–100)
     const page = Math.max(1, pageParam);
-    const limit = Math.min(Math.max(10, limitParam), 100);
+    const limit =
+      profile === "lite"
+        ? liteDefaultLimit(limitParam, 12)
+        : Math.min(Math.max(10, limitParam), 100);
 
     // Extract filtering parameters
     const contentType = (request.query.contentType as string) || "ALL";
@@ -122,6 +133,7 @@ export const getPublicAllContent = async (
       search: options.search,
       sort: options.sort,
       order: options.order,
+      profile,
     });
 
     const generation = await getFeedGeneration();
@@ -158,21 +170,26 @@ export const getPublicAllContent = async (
     }
 
     let recommendations: any = undefined;
-    try {
-      recommendations = await mediaService.getRecommendationsForAllContent(undefined, {
-        limitPerSection: 12,
-        mood,
-      });
-    } catch {
-      recommendations = undefined;
+    if (profile !== "lite") {
+      try {
+        recommendations = await mediaService.getRecommendationsForAllContent(undefined, {
+          limitPerSection: 12,
+          mood,
+        });
+      } catch {
+        recommendations = undefined;
+      }
     }
 
     const mediaWithCounts = await attachFreshEngagementCounts(media, { fromMongoMiss });
     // Optional Bearer (verifyTokenOptional on the route) → same liked/saved overlay as auth feed
-    const mediaWithFlags = await attachFeedUserInteractionFlags(
+    let mediaWithFlags = await attachFeedUserInteractionFlags(
       mediaWithCounts,
       request.userId
     );
+    if (profile === "lite") {
+      mediaWithFlags = compactFeedItems(mediaWithFlags);
+    }
     response.setHeader("X-Cache", cacheStatus);
 
     const result = {
@@ -180,6 +197,7 @@ export const getPublicAllContent = async (
       data: {
         media: mediaWithFlags,
         pagination,
+        profile,
       },
       ...(recommendations && { recommendations }),
     };

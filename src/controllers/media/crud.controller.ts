@@ -13,6 +13,11 @@ import { SearchQueryParameters } from "./shared";
 import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlags";
 import { attachFreshEngagementCounts } from "../../service/media/feedCountOverlay";
 import { invalidateFeedCaches } from "../../lib/invalidateFeedCaches";
+import {
+  compactFeedItems,
+  liteDefaultLimit,
+  resolveClientProfile,
+} from "../../modules/clientProfile/liteProfile";
 
 export const getAllMedia = async (
   request: Request,
@@ -44,12 +49,15 @@ export const getAllContentForAllTab = async (
   const startTime = Date.now();
   try {
     // Validate pagination parameters
+    const profile = resolveClientProfile(request);
     const pageParam = request.query.page
       ? parseInt(request.query.page as string, 10)
       : 1;
     const limitParam = request.query.limit
       ? parseInt(request.query.limit as string, 10)
-      : 50;
+      : profile === "lite"
+        ? 8
+        : 50;
 
     if (
       (request.query.page && isNaN(pageParam)) ||
@@ -63,9 +71,12 @@ export const getAllContentForAllTab = async (
       return;
     }
 
-    // Validate and clamp limit (min 10, max 100)
+    // Validate and clamp limit (lite: 1–12; full: 10–100)
     const page = Math.max(1, pageParam);
-    const limit = Math.min(Math.max(10, limitParam), 100);
+    const limit =
+      profile === "lite"
+        ? liteDefaultLimit(limitParam, 12)
+        : Math.min(Math.max(10, limitParam), 100);
 
     // Extract filtering parameters
     const contentType = (request.query.contentType as string) || "ALL";
@@ -120,6 +131,7 @@ export const getAllContentForAllTab = async (
       search: options.search,
       sort: options.sort,
       order: options.order,
+      profile,
     });
 
     const generation = await getFeedGeneration();
@@ -154,9 +166,9 @@ export const getAllContentForAllTab = async (
       fromMongoMiss = loaded.status === "MISS" || loaded.status === "BYPASS";
     }
 
-    // Personalized recommendations: SWR per user, 500ms budget
+    // Personalized recommendations: skip on lite (RAM/data)
     let recommendations: any = undefined;
-    if (userIdentifier) {
+    if (userIdentifier && profile !== "lite") {
       const mood = (request.query?.mood as string) || "default";
       const recKey = feedUserKey(userIdentifier, feedCacheHash({ mood, kind: "rec" }));
       try {
@@ -186,10 +198,13 @@ export const getAllContentForAllTab = async (
     const mediaWithFreshCounts = await attachFreshEngagementCounts(media, {
       fromMongoMiss,
     });
-    const mediaWithFlags = await attachFeedUserInteractionFlags(
+    let mediaWithFlags = await attachFeedUserInteractionFlags(
       mediaWithFreshCounts,
       userIdentifier
     );
+    if (profile === "lite") {
+      mediaWithFlags = compactFeedItems(mediaWithFlags);
+    }
 
     response.setHeader("X-Cache", cacheStatus);
 
@@ -201,6 +216,7 @@ export const getAllContentForAllTab = async (
         limit,
         contentType,
         cached: cacheStatus,
+        profile,
       });
     }
 
@@ -209,6 +225,7 @@ export const getAllContentForAllTab = async (
       data: {
         media: mediaWithFlags,
         pagination,
+        profile,
       },
       ...(recommendations && { recommendations }),
     });

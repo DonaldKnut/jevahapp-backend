@@ -37,13 +37,12 @@ Lite response extras:
 
 Full app keeps calling without `profile=lite`.
 
-Chronological fallback:
+Chronological fallback (also compact when lite):
 
 ```http
-GET /api/media/all-content?page=1&limit=8
+GET /api/media/all-content?profile=lite&limit=8
+GET /api/media/public/all-content?profile=lite&limit=8
 ```
-
-(Compact shaping on all-content can be added later; for now FE can map cards with the same lite field allowlist.)
 
 ---
 
