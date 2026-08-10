@@ -3,6 +3,12 @@ import { Types } from "mongoose";
 import { ingestFeedEvents } from "./feedEvents.service";
 import { getForYouFeed } from "./forYou.service";
 import { getMusicForYouFeed } from "./musicForYou.service";
+import {
+  compactFeedItems,
+  compactTrackCards,
+  liteDefaultLimit,
+  resolveClientProfile,
+} from "../clientProfile/liteProfile";
 import logger from "../../utils/logger";
 
 /**
@@ -56,8 +62,8 @@ export async function postFeedEvents(req: Request, res: Response): Promise<void>
 }
 
 /**
- * GET /api/feed/for-you?cursor=&limit=20
- * Same card shape as GET /api/media/all-content items.
+ * GET /api/feed/for-you?cursor=&limit=20&profile=lite
+ * Compact cards when profile=lite / X-Jevah-Client: lite
  */
 export async function getForYou(req: Request, res: Response): Promise<void> {
   try {
@@ -71,9 +77,18 @@ export async function getForYou(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const limit = req.query.limit
+    const profile = resolveClientProfile(req);
+    const rawLimit = req.query.limit
       ? parseInt(String(req.query.limit), 10)
-      : 20;
+      : profile === "lite"
+        ? 8
+        : 20;
+    const limit =
+      profile === "lite"
+        ? liteDefaultLimit(rawLimit, 12)
+        : Number.isFinite(rawLimit)
+          ? Math.min(50, Math.max(1, rawLimit))
+          : 20;
     const cursor =
       (req.query.cursor as string) ||
       (req.query.page as string) ||
@@ -81,18 +96,21 @@ export async function getForYou(req: Request, res: Response): Promise<void> {
 
     const result = await getForYouFeed({
       userId,
-      limit: Number.isFinite(limit) ? limit : 20,
+      limit,
       cursor,
     });
+
+    const items =
+      profile === "lite" ? compactFeedItems(result.items) : result.items;
 
     res.status(200).json({
       success: true,
       data: {
-        items: result.items,
-        // Alias for FE that reuses all-content parsers
-        media: result.items,
+        items,
+        media: items,
         cursor: result.cursor,
         hasMore: result.hasMore,
+        profile,
       },
     });
   } catch (error: any) {
@@ -105,8 +123,7 @@ export async function getForYou(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * GET /api/feed/music-for-you?cursor=&limit=20&lane=artist|curated
- * Personalized artist-lane (default) gospel tracks.
+ * GET /api/feed/music-for-you?cursor=&limit=20&lane=artist|curated&profile=lite
  */
 export async function getMusicForYou(
   req: Request,
@@ -123,9 +140,18 @@ export async function getMusicForYou(
       return;
     }
 
-    const limit = req.query.limit
+    const profile = resolveClientProfile(req);
+    const rawLimit = req.query.limit
       ? parseInt(String(req.query.limit), 10)
-      : 20;
+      : profile === "lite"
+        ? 8
+        : 20;
+    const limit =
+      profile === "lite"
+        ? liteDefaultLimit(rawLimit, 12)
+        : Number.isFinite(rawLimit)
+          ? Math.min(50, Math.max(1, rawLimit))
+          : 20;
     const cursor =
       (req.query.cursor as string) || (req.query.page as string) || null;
     const laneRaw = String(req.query.lane || "artist");
@@ -134,19 +160,23 @@ export async function getMusicForYou(
 
     const result = await getMusicForYouFeed({
       userId,
-      limit: Number.isFinite(limit) ? limit : 20,
+      limit,
       cursor,
       lane,
     });
 
+    const tracks =
+      profile === "lite" ? compactTrackCards(result.tracks) : result.tracks;
+
     res.status(200).json({
       success: true,
       data: {
-        tracks: result.tracks,
-        items: result.items,
+        tracks,
+        items: tracks,
         cursor: result.cursor,
         hasMore: result.hasMore,
         lane,
+        profile,
       },
     });
   } catch (error: any) {
