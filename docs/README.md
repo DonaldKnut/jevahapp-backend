@@ -43,6 +43,7 @@ Last updated: July 2026 (post-modularization refactor)
 12f. **[FEED_RANKER.md](./FEED_RANKER.md)** — Algorithmic For You + music For You (Contabo-safe, no Torch)
 12g. **[FRONTEND_FOR_YOU_HANDOFF.md](./FRONTEND_FOR_YOU_HANDOFF.md)** — FE: for-you + Artists music algorithm, events queue, premium UI
 12h. **[FRONTEND_AUTH_SESSION_HANDOFF.md](./FRONTEND_AUTH_SESSION_HANDOFF.md)** — Backend JWT is the only session; Clerk is OAuth shell only
+12i. **[FRONTEND_LITE_ANDROID_HANDOFF.md](./FRONTEND_LITE_ANDROID_HANDOFF.md)** — 2GB Android / Jevah Lite: FE rules + `profile=lite` compact feeds
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
 15. **[PERFORMANCE.md](./PERFORMANCE.md)** — Shareholder performance brief (API latency, CPU/RAM, upload & verification)
