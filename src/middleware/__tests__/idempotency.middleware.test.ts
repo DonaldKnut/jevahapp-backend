@@ -221,4 +221,30 @@ describe("idempotencyMiddleware", () => {
     await Promise.resolve();
     expect(store.has(idempotencyRedisKey("u1", OTHER_KEY))).toBe(false);
   });
+
+  it("sends JSON even if Redis persist is still pending", async () => {
+    let release!: (ok: boolean) => void;
+    (engRedis.engagementSetEx as jest.Mock).mockImplementation(
+      () => new Promise<boolean>(resolve => {
+        release = resolve;
+      })
+    );
+    const mw = idempotencyMiddleware();
+    const req = makeReq({ key: VALID_KEY });
+    const res = mockRes();
+    const next = jest.fn(() => {
+      res.status(200).json({
+        success: true,
+        data: { liked: true, likeCount: 1 },
+      });
+    });
+    await mw(req, res, next);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      data: { liked: true, likeCount: 1 },
+    });
+    release(true);
+    await (res as any).__idempotencyWrite;
+  });
 });

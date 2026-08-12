@@ -9,6 +9,7 @@ function mockQuery<T>(value: T) {
   const q: any = {
     session: jest.fn().mockImplementation(() => q),
     select: jest.fn().mockImplementation(() => q),
+    maxTimeMS: jest.fn().mockImplementation(() => q),
     lean: jest.fn().mockResolvedValue(value),
     then: (resolve: (v: T) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve(value).then(resolve, reject),
@@ -41,13 +42,15 @@ jest.mock("../../../lib/redisCounters", () => ({
 
 const likeFindOne = jest.fn();
 const likeCreate = jest.fn();
-const likeFindByIdAndDelete = jest.fn();
+const likeFindOneAndDelete = jest.fn();
+const likeDeleteOne = jest.fn();
 
 jest.mock("../../../models/like.model", () => ({
   Like: {
     findOne: (...args: unknown[]) => likeFindOne(...args),
     create: (...args: unknown[]) => likeCreate(...args),
-    findByIdAndDelete: (...args: unknown[]) => likeFindByIdAndDelete(...args),
+    findOneAndDelete: (...args: unknown[]) => likeFindOneAndDelete(...args),
+    deleteOne: (...args: unknown[]) => likeDeleteOne(...args),
   },
 }));
 
@@ -99,22 +102,22 @@ describe("LikeService — durable Media toggle", () => {
       endSession: jest.fn(),
     });
     likeFindOne.mockReturnValue(mockQuery(null));
-    likeCreate.mockResolvedValue([{ _id: new Types.ObjectId() }]);
-    likeFindByIdAndDelete.mockReturnValue(mockQuery({}));
-    mediaFindByIdAndUpdate.mockResolvedValue({ likeCount: 1 });
+    likeFindOneAndDelete.mockReturnValue(mockQuery(null));
+    likeCreate.mockResolvedValue({ _id: new Types.ObjectId() });
+    likeDeleteOne.mockResolvedValue({ deletedCount: 1 });
+    mediaFindByIdAndUpdate.mockReturnValue(mockQuery({ likeCount: 1 }));
   });
 
-  it("likes media and returns committed shape", async () => {
+  it("likes media and returns committed shape without a Mongo session", async () => {
     const likeDocId = new Types.ObjectId();
-    // 1) toggleMediaLike existence check → null; 2) finalizeToggle lookup → id
-    likeFindOne
-      .mockReturnValueOnce(mockQuery(null))
-      .mockReturnValueOnce(mockQuery({ _id: likeDocId }));
-    likeCreate.mockResolvedValue([{ _id: likeDocId }]);
+    likeFindOneAndDelete.mockReturnValue(mockQuery(null));
+    likeCreate.mockResolvedValue({ _id: likeDocId });
+    mediaFindByIdAndUpdate.mockReturnValue(mockQuery({ likeCount: 1 }));
 
     const result = await likeService.toggleLike(userId, contentId, "media");
 
     expect(mockVerify).toHaveBeenCalledWith(contentId, "media");
+    expect(mediaStartSession).not.toHaveBeenCalled();
     expect(likeCreate).toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
@@ -143,13 +146,14 @@ describe("LikeService — durable Media toggle", () => {
 
   it("unlikes when Like row exists", async () => {
     const existingId = new Types.ObjectId();
-    likeFindOne.mockReturnValue(mockQuery({ _id: existingId }));
-    (getLikeCountFromDB as jest.Mock).mockResolvedValue(0);
+    likeFindOneAndDelete.mockReturnValue(mockQuery({ _id: existingId }));
+    mediaFindByIdAndUpdate.mockReturnValue(mockQuery({ likeCount: 0 }));
 
     const result = await likeService.toggleLike(userId, contentId, "media");
     expect(result.liked).toBe(false);
     expect(result.likeCount).toBe(0);
-    expect(likeFindByIdAndDelete).toHaveBeenCalled();
+    expect(likeFindOneAndDelete).toHaveBeenCalled();
+    expect(likeCreate).not.toHaveBeenCalled();
     expect(mockNotify).toHaveBeenCalledWith(
       userId,
       contentId,
@@ -157,6 +161,22 @@ describe("LikeService — durable Media toggle", () => {
       false,
       undefined
     );
+  });
+
+  it("returns before Redis cache refresh (must not 504 on Redis hang)", async () => {
+    const { setPostCounter } = jest.requireMock("../../../lib/redisCounters");
+    let release!: () => void;
+    setPostCounter.mockReturnValue(new Promise<void>(resolve => {
+      release = resolve;
+    }));
+    likeFindOneAndDelete.mockReturnValue(mockQuery(null));
+    likeCreate.mockResolvedValue({ _id: new Types.ObjectId() });
+    mediaFindByIdAndUpdate.mockReturnValue(mockQuery({ likeCount: 4 }));
+
+    await expect(
+      likeService.toggleLike(userId, contentId, "media")
+    ).resolves.toEqual(expect.objectContaining({ liked: true, likeCount: 4 }));
+    release();
   });
 
   it("throws CONTENT_NOT_FOUND without mutating when media missing", async () => {

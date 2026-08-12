@@ -11,7 +11,8 @@ import {
 import logger from "../utils/logger";
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60; // 24h
-const IN_PROGRESS_TTL_SECONDS = 60;
+/** Short enough that a 504 retry is not stuck behind a dead in_progress lock. */
+const IN_PROGRESS_TTL_SECONDS = 8;
 
 /** RFC 4122 UUID (any version) */
 const UUID_RE =
@@ -225,24 +226,22 @@ export function idempotencyMiddleware() {
           completedAt: new Date().toISOString(),
         };
 
-        // Chain: write then send. Express callers rarely await res.json — fire async write
-        // but block send until write settles via thenable return when possible.
-        const writeAndSend = engagementSetEx(
+        // Persist in the background. Never block the HTTP body on Redis —
+        // a hung SET was a production 504 on POST /like.
+        const write = engagementSetEx(
           redisKey,
           JSON.stringify(record),
           IDEMPOTENCY_TTL_SECONDS
         ).then(ok => {
           if (!ok) {
-            // Persist failed — release so retry can re-run rather than stuck in-progress
             void engagementDel(redisKey);
             logger.warn("Idempotency persist failed; released reservation", { redisKey });
           }
-          return originalJson(body);
+          return ok;
         });
 
-        // Attach for tests that await the write
-        (res as any).__idempotencyWrite = writeAndSend;
-        return writeAndSend as unknown as Response;
+        (res as any).__idempotencyWrite = write;
+        return originalJson(body);
       }) as Response["json"];
 
       next();

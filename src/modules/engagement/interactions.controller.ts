@@ -74,6 +74,18 @@ export const toggleContentLike = async (req: Request, res: Response): Promise<vo
       requestId,
     });
 
+    const durationMs = Date.now() - startedAt;
+    if (durationMs > 500) {
+      logger.warn("like_toggle_slow", {
+        event: "like_toggle_slow",
+        requestId,
+        userId,
+        contentId,
+        contentType: responseContentType,
+        durationMs,
+      });
+    }
+
     logger.info("like_toggle_completed", {
       event: "like_toggle_completed",
       requestId,
@@ -83,7 +95,7 @@ export const toggleContentLike = async (req: Request, res: Response): Promise<vo
       liked,
       likeCount,
       status: 200,
-      durationMs: Date.now() - startedAt,
+      durationMs,
     });
 
     res.status(200).json({

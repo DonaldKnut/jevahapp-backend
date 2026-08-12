@@ -46,6 +46,7 @@ Last updated: July 2026 (post-modularization refactor)
 12i. **[FRONTEND_LITE_ANDROID_HANDOFF.md](./FRONTEND_LITE_ANDROID_HANDOFF.md)** — 2GB Android / Jevah Lite: FE rules + `profile=lite` compact feeds
 12j. **[FE_LAUNCH_CHECKLIST.md](./FE_LAUNCH_CHECKLIST.md)** — FE: auth session + feed events + Lite (ticket list)
 12k. **[CONTABO_DEPLOY_CHECKLIST.md](./CONTABO_DEPLOY_CHECKLIST.md)** — Pull/restart/smoke for clerk JWT, analytics, lite, Guardian
+12l. **[LIKE_504_FIX.md](./LIKE_504_FIX.md)** — P0: like POST 504 — no txn, Redis fail-open, return before side effects
 13. **[SUPER_ADMIN.md](./SUPER_ADMIN.md)** — Master admin seed (`support@jevahapp.com`) + API protections
 14. **[SETUP.md](./SETUP.md)** — Production checklist, env vars, workers
 15. **[PERFORMANCE.md](./PERFORMANCE.md)** — Shareholder performance brief (API latency, CPU/RAM, upload & verification)

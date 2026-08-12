@@ -90,6 +90,15 @@ curl -s "$BASE/feed/music-for-you?profile=lite&lane=artist&limit=8" \
 curl -s "$BASE/creators/me/analytics?rangeDays=30" -H "Authorization: Bearer $TOKEN" \
   | jq '.data|{totalListens,uniqueListeners,focusHint}'
 
+# Like write (must be 200 JSON in < 1s — never HTML 504)
+# KEY=$(uuidgen)   # or any RFC 4122 UUID
+# time curl -sS -o /tmp/like.json -w "%{http_code} %{time_total}\n" -X POST \
+#   "$BASE/content/media/<contentId>/like" \
+#   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+#   -H "Idempotency-Key: $KEY" -d '{}'
+# jq '.data|{liked,likeCount}' /tmp/like.json
+# See docs/LIKE_504_FIX.md
+
 # Metrics / Guardian
 curl -s "$BASE/../metrics" -H "Authorization: Bearer $ADMIN" 2>/dev/null || true
 # Use your actual metrics path if mounted under /api/metrics

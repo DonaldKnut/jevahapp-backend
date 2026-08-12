@@ -139,6 +139,7 @@ export async function verifyContentExists(
           $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
         })
           .select("_id")
+          .maxTimeMS(2000)
           .setOptions(query);
         return !!media;
       }

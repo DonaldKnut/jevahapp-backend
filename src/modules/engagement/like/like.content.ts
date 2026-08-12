@@ -23,6 +23,15 @@ import { invalidateContentMetadataCache } from "../metadata/metadata.cache";
 const CONTENT_TYPES = ["media", "artist", "merch"] as const;
 type ContentType = (typeof CONTENT_TYPES)[number];
 
+/** Cap Mongo like writes so nginx never 504s (default proxy_read_timeout 60s). */
+const LIKE_QUERY_MAX_MS = 2000;
+
+type MediaToggleOutcome = {
+  liked: boolean;
+  likeCount: number;
+  likeId?: string;
+};
+
 function resultShape(
   contentId: string,
   contentType: string,
@@ -131,7 +140,7 @@ export const contentLikeService = {
     contentId: string,
     normalized: ContentType
   ): Promise<LikeToggleResult> {
-    // Existence check outside the transaction — clear 404 before mutation
+    // Existence check — 404 before mutation. No Mongo transaction (60s txn == nginx 504).
     const exists = await verifyContentExists(contentId, normalized);
     if (!exists) {
       throw new LikeOperationError(
@@ -142,50 +151,9 @@ export const contentLikeService = {
       );
     }
 
-    try {
-      return await contentLikeService.toggleDbWithTransaction(userId, contentId, normalized);
-    } catch (error: any) {
-      if (
-        error.message?.includes("Transaction numbers are only allowed") ||
-        error.message?.includes("replica set")
-      ) {
-        logger.warn("Like toggle falling back without transaction", {
-          contentId,
-          userId,
-          contentType: normalized,
-        });
-        return contentLikeService.toggleDbWithoutTransaction(userId, contentId, normalized);
-      }
-      throw error;
-    }
-  },
-
-  async toggleDbWithTransaction(
-    userId: string,
-    contentId: string,
-    normalized: ContentType
-  ): Promise<LikeToggleResult> {
-    const session = await Media.startSession();
-    try {
-      let liked = false;
-      await session.withTransaction(async () => {
-        switch (normalized) {
-          case "media":
-            liked = await toggleMediaLike(userId, contentId, session);
-            break;
-          case "artist":
-            liked = await toggleArtistFollow(userId, contentId, session);
-            break;
-          case "merch":
-            liked = await toggleMerchLike(userId, contentId, session);
-            break;
-        }
-      });
-
-      return finalizeToggle(userId, contentId, normalized, liked);
-    } finally {
-      session.endSession();
-    }
+    // Never use multi-doc transactions on the like hot path.
+    // Mongo txn lifetime defaults to 60s — the same window as nginx 504.
+    return contentLikeService.toggleDbWithoutTransaction(userId, contentId, normalized);
   },
 
   async toggleDbWithoutTransaction(
@@ -193,11 +161,13 @@ export const contentLikeService = {
     contentId: string,
     normalized: ContentType
   ): Promise<LikeToggleResult> {
+    if (normalized === "media") {
+      const outcome = await toggleMediaLike(userId, contentId);
+      return finalizeToggle(userId, contentId, normalized, outcome.liked, outcome);
+    }
+
     let liked = false;
     switch (normalized) {
-      case "media":
-        liked = await toggleMediaLike(userId, contentId);
-        break;
       case "artist":
         liked = await toggleArtistFollow(userId, contentId);
         break;
@@ -218,6 +188,7 @@ export const contentLikeService = {
           contentType: "media",
         })
           .select("_id")
+          .maxTimeMS(LIKE_QUERY_MAX_MS)
           .lean();
         return !!like;
       }
@@ -289,23 +260,18 @@ async function finalizeToggle(
   userId: string,
   contentId: string,
   normalized: ContentType,
-  liked: boolean
+  liked: boolean,
+  extras?: { likeCount?: number; likeId?: string }
 ): Promise<LikeToggleResult> {
-  const likeCount = clampCount(await getLikeCountFromDB(contentId, normalized));
+  const likeCount =
+    extras?.likeCount != null
+      ? clampCount(extras.likeCount)
+      : clampCount(await getLikeCountFromDB(contentId, normalized));
 
-  let likeId: string | undefined;
-  if (liked && (normalized === "media" || normalized === "merch")) {
-    const row = (await Like.findOne({
-      userId: new Types.ObjectId(userId),
-      contentId: new Types.ObjectId(contentId),
-      contentType: normalized,
-    })
-      .select("_id")
-      .lean()) as { _id?: { toString(): string } } | null;
-    likeId = row?._id?.toString();
-  }
+  const likeId = extras?.likeId;
 
-  await refreshLikeCaches({
+  // Redis / feed flags / metadata cache must never delay the HTTP response.
+  void refreshLikeCaches({
     userId,
     contentId,
     contentType: normalized,
@@ -326,51 +292,90 @@ async function finalizeToggle(
   return resultShape(contentId, normalized, liked, likeCount, likeId);
 }
 
+async function adjustMediaLikeCount(
+  contentId: string,
+  delta: 1 | -1
+): Promise<number> {
+  const update =
+    delta === 1
+      ? { $inc: { likeCount: 1 } }
+      : [
+          {
+            $set: {
+              likeCount: {
+                $max: [0, { $subtract: [{ $ifNull: ["$likeCount", 0] }, 1] }],
+              },
+            },
+          },
+        ];
+
+  const media = await Media.findByIdAndUpdate(contentId, update, {
+    new: true,
+    maxTimeMS: LIKE_QUERY_MAX_MS,
+  })
+    .select("likeCount")
+    .lean();
+
+  if (!media) {
+    throw new LikeOperationError(
+      "CONTENT_NOT_FOUND",
+      `Content not found: media with ID ${contentId}`,
+      404,
+      { contentId, contentType: "media" }
+    );
+  }
+
+  return clampCount((media as { likeCount?: number }).likeCount);
+}
+
+/**
+ * Indexed toggle: unique (userId, contentType, contentId).
+ * No session / transaction — two atomic writes, then return.
+ */
 async function toggleMediaLike(
   userId: string,
-  contentId: string,
-  session?: ClientSession
-): Promise<boolean> {
+  contentId: string
+): Promise<MediaToggleOutcome> {
   const userObjId = new Types.ObjectId(userId);
   const contentObjId = new Types.ObjectId(contentId);
-  const query = Like.findOne({
+  const filter = {
     userId: userObjId,
     contentId: contentObjId,
-    contentType: "media",
-  });
-  if (session) query.session(session);
-  const existing = await query;
+    contentType: "media" as const,
+  };
+
+  const existing = await Like.findOneAndDelete(filter)
+    .select("_id")
+    .maxTimeMS(LIKE_QUERY_MAX_MS)
+    .lean();
 
   if (existing) {
-    const del = Like.findByIdAndDelete(existing._id);
-    if (session) del.session(session);
-    await del;
-    await Media.findByIdAndUpdate(
-      contentId,
-      [{ $set: { likeCount: { $max: [0, { $subtract: [{ $ifNull: ["$likeCount", 0] }, 1] }] } } }],
-      session ? { session } : undefined
-    );
-    return false;
+    const likeCount = await adjustMediaLikeCount(contentId, -1);
+    return { liked: false, likeCount };
   }
 
   try {
-    if (session) {
-      await Like.create(
-        [{ userId: userObjId, contentId: contentObjId, contentType: "media" }],
-        { session }
-      );
-      await Media.findByIdAndUpdate(contentId, { $inc: { likeCount: 1 } }, { session });
-    } else {
-      await Like.create({
-        userId: userObjId,
-        contentId: contentObjId,
-        contentType: "media",
-      });
-      await Media.findByIdAndUpdate(contentId, { $inc: { likeCount: 1 } });
+    const created = await Like.create({
+      userId: userObjId,
+      contentId: contentObjId,
+      contentType: "media",
+    });
+    try {
+      const likeCount = await adjustMediaLikeCount(contentId, 1);
+      return {
+        liked: true,
+        likeCount,
+        likeId: created._id.toString(),
+      };
+    } catch (err) {
+      await Like.deleteOne({ _id: created._id }).catch(() => undefined);
+      throw err;
     }
-    return true;
   } catch (error: any) {
-    if (error.code === 11000) return true;
+    if (error.code === 11000) {
+      const likeCount = clampCount(await getLikeCountFromDB(contentId, "media"));
+      return { liked: true, likeCount };
+    }
     throw error;
   }
 }

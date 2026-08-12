@@ -16,13 +16,68 @@ import logger from "../utils/logger";
 
 export { isRedisConnected, connectRedis, getRedisClient };
 
-/** Safe wrapper over the engagement (ioredis) client */
+/** Hot-path cap so a blocked Redis never becomes nginx 504. */
+const ENGAGEMENT_REDIS_TIMEOUT_MS = Math.max(
+  20,
+  Number(process.env.ENGAGEMENT_REDIS_TIMEOUT_MS || 100)
+);
+
+function withTimeout<T>(
+  opName: string,
+  work: Promise<T>,
+  fallback: T,
+  ms: number
+): Promise<T> {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      logger.warn("Redis operation timed out (fallback used)", {
+        op: opName,
+        timeoutMs: ms,
+      });
+      resolve(fallback);
+    }, ms);
+    work.then(
+      value => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      err => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        logger.warn("Redis operation failed (fallback used)", {
+          op: opName,
+          error: (err as Error)?.message,
+        });
+        resolve(fallback);
+      }
+    );
+  });
+}
+
+/**
+ * Fail-open Redis for likes / idempotency / rate limits.
+ * If Redis is not ready, do not await reconnect (connectTimeout is 15s).
+ */
 export async function engagementRedisSafe<T>(
   opName: string,
   fn: (client: Redis) => Promise<T>,
   fallback: T
 ): Promise<T> {
-  return ioredisSafe(opName, fn, fallback);
+  if (!isRedisConnected()) {
+    return fallback;
+  }
+  return withTimeout(
+    opName,
+    ioredisSafe(opName, fn, fallback),
+    fallback,
+    ENGAGEMENT_REDIS_TIMEOUT_MS
+  );
 }
 
 export async function engagementSetEx(
