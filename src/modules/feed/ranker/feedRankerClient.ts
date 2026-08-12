@@ -3,7 +3,7 @@
  * Default: OFF (FEED_RANKER_URL unset) — zero RAM / zero latency cost.
  * When set: 120ms timeout, circuit breaker, soft-fail to local score.
  */
-import logger from "../../utils/logger";
+import logger from "../../../utils/logger";
 
 export type RankerCandidate = {
   id: string;

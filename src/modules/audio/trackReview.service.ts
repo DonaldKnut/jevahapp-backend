@@ -248,7 +248,7 @@ export async function reviewTrackAudioWithGuardian(input: {
     if (outcome.decision === "approve") {
       return {
         decision: "approved",
-        reason: mapped.reason,
+        reason: mapped.reason || "Approved by Content Guardian (audio STT)",
         source: "guardian_audio",
         transcriptPreview: (scored.transcript || "").slice(0, 200),
       };
@@ -256,7 +256,7 @@ export async function reviewTrackAudioWithGuardian(input: {
     if (outcome.decision === "reject") {
       return {
         decision: "rejected",
-        reason: mapped.reason,
+        reason: mapped.reason || "Rejected by Content Guardian (audio STT)",
         source: "guardian_audio",
         transcriptPreview: (scored.transcript || "").slice(0, 200),
       };

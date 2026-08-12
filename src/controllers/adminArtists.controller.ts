@@ -61,25 +61,25 @@ function validateCreatorApply(body: any): {
   }
 
   const rawTypes = Array.isArray(body?.creatorTypes) ? body.creatorTypes : [];
-  const creatorTypes = [
-    ...new Set(
+  const creatorTypes = Array.from(
+    new Set(
       rawTypes
         .map((t: unknown) => String(t || "").trim().toLowerCase())
         .filter((t: string) => CREATOR_TYPES.has(t))
-    ),
-  ];
+    )
+  ) as string[];
   if (creatorTypes.length < 1) {
     fieldErrors.creatorTypes = "Select at least one creator type";
   }
 
   const rawGenres = Array.isArray(body?.genres) ? body.genres : [];
-  const genres = [
-    ...new Set(
+  const genres = Array.from(
+    new Set(
       rawGenres
         .map((g: unknown) => String(g || "").trim().toLowerCase())
         .filter((g: string) => ALLOWED_GENRES.has(g))
-    ),
-  ];
+    )
+  ) as string[];
   if (genres.length < 1) {
     fieldErrors.genres = `Select at least one genre (${TRACK_GENRES.join(", ")})`;
   }

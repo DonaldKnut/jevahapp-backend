@@ -120,7 +120,9 @@ export async function getCreatorStudioAnalytics(
     };
   }
 
-  const artist = await Artist.findOne({ userId }).select("_id status").lean();
+  const artist = (await Artist.findOne({ userId })
+    .select("_id status")
+    .lean()) as { _id: Types.ObjectId; status?: string } | null;
   if (!artist) {
     return {
       ok: false,
@@ -135,12 +137,19 @@ export async function getCreatorStudioAnalytics(
   since.setUTCDate(since.getUTCDate() - rangeDays);
   since.setUTCHours(0, 0, 0, 0);
 
-  const tracks = await CopyrightFreeSong.find({
+  const tracks = (await CopyrightFreeSong.find({
     artistId: artist._id,
     lane: "artist",
   })
     .select("_id title playCount viewCount likeCount saveCount")
-    .lean();
+    .lean()) as Array<{
+    _id: Types.ObjectId;
+    title?: string;
+    playCount?: number;
+    viewCount?: number;
+    likeCount?: number;
+    saveCount?: number;
+  }>;
 
   if (!tracks.length) {
     const data: CreatorAnalyticsResult = {
@@ -374,7 +383,9 @@ export async function getCreatorTrackAnalytics(
     };
   }
 
-  const artist = await Artist.findOne({ userId }).select("_id").lean();
+  const artist = (await Artist.findOne({ userId })
+    .select("_id")
+    .lean()) as { _id: Types.ObjectId } | null;
   if (!artist) {
     return {
       ok: false,
@@ -384,13 +395,19 @@ export async function getCreatorTrackAnalytics(
     };
   }
 
-  const track = await CopyrightFreeSong.findOne({
+  const track = (await CopyrightFreeSong.findOne({
     _id: trackId,
     artistId: artist._id,
     lane: "artist",
   })
     .select("title playCount viewCount likeCount saveCount")
-    .lean();
+    .lean()) as {
+    title?: string;
+    playCount?: number;
+    viewCount?: number;
+    likeCount?: number;
+    saveCount?: number;
+  } | null;
 
   if (!track) {
     return { ok: false, status: 404, message: "Track not found", code: "TRACK_NOT_FOUND" };
