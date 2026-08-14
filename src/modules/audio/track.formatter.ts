@@ -36,12 +36,18 @@ export type TrackCard = {
   audioUrl: string | null;
   thumbnailUrl: string | null;
   coverUrl: string | null;
+  artwork: string | null;
   processingStatus: "pending" | "processing" | "ready" | "failed";
   playCount: number;
   likeCount: number;
+  likes: number;
   viewCount: number;
   shareCount: number;
   saveCount: number;
+  saves: number;
+  uniqueListeners?: number;
+  isrc: string | null;
+  explicit: boolean;
   artistId: string | null;
   releaseId: string | null;
   albumId: string | null;
@@ -173,12 +179,21 @@ export function shapeTrackCard(
     audioUrl: playbackUrl,
     thumbnailUrl,
     coverUrl: thumbnailUrl,
+    artwork: thumbnailUrl,
     processingStatus,
     playCount: doc.playCount ?? 0,
     likeCount,
+    likes: likeCount,
     viewCount,
     shareCount: Math.max(0, doc.shareCount ?? 0),
     saveCount: Math.max(0, doc.saveCount ?? 0),
+    saves: Math.max(0, doc.saveCount ?? 0),
+    uniqueListeners:
+      doc.uniqueListeners != null && Number.isFinite(Number(doc.uniqueListeners))
+        ? Number(doc.uniqueListeners)
+        : undefined,
+    isrc: doc.isrc || null,
+    explicit: Boolean(doc.explicit),
     artistId: doc.artistId?._id?.toString?.() || doc.artistId?.toString?.() || doc.artistId || null,
     releaseId: releaseIdFromDoc(doc),
     albumId:

@@ -13,6 +13,8 @@ export interface IArtist extends Document {
   slug: string;
   bio?: string | null;
   avatarUrl?: string | null;
+  bannerUrl?: string | null;
+  location?: string | null;
   genres: string[];
   creatorTypes: CreatorType[];
   isVerified: boolean;
@@ -22,12 +24,16 @@ export interface IArtist extends Document {
     youtube?: string;
     instagram?: string;
     twitter?: string;
+    tiktok?: string;
+    website?: string;
   };
   applicationNote?: string | null;
   reviewedByAdminId?: mongoose.Types.ObjectId | null;
   reviewedAt?: Date | null;
   /** Last time admin sent an artist onboard / welcome email for this profile. */
   onboardEmailSentAt?: Date | null;
+  avatarPendingKey?: string | null;
+  bannerPendingKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +57,8 @@ const artistSchema = new Schema<IArtist>(
     },
     bio: { type: String, default: null },
     avatarUrl: { type: String, default: null },
+    bannerUrl: { type: String, default: null },
+    location: { type: String, default: null, trim: true, maxlength: 120 },
     genres: { type: [String], default: [] },
     creatorTypes: {
       type: [String],
@@ -69,6 +77,8 @@ const artistSchema = new Schema<IArtist>(
       youtube: String,
       instagram: String,
       twitter: String,
+      tiktok: String,
+      website: String,
     },
     applicationNote: { type: String, default: null },
     reviewedByAdminId: {
@@ -78,6 +88,8 @@ const artistSchema = new Schema<IArtist>(
     },
     reviewedAt: { type: Date, default: null },
     onboardEmailSentAt: { type: Date, default: null, index: true },
+    avatarPendingKey: { type: String, default: null },
+    bannerPendingKey: { type: String, default: null },
   },
   { timestamps: true }
 );

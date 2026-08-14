@@ -24,7 +24,7 @@ export const getPublicMedia = async (
   try {
     const filters = request.query;
     const digest = feedCacheHash({ scope: "public-list", ...(filters as any) });
-    const cacheKey = `media:public:list:v2:${digest}`;
+    const cacheKey = `media:public:list:v3:${digest}`;
 
     const result = await cacheService.getOrSetSwr(
       cacheKey,

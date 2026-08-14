@@ -113,7 +113,7 @@ export const getAllContentForAllTab = async (
 
     /**
      * Feed caching (IG/TikTok pattern):
-     * - Shared list under feed:global:v2:{generation}:{sha256}
+     * - Shared list under feed:global:v3:{generation}:{sha256}
      * - Generation bump on structural changes (no stale resurrection)
      * - SWR + single-flight on miss; empty feeds are valid hits
      * - Counts overlaid from Redis counters (cold-seeded on miss)

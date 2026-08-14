@@ -26,6 +26,17 @@ Creates / updates:
 
 Then sign in at the web `/login` with that email + password.
 
+## Demo Creator Studio (artist)
+
+`support@jevahapp.com` stays **admin**. Creator Studio needs `role: artist`.
+
+```bash
+CREATOR_SEED_PASSWORD='your-strong-password' npm run seed:demo-creator
+```
+
+Default login: `creator@jevahapp.com` (active verified Artist + one demo track). Open `/creators` or `/creators/studio`, not `/admin`.
+
+
 ## Backend protections (shipped)
 
 | Action | Rule |

@@ -767,7 +767,23 @@ export async function patchTrack(
     track.genre = normalizeGenre(body.genre as string);
   }
   if (body.language !== undefined) {
-    track.language = (body.language as string)?.trim() || null;
+    const lang = String(body.language || "").trim();
+    if (lang) track.language = lang;
+  }
+  if (body.isrc !== undefined) {
+    const isrc = String(body.isrc || "").trim();
+    track.isrc = isrc || null;
+  }
+  if (body.lyrics !== undefined) {
+    const lyrics = String(body.lyrics || "").trim();
+    track.lyrics = lyrics ? lyrics.slice(0, 50000) : null;
+  }
+  if (body.explicit !== undefined) {
+    track.explicit = body.explicit === true || body.explicit === "true";
+  }
+  if (body.trackNumber !== undefined) {
+    const n = Number(body.trackNumber);
+    track.trackNumber = Number.isFinite(n) && n > 0 ? n : null;
   }
   if (body.licenseNote !== undefined) {
     track.licenseNote = (body.licenseNote as string)?.trim() || null;

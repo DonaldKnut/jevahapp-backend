@@ -6,7 +6,7 @@ import {
   shapeArtistCard,
   shapeCreatorMePayload,
 } from "../modules/creators/creator.presenter";
-import { shapeTrackCardsWithRelease, shapeUploadIntentResponse, publicArtistReadyFilter, publicCuratedReadyFilter } from "../modules/audio/track.formatter";
+import { shapeTrackCardsWithRelease, shapeUploadIntentResponse, publicArtistReadyFilter, publicCuratedReadyFilter, fromFeVisibility } from "../modules/audio/track.formatter";
 import {
   decodeCatalogCursor,
   catalogCursorFilter,
@@ -25,11 +25,12 @@ import {
   TrackUploadError,
 } from "../modules/audio/trackUpload.service";
 import logger from "../utils/logger";
+import { uniqueListenersByTrackIds, uniqueListenersSince, countArtistFollowers } from "../modules/creators/creatorAudience.service";
 
 async function requireActiveArtist(userId: string) {
   const artist = await Artist.findOne({ userId });
   if (!artist) {
-    return { error: { status: 404, message: "No creator profile — apply first" } as const };
+    return { error: { status: 404, message: "No creator profile — apply first", code: "NOT_A_CREATOR" } as const };
   }
   if (artist.status !== "active") {
     return {
@@ -61,19 +62,24 @@ export const getPublicArtistBySlug = async (req: Request, res: Response) => {
       return;
     }
     const artistDoc = artist as any;
-    const trackCount = await CopyrightFreeSong.countDocuments(
-      artistPublicTracksFilter(artistDoc._id.toString())
-    );
+    const [trackCount, followers, monthlyListeners] = await Promise.all([
+      CopyrightFreeSong.countDocuments(
+        artistPublicTracksFilter(artistDoc._id.toString())
+      ),
+      countArtistFollowers(String(artistDoc.userId || ""), artistDoc._id),
+      uniqueListenersSince(artistDoc._id, 28),
+    ]);
+    const card = {
+      ...shapeArtistCard(artistDoc),
+      trackCount,
+      followers,
+      monthlyListeners,
+    };
     res.status(200).json({
       success: true,
       data: {
-        artist: {
-          ...shapeArtistCard(artistDoc),
-          trackCount,
-        },
-        // Flat aliases for FE normalizers
-        ...shapeArtistCard(artistDoc),
-        trackCount,
+        artist: card,
+        ...card,
       },
     });
   } catch (error: any) {
@@ -260,27 +266,56 @@ export const listMyCreatorTracks = async (req: Request, res: Response) => {
     }
     const page = Math.max(parseInt(String(req.query.page || "1"), 10) || 1, 1);
     const limit = Math.min(
-      Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1),
+      Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1),
       100
     );
     const skip = (page - 1) * limit;
-    const filter = { artistId: artist._id, lane: "artist" as const };
+    const q = String(req.query.q || "").trim();
+    const visibilityRaw = String(req.query.visibility || "").trim();
+    const sortRaw = String(req.query.sort || "recent").trim().toLowerCase();
+
+    const filter: Record<string, unknown> = {
+      artistId: artist._id,
+      lane: "artist" as const,
+    };
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.$or = [{ title: rx }, { artistName: rx }, { singer: rx }];
+    }
+    if (visibilityRaw) {
+      const mapped = fromFeVisibility(visibilityRaw);
+      if (mapped) filter.visibility = mapped;
+      else if (visibilityRaw === "published") filter.visibility = "published";
+    }
+
+    const sort: Record<string, 1 | -1> =
+      sortRaw === "plays"
+        ? { playCount: -1, createdAt: -1 }
+        : sortRaw === "title"
+          ? { title: 1 }
+          : sortRaw === "duration"
+            ? { durationSec: -1, createdAt: -1 }
+            : { createdAt: -1 };
+
     const [rows, total] = await Promise.all([
-      CopyrightFreeSong.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      CopyrightFreeSong.find(filter).sort(sort).skip(skip).limit(limit).lean(),
       CopyrightFreeSong.countDocuments(filter),
     ]);
     const cards = await shapeTrackCardsWithRelease(
       rows.map((r: any) => ({ ...r, artistSlug: artist.slug }))
     );
+    const uniques = await uniqueListenersByTrackIds(
+      rows.map((r: any) => r._id)
+    );
+    const withStats = cards.map(c => ({
+      ...c,
+      uniqueListeners: uniques.get(c.id) ?? 0,
+    }));
     res.status(200).json({
       success: true,
       data: {
-        tracks: cards,
-        items: cards,
+        tracks: withStats,
+        items: withStats,
         total,
         pagination: {
           page,
@@ -738,6 +773,13 @@ export const listPublicArtists = async (req: Request, res: Response) => {
 /** Alias play handler for /api/music/tracks/:songId/play */
 export const recordMusicTrackPlay = async (req: Request, res: Response) => {
   const { recordPlay } = await import("./copyrightFreeSong/engagement.controller");
-  // Normalize param name — music routes use :songId
+  return recordPlay(req, res);
+};
+
+/** POST /api/music/plays — body { trackId, source, positionSec, completed } */
+export const recordMusicPlays = async (req: Request, res: Response) => {
+  const trackId = String(req.body?.trackId || req.body?.songId || "").trim();
+  (req.params as any).songId = trackId;
+  const { recordPlay } = await import("./copyrightFreeSong/engagement.controller");
   return recordPlay(req, res);
 };

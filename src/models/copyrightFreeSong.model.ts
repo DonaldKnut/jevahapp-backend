@@ -38,6 +38,8 @@ export interface ICopyrightFreeSong extends Document {
   durationSec?: number | null;
   bpm?: number | null;
   isrc?: string | null;
+  lyrics?: string | null;
+  explicit?: boolean;
 
   lane: TrackLane;
   visibility: TrackVisibility;
@@ -153,6 +155,8 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
     durationSec: { type: Number, default: null },
     bpm: { type: Number, default: null },
     isrc: { type: String, trim: true, default: null },
+    lyrics: { type: String, default: null },
+    explicit: { type: Boolean, default: false },
 
     lane: {
       type: String,

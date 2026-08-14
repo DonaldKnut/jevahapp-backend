@@ -20,6 +20,8 @@ export interface ArtistCard {
   slug: string;
   bio: string | null;
   avatarUrl: string | null;
+  bannerUrl: string | null;
+  location: string | null;
   genres: string[];
   creatorTypes: CreatorType[];
   isVerified: boolean;
@@ -30,6 +32,8 @@ export interface ArtistCard {
   updatedAt: string | Date | null;
   reviewedAt: string | Date | null;
   onboardEmailSentAt: string | Date | null;
+  followers?: number;
+  monthlyListeners?: number;
 }
 
 export interface CreatorCapabilities {
@@ -56,6 +60,8 @@ export function shapeArtistCard(doc: any): ArtistCard {
     slug: doc.slug,
     bio: doc.bio || null,
     avatarUrl: doc.avatarUrl || null,
+    bannerUrl: doc.bannerUrl || null,
+    location: doc.location || null,
     genres: doc.genres || [],
     creatorTypes: (doc.creatorTypes || ["artist"]) as CreatorType[],
     isVerified: Boolean(doc.isVerified),
@@ -169,9 +175,18 @@ export function buildCreatorCapabilities(
 /** Full payload for mobile + web creator hub */
 export function shapeCreatorMePayload(
   doc: any | null,
-  opts: { trackCount?: number; emailVerified?: boolean } = {}
+  opts: {
+    trackCount?: number;
+    emailVerified?: boolean;
+    followers?: number;
+    monthlyListeners?: number;
+  } = {}
 ) {
   const artist = doc ? shapeArtistCard(doc) : null;
+  if (artist) {
+    if (opts.followers != null) artist.followers = opts.followers;
+    if (opts.monthlyListeners != null) artist.monthlyListeners = opts.monthlyListeners;
+  }
   const capabilities = buildCreatorCapabilities(artist, opts);
   return {
     artist,

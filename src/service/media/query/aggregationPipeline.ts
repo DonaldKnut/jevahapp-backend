@@ -32,8 +32,18 @@ export function buildAggregationPipeline(
     {
       $lookup: {
         from: "users",
-        localField: "uploadedBy",
-        foreignField: "_id",
+        let: { uploaderId: "$uploadedBy" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$_id", "$$uploaderId"] } } },
+          {
+            $project: {
+              firstName: 1,
+              lastName: 1,
+              avatar: 1,
+              avatarUpload: 1,
+            },
+          },
+        ],
         as: "author",
       },
     },
@@ -53,6 +63,7 @@ export function buildAggregationPipeline(
             if: { $ifNull: ["$author._id", false] },
             then: {
               _id: "$author._id",
+              id: "$author._id",
               firstName: { $ifNull: ["$author.firstName", ""] },
               lastName: { $ifNull: ["$author.lastName", ""] },
               fullName: {
@@ -66,15 +77,38 @@ export function buildAggregationPipeline(
                   },
                 },
               },
-              avatar: { $ifNull: ["$author.avatar", null] },
+              name: {
+                $trim: {
+                  input: {
+                    $concat: [
+                      { $ifNull: ["$author.firstName", ""] },
+                      " ",
+                      { $ifNull: ["$author.lastName", ""] },
+                    ],
+                  },
+                },
+              },
+              avatar: {
+                $ifNull: ["$author.avatar", { $ifNull: ["$author.avatarUpload", null] }],
+              },
+              avatarUrl: {
+                $ifNull: ["$author.avatar", { $ifNull: ["$author.avatarUpload", null] }],
+              },
+              avatarUpload: {
+                $ifNull: ["$author.avatarUpload", { $ifNull: ["$author.avatar", null] }],
+              },
               section: { $ifNull: ["$author.section", null] },
             },
             else: {
-              _id: null,
+              _id: "$uploadedBy",
+              id: "$uploadedBy",
               firstName: "",
               lastName: "",
               fullName: "Unknown",
+              name: "Unknown",
               avatar: null,
+              avatarUrl: null,
+              avatarUpload: null,
               section: null,
             },
           },
@@ -216,9 +250,10 @@ export function buildAggregationPipeline(
         width: 1, // Video width (videos only)
         height: 1, // Video height (videos only)
         bitrate: 1, // Bitrate in bps
-        // ⭐ AUTHOR INFO
+        // ⭐ AUTHOR INFO — populated object (never a bare ObjectId)
         authorInfo: 1,
-        uploadedBy: 1, // Keep for backward compatibility
+        author: "$authorInfo",
+        uploadedBy: "$authorInfo",
         // ⭐ ENGAGEMENT METRICS
         totalLikes: 1,
         totalShares: 1,

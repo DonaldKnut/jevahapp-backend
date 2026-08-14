@@ -9,17 +9,17 @@
 ## Endpoint
 
 ```http
-GET /api/creators/me/analytics?rangeDays=30
+GET /api/creators/me/analytics?rangeDays=28
 Authorization: Bearer <creator JWT>
 ```
 
 Per-track:
 
 ```http
-GET /api/creators/me/analytics/tracks/:trackId?rangeDays=30
+GET /api/creators/me/analytics/tracks/:trackId?rangeDays=28
 ```
 
-`rangeDays`: `7` | `30` | `90` (clamped 1–90, default 30).
+`rangeDays`: `7` | `28` | `90` (clamped 1–90, default **28**; `30` still accepted).
 
 | Status | When |
 |--------|------|
@@ -32,7 +32,9 @@ GET /api/creators/me/analytics/tracks/:trackId?rangeDays=30
 
 ## Response shape
 
-Matches FE `CreatorAnalyticsDashboard` contract: `totalListens`, `uniqueListeners`, `completes`, `likes`, `saves`, `avgWatchPct`, `topRegions[]`, `focusHint`, `topTracks[]`, `timeseries[]`.
+Matches FE `CreatorAnalyticsDashboard` contract: `totalListens`, `uniqueListeners`, `monthlyListeners` (always last 28 days), `followers`, `completes`, `likes`, `saves`, `avgWatchPct`, `topRegions[]`, `focusHint`, `topTracks[]` (`coverUrl`, `skipRate`), `timeseries[]`, `sources[]`.
+
+Studio preview / admin inspect plays (`source=studio_preview|admin|inspect`) are excluded. See [FRONTEND_CREATOR_STUDIO_HANDOFF.md](./FRONTEND_CREATOR_STUDIO_HANDOFF.md).
 
 ---
 

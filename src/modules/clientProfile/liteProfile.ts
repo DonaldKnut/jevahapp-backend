@@ -3,6 +3,7 @@
  * Contabo-safe: pure response shaping — no extra services or RAM.
  */
 import type { Request } from "express";
+import { shapePublicAuthor, pickAuthorSource } from "./publicAuthor";
 
 export type ClientProfile = "full" | "lite";
 
@@ -32,6 +33,8 @@ export function compactFeedItem(item: any): any {
   const hlsUrl = item.hlsUrl || null;
   const playbackUrl = item.playbackUrl || item.fileUrl || item.videoUrl || null;
   const audioUrl = item.audioUrl || item.fileUrl || playbackUrl || null;
+
+  const author = shapePublicAuthor(pickAuthorSource(item));
 
   return {
     id,
@@ -64,6 +67,12 @@ export function compactFeedItem(item: any): any {
       item.hasBookmarked ?? item.isBookmarked ?? item.userInteractions?.saved
     ),
     artistName: item.artistName || item.singer || null,
+    uploadedBy: author,
+    author,
+    authorInfo: author
+      ? { ...author, fullName: author.name }
+      : null,
+    createdAt: item.createdAt || null,
     // Lite playback hints for Expo AV / exoplayer
     lite: {
       preferHls: Boolean(hlsUrl),

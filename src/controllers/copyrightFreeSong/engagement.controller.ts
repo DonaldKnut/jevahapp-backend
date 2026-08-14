@@ -512,6 +512,9 @@ export const toggleSave = async (req: Request, res: Response): Promise<void> => 
  * POST /api/audio/copyright-free/:songId/play
  * Also used for artist-lane tracks (same collection).
  * Increments playCount (scrobble-style; not unique).
+ *
+ * Studio / admin inspect must send `source=studio_preview` or `admin` so public
+ * playCount and creator analytics stay honest. Those sources are not counted.
  */
 export const recordPlay = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -527,34 +530,51 @@ export const recordPlay = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { CopyrightFreeSong } = await import("../../models/copyrightFreeSong.model");
-    const updated = await CopyrightFreeSong.findByIdAndUpdate(
-      songId,
-      { $inc: { playCount: 1 } },
-      { new: true }
+    const source = String(
+      (req.body && (req.body.source || req.body.playSource)) ||
+        req.query.source ||
+        ""
     )
-      .select("playCount viewCount likeCount lane artistSlug title")
-      .lean();
+      .trim()
+      .toLowerCase();
+    const { isNonStatPlaySource } = await import(
+      "../../modules/creators/creatorAudience.service"
+    );
+    const counted = !isNonStatPlaySource(source);
+
+    const { CopyrightFreeSong } = await import("../../models/copyrightFreeSong.model");
+    const updated = counted
+      ? await CopyrightFreeSong.findByIdAndUpdate(
+          songId,
+          { $inc: { playCount: 1 } },
+          { new: true }
+        )
+          .select("playCount viewCount likeCount lane artistSlug title")
+          .lean()
+      : await CopyrightFreeSong.findById(songId)
+          .select("playCount viewCount likeCount lane artistSlug title")
+          .lean();
 
     if (!updated) {
       res.status(404).json({ success: false, message: "Track not found" });
       return;
     }
 
-    // Also count as a view if threshold-like play (optional dual path — FE may still call /view)
-    try {
-      const { getIO } = await import("../../socket/socketManager");
-      const io = getIO();
-      if (io) {
-        io.to(`content:audio:${songId}`).emit("copyright-free-song-interaction-updated", {
-          songId,
-          playCount: (updated as any).playCount ?? 0,
-          viewCount: (updated as any).viewCount ?? 0,
-          likeCount: (updated as any).likeCount ?? 0,
-        });
+    if (counted) {
+      try {
+        const { getIO } = await import("../../socket/socketManager");
+        const io = getIO();
+        if (io) {
+          io.to(`content:audio:${songId}`).emit("copyright-free-song-interaction-updated", {
+            songId,
+            playCount: (updated as any).playCount ?? 0,
+            viewCount: (updated as any).viewCount ?? 0,
+            likeCount: (updated as any).likeCount ?? 0,
+          });
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
     }
 
     res.status(200).json({
@@ -562,6 +582,8 @@ export const recordPlay = async (req: Request, res: Response): Promise<void> => 
       data: {
         playCount: (updated as any).playCount ?? 0,
         id: songId,
+        counted,
+        source: source || "listener",
       },
     });
   } catch (error: any) {

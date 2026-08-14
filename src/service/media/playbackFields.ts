@@ -1,4 +1,5 @@
 import { parseDurationSeconds } from "../../utils/mediaTools";
+import { attachPublicAuthor } from "../../modules/clientProfile/publicAuthor";
 
 /**
  * Resolve playable duration (seconds) for feed / detail / status payloads.
@@ -51,9 +52,9 @@ export function enrichMediaPlaybackFields<T extends Record<string, any>>(
 ): T & { duration: number | null; processingStatus: string } {
   const duration = resolveDurationSeconds(doc);
   const processingStatus = resolveProcessingStatus(doc);
-  return {
+  return attachPublicAuthor({
     ...doc,
     duration,
     processingStatus,
-  };
+  });
 }

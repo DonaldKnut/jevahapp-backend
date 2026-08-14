@@ -15,6 +15,6 @@ describe("cacheKeys", () => {
   });
 
   it("feedGlobalKey is generation-scoped", () => {
-    expect(feedGlobalKey("abc", 3)).toBe("feed:global:v2:3:abc");
+    expect(feedGlobalKey("abc", 3)).toBe("feed:global:v3:3:abc");
   });
 });

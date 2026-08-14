@@ -33,6 +33,7 @@ export async function getMyCreatorAnalytics(
         success: false,
         message: result.message,
         code: result.code,
+        error: { code: result.code, message: result.message },
       });
       return;
     }
@@ -79,6 +80,7 @@ export async function getMyCreatorTrackAnalytics(
         success: false,
         message: result.message,
         code: result.code,
+        error: { code: result.code, message: result.message },
       });
       return;
     }

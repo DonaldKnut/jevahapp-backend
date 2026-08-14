@@ -9,6 +9,11 @@ import { CopyrightFreeSongInteraction } from "../../models/copyrightFreeSongInte
 import { FeedEvent } from "../../models/feedEvent.model";
 import { User } from "../../models/user.model";
 import logger from "../../utils/logger";
+import {
+  countArtistFollowers,
+  nonStatSourceFilter,
+  uniqueListenersSince,
+} from "./creatorAudience.service";
 
 const COUNTRY_NAMES: Record<string, string> = {
   NG: "Nigeria",
@@ -34,6 +39,8 @@ export type CreatorAnalyticsResult = {
   rangeDays: number;
   totalListens: number;
   uniqueListeners: number;
+  monthlyListeners: number;
+  followers: number;
   completes: number;
   likes: number;
   saves: number;
@@ -48,18 +55,21 @@ export type CreatorAnalyticsResult = {
   topTracks: Array<{
     trackId: string;
     title: string;
+    coverUrl: string | null;
     listens: number;
     completes: number;
     likes: number;
     saves: number;
     avgWatchPct: number;
+    skipRate: number;
   }>;
   timeseries: Array<{ date: string; listens: number }>;
+  sources: Array<{ source: string; listens: number; sharePct: number }>;
 };
 
 function clampRangeDays(raw: unknown): number {
-  const n = parseInt(String(raw ?? 30), 10);
-  if (!Number.isFinite(n)) return 30;
+  const n = parseInt(String(raw ?? 28), 10);
+  if (!Number.isFinite(n)) return 28;
   return Math.min(90, Math.max(1, n));
 }
 
@@ -96,6 +106,50 @@ function emptySeries(rangeDays: number): Array<{ date: string; listens: number }
   return out;
 }
 
+function trackCoverUrl(t: any): string | null {
+  return t?.thumbnailUrl || t?.artwork?.url || t?.coverUrl || null;
+}
+
+function emptyAnalytics(rangeDays: number): CreatorAnalyticsResult {
+  return {
+    rangeDays,
+    totalListens: 0,
+    uniqueListeners: 0,
+    monthlyListeners: 0,
+    followers: 0,
+    completes: 0,
+    likes: 0,
+    saves: 0,
+    avgWatchPct: 0,
+    topRegions: [],
+    focusHint: "Upload your first track to start seeing Studio analytics.",
+    topTracks: [],
+    timeseries: emptySeries(rangeDays),
+    sources: [],
+  };
+}
+
+function viewedInRangeMatch(trackIds: Types.ObjectId[], since: Date) {
+  return {
+    songId: { $in: trackIds },
+    hasViewed: true,
+    $or: [
+      { lastViewedAt: { $gte: since } },
+      { viewedAt: { $gte: since } },
+      { updatedAt: { $gte: since } },
+    ],
+  };
+}
+
+function feedStatMatch(trackIds: Types.ObjectId[], since: Date) {
+  return {
+    contentId: { $in: trackIds },
+    eventType: { $in: ["watch_time", "impression"] },
+    createdAt: { $gte: since },
+    ...nonStatSourceFilter(),
+  };
+}
+
 export async function getCreatorStudioAnalytics(
   userId: string,
   rangeDaysRaw?: unknown
@@ -127,8 +181,8 @@ export async function getCreatorStudioAnalytics(
     return {
       ok: false,
       status: 404,
-      message: "No creator profile yet",
-      code: "ARTIST_NOT_FOUND",
+      message: "No creator profile yet — apply first",
+      code: "NOT_A_CREATOR",
     };
   }
 
@@ -141,7 +195,7 @@ export async function getCreatorStudioAnalytics(
     artistId: artist._id,
     lane: "artist",
   })
-    .select("_id title playCount viewCount likeCount saveCount")
+    .select("_id title playCount viewCount likeCount saveCount thumbnailUrl artwork coverUrl")
     .lean()) as Array<{
     _id: Types.ObjectId;
     title?: string;
@@ -149,23 +203,25 @@ export async function getCreatorStudioAnalytics(
     viewCount?: number;
     likeCount?: number;
     saveCount?: number;
+    thumbnailUrl?: string | null;
+    artwork?: { url?: string | null };
+    coverUrl?: string | null;
   }>;
 
+  const [followers, monthlyListeners] = await Promise.all([
+    countArtistFollowers(userId, artist._id),
+    uniqueListenersSince(artist._id, 28),
+  ]);
+
   if (!tracks.length) {
-    const data: CreatorAnalyticsResult = {
-      rangeDays,
-      totalListens: 0,
-      uniqueListeners: 0,
-      completes: 0,
-      likes: 0,
-      saves: 0,
-      avgWatchPct: 0,
-      topRegions: [],
-      focusHint: "Upload your first track to start seeing Studio analytics.",
-      topTracks: [],
-      timeseries: emptySeries(rangeDays),
+    return {
+      ok: true,
+      data: {
+        ...emptyAnalytics(rangeDays),
+        followers,
+        monthlyListeners,
+      },
     };
-    return { ok: true, data };
   }
 
   const trackIds = tracks.map(t => t._id as Types.ObjectId);
@@ -183,24 +239,16 @@ export async function getCreatorStudioAnalytics(
     regionAgg,
     feedDayAgg,
     perTrackComplete,
+    skipAgg,
+    sourceAgg,
   ] = await Promise.all([
     CopyrightFreeSongInteraction.aggregate([
-      {
-        $match: {
-          songId: { $in: trackIds },
-          hasViewed: true,
-        },
-      },
+      { $match: viewedInRangeMatch(trackIds, since) },
       { $group: { _id: "$userId" } },
       { $count: "n" },
     ]),
     CopyrightFreeSongInteraction.aggregate([
-      {
-        $match: {
-          songId: { $in: trackIds },
-          hasViewed: true,
-        },
-      },
+      { $match: viewedInRangeMatch(trackIds, since) },
       {
         $group: {
           _id: null,
@@ -212,8 +260,7 @@ export async function getCreatorStudioAnalytics(
     CopyrightFreeSongInteraction.aggregate([
       {
         $match: {
-          songId: { $in: trackIds },
-          hasViewed: true,
+          ...viewedInRangeMatch(trackIds, since),
           countryCode: { $type: "string", $ne: "" },
         },
       },
@@ -222,13 +269,7 @@ export async function getCreatorStudioAnalytics(
       { $limit: 10 },
     ]),
     FeedEvent.aggregate([
-      {
-        $match: {
-          contentId: { $in: trackIds },
-          eventType: { $in: ["watch_time", "impression"] },
-          createdAt: { $gte: since },
-        },
-      },
+      { $match: feedStatMatch(trackIds, since) },
       {
         $group: {
           _id: {
@@ -240,12 +281,7 @@ export async function getCreatorStudioAnalytics(
       { $sort: { _id: 1 } },
     ]),
     CopyrightFreeSongInteraction.aggregate([
-      {
-        $match: {
-          songId: { $in: trackIds },
-          hasViewed: true,
-        },
-      },
+      { $match: viewedInRangeMatch(trackIds, since) },
       {
         $group: {
           _id: "$songId",
@@ -254,6 +290,35 @@ export async function getCreatorStudioAnalytics(
           uniqueListeners: { $sum: 1 },
         },
       },
+    ]),
+    FeedEvent.aggregate([
+      {
+        $match: {
+          contentId: { $in: trackIds },
+          eventType: "skip",
+          createdAt: { $gte: since },
+          ...nonStatSourceFilter(),
+        },
+      },
+      { $group: { _id: "$contentId", skips: { $sum: 1 } } },
+    ]),
+    FeedEvent.aggregate([
+      {
+        $match: {
+          contentId: { $in: trackIds },
+          eventType: { $in: ["watch_time", "impression"] },
+          createdAt: { $gte: since },
+          ...nonStatSourceFilter(),
+        },
+      },
+      {
+        $group: {
+          _id: { $ifNull: ["$source", "unknown"] },
+          listens: { $sum: 1 },
+        },
+      },
+      { $sort: { listens: -1 } },
+      { $limit: 12 },
     ]),
   ]);
 
@@ -287,20 +352,28 @@ export async function getCreatorStudioAnalytics(
       avgWatchPct: Math.round((row.avgWatchPct || 0) * 10) / 10,
     });
   }
+  const skipsByTrack = new Map<string, number>();
+  for (const row of skipAgg as any[]) {
+    skipsByTrack.set(String(row._id), row.skips || 0);
+  }
 
   const topTracks = [...tracks]
     .map(t => {
       const id = (t._id as Types.ObjectId).toString();
       const q = qualityByTrack.get(id) || { completes: 0, avgWatchPct: 0 };
       const listens = (t.playCount || 0) + (t.viewCount || 0);
+      const skips = skipsByTrack.get(id) || 0;
+      const denom = listens + skips;
       return {
         trackId: id,
         title: t.title || "Untitled",
+        coverUrl: trackCoverUrl(t),
         listens,
         completes: q.completes,
         likes: t.likeCount || 0,
         saves: t.saveCount || 0,
         avgWatchPct: q.avgWatchPct,
+        skipRate: denom > 0 ? Math.round((skips / denom) * 1000) / 1000 : 0,
       };
     })
     .sort((a, b) => b.listens - a.listens)
@@ -315,10 +388,25 @@ export async function getCreatorStudioAnalytics(
     listens: seriesMap.get(point.date) || 0,
   }));
 
+  const sourceTotal =
+    (sourceAgg as any[]).reduce((s, r) => s + (r.listens || 0), 0) || 1;
+  const sources = (sourceAgg as any[])
+    .filter(r => !["studio_preview", "admin", "inspect"].includes(String(r._id || "")))
+    .map(r => {
+      const listens = r.listens || 0;
+      return {
+        source: String(r._id || "unknown"),
+        listens,
+        sharePct: Math.round((listens / sourceTotal) * 1000) / 10,
+      };
+    });
+
   const data: CreatorAnalyticsResult = {
     rangeDays,
     totalListens,
     uniqueListeners,
+    monthlyListeners,
+    followers,
     completes,
     likes,
     saves,
@@ -327,6 +415,7 @@ export async function getCreatorStudioAnalytics(
     focusHint: buildFocusHint(topRegions, topTracks),
     topTracks,
     timeseries,
+    sources,
   };
 
   logger.info("creator_studio_analytics", {
@@ -390,8 +479,8 @@ export async function getCreatorTrackAnalytics(
     return {
       ok: false,
       status: 404,
-      message: "No creator profile yet",
-      code: "ARTIST_NOT_FOUND",
+      message: "No creator profile yet — apply first",
+      code: "NOT_A_CREATOR",
     };
   }
 
@@ -453,6 +542,7 @@ export async function getCreatorTrackAnalytics(
           contentId: songObj,
           eventType: { $in: ["watch_time", "impression"] },
           createdAt: { $gte: since },
+          ...nonStatSourceFilter(),
         },
       },
       {
@@ -500,11 +590,13 @@ export async function getCreatorTrackAnalytics(
     {
       trackId,
       title,
+      coverUrl: null,
       listens,
       completes,
       likes: track.likeCount || 0,
       saves: track.saveCount || 0,
       avgWatchPct,
+      skipRate: 0,
     },
   ]);
 

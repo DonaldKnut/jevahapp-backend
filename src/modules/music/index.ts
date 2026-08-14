@@ -8,6 +8,7 @@ import {
   browseMusicTracks,
   listPublicArtists,
   recordMusicTrackPlay,
+  recordMusicPlays,
 } from "../../controllers/publicMusic.controller";
 import {
   getPublicReleaseHandler,
@@ -81,6 +82,12 @@ musicRouter.post(
   verifyToken,
   apiRateLimiter,
   toggleSaveCopyrightFreeSong
+);
+musicRouter.post(
+  "/plays",
+  verifyToken,
+  apiRateLimiter,
+  recordMusicPlays
 );
 musicRouter.post(
   "/tracks/:songId/play",

@@ -127,11 +127,47 @@ export const getUserById = async (
       targetUserId: userId,
     });
 
+    const avatar = user.avatar || user.avatarUpload || null;
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || null;
+    const publicUser = {
+      _id: user.id,
+      id: user.id,
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      name,
+      avatar,
+      avatarUrl: avatar,
+      avatarUpload: user.avatarUpload || avatar,
+      email: user.email,
+    };
+
     response.status(200).json({
       success: true,
-      data: user,
+      user: publicUser,
+      data: {
+        user: publicUser,
+        ...user,
+        _id: user.id,
+        id: user.id,
+        avatar,
+      },
     });
   } catch (error: any) {
+    const msg = String(error?.message || "");
+    if (msg.includes("User not found") || msg.includes("Invalid user ID")) {
+      logger.warn("User profile not found by ID", {
+        requestedBy: request.userId,
+        targetUserId: request.params.userId,
+      });
+      response.status(404).json({
+        success: false,
+        message: "User not found",
+        code: "USER_NOT_FOUND",
+        error: { code: "USER_NOT_FOUND", message: "User not found" },
+      });
+      return;
+    }
     logger.error("Error getting user by ID", {
       error: error.message,
       requestedBy: request.userId,

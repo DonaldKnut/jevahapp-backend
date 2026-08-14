@@ -25,6 +25,7 @@ async function requireActiveArtist(userId: string) {
       error: {
         status: 404,
         message: "No creator profile — apply first",
+        code: "NOT_A_CREATOR",
       } as const,
     };
   }
@@ -46,6 +47,7 @@ function sendReleaseError(res: Response, error: any) {
       success: false,
       message: error.message,
       code: error.code,
+      error: { code: error.code, message: error.message },
       ...(error.data !== undefined ? { data: error.data } : {}),
     });
     return true;

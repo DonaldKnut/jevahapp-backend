@@ -27,7 +27,7 @@ export const CACHE_TTL = {
   userFlags: 24 * 3600,
 } as const;
 
-export const FEED_CACHE_SCHEMA = "v2";
+export const FEED_CACHE_SCHEMA = "v3";
 
 export const FEED_GLOBAL_GENERATION_KEY = "feed:global:generation";
 

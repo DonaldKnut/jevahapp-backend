@@ -11,7 +11,7 @@ export async function getMediaByIdentifier(mediaIdentifier: string, options: { a
     .select(
       "title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl topics uploadedBy duration fileSize width height bitrate createdAt updatedAt isDownloadable downloadUrl shareUrl viewThreshold moderationStatus isHidden processing processingMetadata"
     )
-    .populate("uploadedBy", "firstName lastName avatar");
+    .populate("uploadedBy", "firstName lastName avatar avatarUpload");
   if (!media) {
     throw new Error("Media not found");
   }
@@ -49,7 +49,7 @@ export async function getRecentMedia(limit: number) {
     .select(
       "title contentType category createdAt thumbnailUrl fileUrl duration processing processingMetadata moderationStatus playbackUrl hlsUrl"
     )
-    .populate("uploadedBy", "firstName lastName avatar")
+    .populate("uploadedBy", "firstName lastName avatar avatarUpload")
     .lean();
   return rows.map((row: any) => enrichMediaPlaybackFields(row));
 }

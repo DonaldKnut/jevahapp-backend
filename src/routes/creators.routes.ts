@@ -1,8 +1,14 @@
 import { Router } from "express";
+import { applyAsCreator } from "../controllers/adminArtists.controller";
 import {
-  applyAsCreator,
   getMyCreatorProfile,
-} from "../controllers/adminArtists.controller";
+  patchMyCreatorProfile,
+  getMyCreatorAudience,
+  creatorAvatarUploadIntent,
+  creatorAvatarFinalize,
+  creatorBannerUploadIntent,
+  creatorBannerFinalize,
+} from "../controllers/creatorProfile.controller";
 import { getMyCreatorAnalytics, getMyCreatorTrackAnalytics } from "../controllers/creatorAnalytics.controller";
 import {
   listMyCreatorTracks,
@@ -43,6 +49,36 @@ router.post(
   applyAsCreator
 );
 router.get("/me", verifyToken, apiRateLimiter, getMyCreatorProfile);
+router.patch("/me", verifyToken, apiRateLimiter, patchMyCreatorProfile);
+router.get("/me/audience", verifyToken, apiRateLimiter, getMyCreatorAudience);
+router.post(
+  "/me/avatar/upload-intent",
+  verifyToken,
+  requireEmailVerified,
+  apiRateLimiter,
+  creatorAvatarUploadIntent
+);
+router.post(
+  "/me/avatar/finalize",
+  verifyToken,
+  requireEmailVerified,
+  apiRateLimiter,
+  creatorAvatarFinalize
+);
+router.post(
+  "/me/banner/upload-intent",
+  verifyToken,
+  requireEmailVerified,
+  apiRateLimiter,
+  creatorBannerUploadIntent
+);
+router.post(
+  "/me/banner/finalize",
+  verifyToken,
+  requireEmailVerified,
+  apiRateLimiter,
+  creatorBannerFinalize
+);
 router.get("/me/analytics", verifyToken, apiRateLimiter, getMyCreatorAnalytics);
 router.get(
   "/me/analytics/tracks/:trackId",

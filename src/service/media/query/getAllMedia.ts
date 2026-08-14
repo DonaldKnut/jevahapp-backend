@@ -82,7 +82,7 @@ export async function getAllMedia(filters: any = {}, options: { enforceModeratio
     .sort(sort)
     .skip(skip)
     .limit(limit)
-    .populate("uploadedBy", "firstName lastName avatar")
+    .populate("uploadedBy", "firstName lastName avatar avatarUpload")
     .lean();
 
   const total = await Media.countDocuments(query);
