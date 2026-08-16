@@ -13,7 +13,7 @@ Errors: `{ success, message, code, error: { code, message } }`.
 | Method | Path | Notes |
 |--------|------|--------|
 | GET | `/api/creators/me` | `artist.avatarUrl`, `bannerUrl`, `location`, `genres[]`, `socials` (incl. tiktok/website), `bio`, `slug`, `isVerified`, `followers`, `monthlyListeners` |
-| PATCH | `/api/creators/me` | **Implemented.** Active + pending artists. Accepts `displayName`, `bio`, `genres[]`, `socials{instagram,youtube,website,tiktok,spotify,twitter}`, `location`, `bannerUrl`, `avatarUrl`. Ignores `monthlyListeners`. |
+| PATCH | `/api/creators/me` | **Implemented.** Active + pending artists. Accepts `displayName`, `bio`, `genres[]`, `socials{instagram,youtube,website,tiktok,spotify,twitter}` (`https` or `@handle` only), `location`. `avatarUrl`/`bannerUrl` only if they are **our CDN** — prefer the presign routes below. Ignores `monthlyListeners`. Email must be verified. |
 | GET | `/api/creators/me/tracks` | `q`, `visibility`, `sort=recent\|plays\|title\|duration`, `page`, `limit` (default 50). Always `durationSec`, `thumbnailUrl`/`coverUrl`/`artwork`, `genre`, `release`, `playCount`, `createdAt`, `visibility` (`public` FE / `visibilityDb` published), `processingStatus`, `likes`/`saves`, `uniqueListeners`, `isrc`, `explicit` |
 | PATCH | `/api/creators/tracks/:id` | `title`, `artistName`, `genre`, `visibility`, plus `isrc`, `lyrics`, `explicit`, `language`, `trackNumber` |
 | DELETE | `/api/creators/tracks/:id` | |
@@ -84,7 +84,9 @@ POST /api/creators/me/banner/upload-intent
 POST /api/creators/me/banner/finalize
 ```
 
-Body for intent: `{ contentType, fileName?, fileSizeBytes? }`. Then PUT to `data.putUrl`. Then finalize. Echoed on `GET /me` as `artist.avatarUrl` / `artist.bannerUrl`.
+Body for intent: `{ contentType, fileName?, fileSizeBytes? }`. Then PUT to `data.putUrl`. Then finalize. Echoed on `GET /me` as `artist.avatarUrl` / `artist.bannerUrl`. Avatar finalize also copies the URL onto `User.avatar` / `User.avatarUpload` so feed/profile cards match Studio.
+
+Do **not** PATCH a random `https://…` avatar; that 400s `INVALID_IMAGE_URL`.
 
 ---
 
@@ -95,3 +97,4 @@ Body for intent: `{ contentType, fileName?, fileSizeBytes? }`. Then PUT to `data
 - `TYPE_HINT_MISMATCH` (publish; FE “publish anyway” via `skipTypeHints`)
 - `COVER_REQUIRED` (optional policy — not enforced yet)
 - `CREATOR_SUSPENDED` / `ACCOUNT_BANNED`
+- `INVALID_IMAGE_URL` (PATCH `avatarUrl`/`bannerUrl` not on our CDN)

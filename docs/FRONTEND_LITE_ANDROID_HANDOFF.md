@@ -32,6 +32,7 @@ Lite response extras:
 
 - Smaller page default (8, cap 12)
 - Stripped fields (no moderation blobs / fat nested objects)
+- **Author kept** — `uploadedBy` / `author` / `authorInfo` are a compact `{ _id, id, firstName, lastName, name, avatar }` object. Do not show Unknown; see [FRONTEND_AUTHOR_AVATAR_HANDOFF.md](./FRONTEND_AUTHOR_AVATAR_HANDOFF.md)
 - `data.profile: "lite"`
 - Per-item `lite: { preferHls, maxVideoHeight: 360, prefetchCount: 1, imageMaxEdge }`
 

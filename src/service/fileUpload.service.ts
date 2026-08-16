@@ -530,6 +530,34 @@ class FileUploadService {
       })
     );
   }
+
+  async getObjectBuffer(
+    objectKey: string,
+    opts?: { maxBytes?: number }
+  ): Promise<Buffer | null> {
+    try {
+      const out = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET,
+          Key: objectKey,
+        })
+      );
+      const max = opts?.maxBytes;
+      if (max && out.ContentLength && out.ContentLength > max) {
+        return null;
+      }
+      const bytes = await out.Body?.transformToByteArray();
+      if (!bytes) return null;
+      if (max && bytes.byteLength > max) return null;
+      return Buffer.from(bytes);
+    } catch (err: any) {
+      const status = err?.$metadata?.httpStatusCode;
+      if (status === 404 || err?.name === "NotFound" || err?.name === "NoSuchKey") {
+        return null;
+      }
+      throw err;
+    }
+  }
 }
 
 export default new FileUploadService();

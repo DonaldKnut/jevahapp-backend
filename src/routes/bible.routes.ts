@@ -18,6 +18,8 @@ import {
   getCrossReferences,
   getCommentary,
   getAvailableTranslations,
+  getTranslationManifest,
+  getTranslationPack,
 } from "../controllers/bible.controller";
 import { apiRateLimiter } from "../middleware/rateLimiter";
 import { cacheMiddleware } from "../middleware/cache.middleware";
@@ -104,9 +106,20 @@ router.get(
 
 // GET /api/bible/translations - Get available translations
 router.get(
+  "/translations/:id/manifest",
+  apiRateLimiter,
+  cacheMiddleware(60),
+  getTranslationManifest
+);
+router.get(
+  "/translations/:id/pack",
+  apiRateLimiter,
+  getTranslationPack
+);
+router.get(
   "/translations",
   apiRateLimiter,
-  cacheMiddleware(3600), // 1 hour - translations don't change often
+  cacheMiddleware(120),
   getAvailableTranslations
 );
 

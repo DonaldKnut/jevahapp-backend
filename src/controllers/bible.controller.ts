@@ -1,6 +1,33 @@
 import { Request, Response } from "express";
 import bibleService from "../service/bible.service";
 import logger from "../utils/logger";
+import {
+  UnknownTranslationError,
+  isLicensedTranslation,
+  shapeVerseJson,
+  unknownTranslationBody,
+} from "../modules/bible/bibleTranslations";
+import {
+  assertPackDownloadAllowed,
+  licenseDeniedBody,
+  loadPackManifest,
+} from "../modules/bible/biblePack";
+import { resolveClientProfile } from "../modules/clientProfile/liteProfile";
+
+async function resolveTranslationParam(
+  request: Request,
+  response: Response
+): Promise<string | null> {
+  try {
+    return await bibleService.resolveTranslation(request.query.translation);
+  } catch (error) {
+    if (error instanceof UnknownTranslationError) {
+      response.status(404).json(unknownTranslationBody());
+      return null;
+    }
+    throw error;
+  }
+}
 
 /**
  * Get all Bible books
@@ -137,18 +164,25 @@ export const getChapter = async (
       return;
     }
 
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
     const chapter = await bibleService.getChapter(bookName, chapterNum);
 
     if (chapter) {
-      // Get actual verse count from database
-      const verseCount = await bibleService.getVerseCount(bookName, chapterNum);
+      const verseCount = await bibleService.getVerseCount(
+        bookName,
+        chapterNum,
+        translation
+      );
 
       response.status(200).json({
         success: true,
         data: {
           ...chapter.toObject(),
-          actualVerseCount: verseCount, // Actual count from verses in DB
+          actualVerseCount: verseCount,
         },
+        translation,
       });
     } else {
       response.status(404).json({
@@ -174,7 +208,6 @@ export const getVerses = async (
 ): Promise<void> => {
   try {
     const { bookName, chapterNumber } = request.params;
-    const { translation = "WEB" } = request.query; // Default to WEB
     const chapterNum = parseInt(chapterNumber);
 
     if (isNaN(chapterNum) || chapterNum < 1) {
@@ -185,17 +218,20 @@ export const getVerses = async (
       return;
     }
 
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
     const verses = await bibleService.getVersesByChapter(
       bookName,
       chapterNum,
-      translation as string
+      translation
     );
 
     response.status(200).json({
       success: true,
-      data: verses,
+      data: verses.map(v => shapeVerseJson(v, translation)),
       count: verses.length,
-      translation: (translation as string).toUpperCase(),
+      translation,
     });
   } catch (error) {
     logger.error("Get verses error:", error);
@@ -215,7 +251,6 @@ export const getVerse = async (
 ): Promise<void> => {
   try {
     const { bookName, chapterNumber, verseNumber } = request.params;
-    const { translation = "WEB" } = request.query; // Default to WEB
     const chapterNum = parseInt(chapterNumber);
     const verseNum = parseInt(verseNumber);
 
@@ -235,23 +270,26 @@ export const getVerse = async (
       return;
     }
 
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
     const verse = await bibleService.getVerse(
       bookName,
       chapterNum,
       verseNum,
-      translation as string
+      translation
     );
 
     if (verse) {
       response.status(200).json({
         success: true,
-        data: verse,
-        translation: (translation as string).toUpperCase(),
+        data: shapeVerseJson(verse, translation),
+        translation,
       });
     } else {
       response.status(404).json({
         success: false,
-        message: `Verse not found in ${(translation as string).toUpperCase()} translation`,
+        message: `Verse not found in ${translation} translation`,
       });
     }
   } catch (error) {
@@ -293,13 +331,17 @@ export const getVerseRange = async (
       return;
     }
 
-    const verses = await bibleService.getVerseRange(range);
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
+    const verses = await bibleService.getVerseRange(range, translation);
 
     response.status(200).json({
       success: true,
-      data: verses,
+      data: verses.map(v => shapeVerseJson(v, translation)),
       count: verses.length,
       reference: range,
+      translation,
     });
   } catch (error) {
     logger.error("Get verse range error:", error);
@@ -328,21 +370,29 @@ export const searchBible = async (
       return;
     }
 
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
     const searchOptions = {
       query: q,
       book: book as string,
       testament: testament as "old" | "new",
       limit: parseInt(limit as string) || 50,
       offset: parseInt(offset as string) || 0,
+      translation,
     };
 
     const results = await bibleService.searchBible(searchOptions);
 
     response.status(200).json({
       success: true,
-      data: results,
+      data: results.map(r => ({
+        ...r,
+        verse: shapeVerseJson(r.verse, translation),
+      })),
       count: results.length,
       query: searchOptions,
+      translation,
     });
   } catch (error) {
     logger.error("Search Bible error:", error);
@@ -427,13 +477,12 @@ export const getAvailableTranslations = async (
   response: Response
 ): Promise<void> => {
   try {
-    // Get unique translations from database
-    const translations = await bibleService.getAvailableTranslations();
+    const catalog = await bibleService.getTranslationCatalog();
 
     response.status(200).json({
       success: true,
-      data: translations,
-      count: translations.length,
+      data: catalog,
+      count: catalog.translations.length,
     });
   } catch (error) {
     logger.error("Get translations error:", error);
@@ -452,12 +501,16 @@ export const getRandomVerse = async (
   response: Response
 ): Promise<void> => {
   try {
-    const verse = await bibleService.getRandomVerse();
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
+    const verse = await bibleService.getRandomVerse(translation);
 
     if (verse) {
       response.status(200).json({
         success: true,
-        data: verse,
+        data: shapeVerseJson(verse, translation),
+        translation,
       });
     } else {
       response.status(404).json({
@@ -482,12 +535,16 @@ export const getVerseOfTheDay = async (
   response: Response
 ): Promise<void> => {
   try {
-    const verse = await bibleService.getVerseOfTheDay();
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
+    const verse = await bibleService.getVerseOfTheDay(translation);
 
     if (verse) {
       response.status(200).json({
         success: true,
-        data: verse,
+        data: shapeVerseJson(verse, translation),
+        translation,
         date: new Date().toISOString().split("T")[0],
       });
     } else {
@@ -516,12 +573,16 @@ export const getPopularVerses = async (
     const { limit = 10 } = request.query;
     const limitNum = parseInt(limit as string) || 10;
 
-    const verses = await bibleService.getPopularVerses(limitNum);
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+
+    const verses = await bibleService.getPopularVerses(limitNum, translation);
 
     response.status(200).json({
       success: true,
-      data: verses,
+      data: verses.map(v => shapeVerseJson(v, translation)),
       count: verses.length,
+      translation,
     });
   } catch (error) {
     logger.error("Get popular verses error:", error);
@@ -670,6 +731,77 @@ export const getCommentary = async (
     response.status(500).json({
       success: false,
       message: "Failed to get commentary",
+    });
+  }
+};
+
+/**
+ * GET /api/bible/translations/:id/manifest
+ * Licensed → 403. Missing pack → 404 (not 500).
+ */
+export const getTranslationManifest = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const rawId = String(request.params.id || "");
+    if (isLicensedTranslation(rawId)) {
+      response.status(403).json(licenseDeniedBody());
+      return;
+    }
+    (request.query as any).translation = rawId;
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+    const isLite = resolveClientProfile(request) === "lite";
+    const manifest = await loadPackManifest(translation);
+    const gate = assertPackDownloadAllowed(translation, manifest, isLite);
+    if (!gate.ok) {
+      response.status(gate.status).json(gate.body);
+      return;
+    }
+    response.status(200).json({
+      success: true,
+      data: manifest,
+    });
+  } catch (error) {
+    logger.error("Get translation manifest error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to get pack manifest",
+    });
+  }
+};
+
+/**
+ * GET /api/bible/translations/:id/pack — 302 to R2. Never streams gzip through Node.
+ */
+export const getTranslationPack = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const rawId = String(request.params.id || "");
+    if (isLicensedTranslation(rawId)) {
+      response.status(403).json(licenseDeniedBody());
+      return;
+    }
+    (request.query as any).translation = rawId;
+    const translation = await resolveTranslationParam(request, response);
+    if (!translation) return;
+    const isLite = resolveClientProfile(request) === "lite";
+    const manifest = await loadPackManifest(translation);
+    const gate = assertPackDownloadAllowed(translation, manifest, isLite);
+    if (!gate.ok) {
+      response.status(gate.status).json(gate.body);
+      return;
+    }
+    response.setHeader("Cache-Control", "no-store");
+    response.redirect(302, manifest!.packUrl);
+  } catch (error) {
+    logger.error("Get translation pack error:", error);
+    response.status(500).json({
+      success: false,
+      message: "Failed to get pack",
     });
   }
 };

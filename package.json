@@ -36,6 +36,7 @@
     "seed:forums": "node scripts/seed-forum-categories.js",
     "seed:super-admin": "node scripts/seed-super-admin.js",
     "seed:demo-creator": "node scripts/seed-demo-creator.js",
+    "bible:pack": "node scripts/build-bible-pack.js",
     "seed:polls": "node scripts/seed-polls.js",
     "seed:polls:clear": "node scripts/seed-polls.js --clear",
     "seed:copyright-free": "node scripts/seed-copyright-free-songs.js",

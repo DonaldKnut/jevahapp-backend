@@ -49,7 +49,13 @@ router.post(
   applyAsCreator
 );
 router.get("/me", verifyToken, apiRateLimiter, getMyCreatorProfile);
-router.patch("/me", verifyToken, apiRateLimiter, patchMyCreatorProfile);
+router.patch(
+  "/me",
+  verifyToken,
+  requireEmailVerified,
+  apiRateLimiter,
+  patchMyCreatorProfile
+);
 router.get("/me/audience", verifyToken, apiRateLimiter, getMyCreatorAudience);
 router.post(
   "/me/avatar/upload-intent",

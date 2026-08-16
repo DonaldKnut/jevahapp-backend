@@ -9,6 +9,15 @@ import {
   BIBLE_BOOKS,
 } from "../models/bible.model";
 import logger from "../utils/logger";
+import {
+  DEFAULT_TRANSLATION_ID,
+  UnknownTranslationError,
+  shapeCatalogItem,
+  toPublicTranslationId,
+  toStorageTranslationCode,
+  type TranslationCatalogItem,
+} from "../modules/bible/bibleTranslations";
+import { loadPackManifest } from "../modules/bible/biblePack";
 
 export interface BibleSearchOptions {
   query: string;
@@ -16,6 +25,7 @@ export interface BibleSearchOptions {
   testament?: "old" | "new";
   limit?: number;
   offset?: number;
+  translation?: string;
 }
 
 export interface BibleVerseRange {
@@ -131,13 +141,17 @@ class BibleService {
    */
   async getVerseCount(
     bookName: string,
-    chapterNumber: number
+    chapterNumber: number,
+    translation?: string
   ): Promise<number> {
     try {
       const count = await BibleVerse.countDocuments({
         bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
         chapterNumber,
         isActive: true,
+        ...(translation
+          ? { translation: toStorageTranslationCode(translation) }
+          : {}),
       });
       return count;
     } catch (error) {
@@ -163,7 +177,7 @@ class BibleService {
 
       // Filter by translation if provided
       if (translation) {
-        query.translation = translation.toUpperCase();
+        query.translation = toStorageTranslationCode(translation);
       }
 
       const verses = await BibleVerse.find(query).sort({ verseNumber: 1 });
@@ -193,7 +207,7 @@ class BibleService {
 
       // Filter by translation if provided
       if (translation) {
-        query.translation = translation.toUpperCase();
+        query.translation = toStorageTranslationCode(translation);
       }
 
       const verse = await BibleVerse.findOne(query);
@@ -207,7 +221,10 @@ class BibleService {
   /**
    * Get a range of verses
    */
-  async getVerseRange(range: BibleVerseRange): Promise<IBibleVerse[]> {
+  async getVerseRange(
+    range: BibleVerseRange,
+    translation?: string
+  ): Promise<IBibleVerse[]> {
     try {
       const { bookName, startChapter, startVerse, endChapter, endVerse } =
         range;
@@ -216,6 +233,9 @@ class BibleService {
         bookName: { $regex: new RegExp(`^${bookName}$`, "i") },
         isActive: true,
       };
+      if (translation) {
+        query.translation = toStorageTranslationCode(translation);
+      }
 
       if (endChapter && endChapter !== startChapter) {
         // Cross-chapter range
@@ -259,12 +279,16 @@ class BibleService {
     options: BibleSearchOptions
   ): Promise<IBibleSearchResult[]> {
     try {
-      const { query, book, testament, limit = 50, offset = 0 } = options;
+      const { query, book, testament, limit = 50, offset = 0, translation } =
+        options;
 
       const searchQuery: any = {
         $text: { $search: query },
         isActive: true,
       };
+      if (translation) {
+        searchQuery.translation = toStorageTranslationCode(translation);
+      }
 
       if (book) {
         // Try to match book name or abbreviation (e.g., "pro" -> "Proverbs" or "Pro")
@@ -328,10 +352,14 @@ class BibleService {
   /**
    * Get random verse
    */
-  async getRandomVerse(): Promise<IBibleVerse | null> {
+  async getRandomVerse(translation?: string): Promise<IBibleVerse | null> {
     try {
+      const match: Record<string, unknown> = { isActive: true };
+      if (translation) {
+        match.translation = toStorageTranslationCode(translation);
+      }
       const verse = await BibleVerse.aggregate([
-        { $match: { isActive: true } },
+        { $match: match },
         { $sample: { size: 1 } },
       ]);
       return verse.length > 0 ? verse[0] : null;
@@ -344,7 +372,7 @@ class BibleService {
   /**
    * Get verse of the day (based on date)
    */
-  async getVerseOfTheDay(): Promise<IBibleVerse | null> {
+  async getVerseOfTheDay(translation?: string): Promise<IBibleVerse | null> {
     try {
       const today = new Date();
       const dayOfYear = Math.floor(
@@ -352,10 +380,13 @@ class BibleService {
           (1000 * 60 * 60 * 24)
       );
 
-      // Use day of year to get a consistent verse for the day
+      const match: Record<string, unknown> = { isActive: true };
+      if (translation) {
+        match.translation = toStorageTranslationCode(translation);
+      }
       const verse = await BibleVerse.aggregate([
-        { $match: { isActive: true } },
-        { $skip: dayOfYear % 31102 }, // 31102 is approximate total verses
+        { $match: match },
+        { $skip: dayOfYear % 31102 },
         { $limit: 1 },
       ]);
 
@@ -369,7 +400,10 @@ class BibleService {
   /**
    * Get popular verses (most searched or referenced)
    */
-  async getPopularVerses(limit: number = 10): Promise<IBibleVerse[]> {
+  async getPopularVerses(
+    limit: number = 10,
+    translation?: string
+  ): Promise<IBibleVerse[]> {
     try {
       // For now, return some well-known verses
       // In a real implementation, you'd track verse popularity
@@ -391,7 +425,8 @@ class BibleService {
         const verse = await this.getVerse(
           ref.bookName,
           ref.chapterNumber,
-          ref.verseNumber
+          ref.verseNumber,
+          translation
         );
         if (verse) verses.push(verse);
       }
@@ -535,45 +570,115 @@ class BibleService {
   }
 
   /**
+   * Distinct stored translation codes + verse counts (short memory cache).
+   */
+  private translationInventory:
+    | { at: number; counts: Map<string, number> }
+    | null = null;
+
+  private async loadTranslationInventory(): Promise<Map<string, number>> {
+    const now = Date.now();
+    if (
+      this.translationInventory &&
+      now - this.translationInventory.at < 5 * 60 * 1000
+    ) {
+      return this.translationInventory.counts;
+    }
+    const rows = await BibleVerse.aggregate([
+      { $match: { isActive: true } },
+      { $group: { _id: "$translation", count: { $sum: 1 } } },
+    ]);
+    const counts = new Map<string, number>();
+    for (const r of rows as Array<{ _id: string; count: number }>) {
+      if (r._id) counts.set(String(r._id).toUpperCase(), r.count || 0);
+    }
+    this.translationInventory = { at: now, counts };
+    return counts;
+  }
+
+  /**
+   * Resolve ?translation= to a public id. Omitted → web (today's corpus).
+   * Unknown id → 404.
+   */
+  async resolveTranslation(raw?: unknown): Promise<string> {
+    const omitted =
+      raw === undefined || raw === null || String(raw).trim() === "";
+    const publicId = omitted
+      ? DEFAULT_TRANSLATION_ID
+      : toPublicTranslationId(String(raw));
+    if (omitted || publicId === DEFAULT_TRANSLATION_ID) {
+      return DEFAULT_TRANSLATION_ID;
+    }
+    const inventory = await this.loadTranslationInventory();
+    if (inventory.has(toStorageTranslationCode(publicId))) {
+      return publicId;
+    }
+    throw new UnknownTranslationError(publicId);
+  }
+
+  /**
+   * Catalog for FE picker. defaultId is always web (production corpus).
+   * Licensed translations may appear with offline:false if present in Mongo.
+   */
+  async getTranslationCatalog(): Promise<{
+    defaultId: string;
+    translations: TranslationCatalogItem[];
+  }> {
+    const inventory = await this.loadTranslationInventory();
+    const items: TranslationCatalogItem[] = [];
+
+    const seen = new Set<string>();
+    const ensure = (stored: string, count: number) => {
+      const id = toPublicTranslationId(stored);
+      if (seen.has(id)) return;
+      seen.add(id);
+      items.push(shapeCatalogItem({ storedCode: stored, verseCount: count }));
+    };
+
+    ensure("WEB", inventory.get("WEB") || 0);
+    for (const [code, count] of inventory.entries()) {
+      if (code === "WEB") continue;
+      ensure(code, count);
+    }
+
+    await Promise.all(
+      items.map(async (item, i) => {
+        if (item.license === "licensed") return;
+        try {
+          const manifest = await loadPackManifest(item.id);
+          if (!manifest?.bytes) return;
+          items[i] = shapeCatalogItem({
+            storedCode: item.code,
+            verseCount: item.verseCount,
+            packBytes: manifest.bytes,
+          });
+        } catch {
+          /* catalog still 200 with offline:false */
+        }
+      })
+    );
+
+    items.sort((a, b) => {
+      if (a.isDefault) return -1;
+      if (b.isDefault) return 1;
+      return a.abbreviation.localeCompare(b.abbreviation);
+    });
+
+    return { defaultId: DEFAULT_TRANSLATION_ID, translations: items };
+  }
+
+  /**
    * Get available translations
    */
-  async getAvailableTranslations(): Promise<
-    Array<{ code: string; name: string; count: number }>
-  > {
+  async getAvailableTranslations(): Promise<TranslationCatalogItem[]> {
     try {
-      const translations = await BibleVerse.aggregate([
-        { $match: { isActive: true } },
-        {
-          $group: {
-            _id: "$translation",
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { count: -1 } },
-      ]);
-
-      // Map translation codes to names
-      const translationNames: { [key: string]: string } = {
-        WEB: "World English Bible",
-        KJV: "King James Version",
-        ASV: "American Standard Version",
-        NIV: "New International Version",
-        AMP: "Amplified Bible",
-        DARBY: "Darby Translation",
-        YLT: "Young's Literal Translation",
-        ESV: "English Standard Version",
-        NASB: "New American Standard Bible",
-        NLT: "New Living Translation",
-      };
-
-      return translations.map(t => ({
-        code: t._id,
-        name: translationNames[t._id] || t._id,
-        count: t.count,
-      }));
+      const catalog = await this.getTranslationCatalog();
+      return catalog.translations;
     } catch (error) {
       logger.error("Failed to get translations:", error);
-      return [{ code: "WEB", name: "World English Bible", count: 0 }];
+      return [
+        shapeCatalogItem({ storedCode: "WEB", verseCount: 0 }),
+      ];
     }
   }
 

@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { Artist } from "../../models/artist.model";
 import { CopyrightFreeSong } from "../../models/copyrightFreeSong.model";
 import { User } from "../../models/user.model";
+import { isAllowedCdnUrl } from "../../service/fileUpload.service";
 import { TRACK_GENRES } from "../audio/track.constants";
 import { shapeCreatorMePayload } from "./creator.presenter";
 import { countArtistFollowers, uniqueListenersSince } from "./creatorAudience.service";
@@ -36,9 +37,28 @@ function trimStr(v: unknown, max: number): string | null {
 
 function httpUrlOrHandle(v: string | null): string | null {
   if (!v) return null;
-  if (/^https?:\/\//i.test(v)) return v.slice(0, 300);
   if (v.startsWith("@")) return v.slice(0, 120);
-  return v.slice(0, 200);
+  try {
+    const u = new URL(v);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return v.slice(0, 300);
+  } catch {
+    return null;
+  }
+}
+
+function requireCdnImageUrl(raw: unknown, field: "avatarUrl" | "bannerUrl"): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const url = raw.trim();
+  if (!url) return undefined;
+  if (!isAllowedCdnUrl(url)) {
+    throw new CreatorProfileError(
+      `${field} must be a Jevah CDN URL — use ${field === "avatarUrl" ? "avatar" : "banner"}/upload-intent`,
+      400,
+      "INVALID_IMAGE_URL"
+    );
+  }
+  return url.slice(0, 500);
 }
 
 export async function loadCreatorMe(userId: string) {
@@ -108,12 +128,10 @@ export async function patchCreatorMe(userId: string, body: Record<string, unknow
   if (body.location !== undefined) {
     artist.location = trimStr(body.location, 120);
   }
-  if (typeof body.bannerUrl === "string" && /^https?:\/\//i.test(body.bannerUrl)) {
-    artist.bannerUrl = body.bannerUrl.trim().slice(0, 500);
-  }
-  if (typeof body.avatarUrl === "string" && /^https?:\/\//i.test(body.avatarUrl)) {
-    artist.avatarUrl = body.avatarUrl.trim().slice(0, 500);
-  }
+  const nextBanner = requireCdnImageUrl(body.bannerUrl, "bannerUrl");
+  if (nextBanner) artist.bannerUrl = nextBanner;
+  const nextAvatar = requireCdnImageUrl(body.avatarUrl, "avatarUrl");
+  if (nextAvatar) artist.avatarUrl = nextAvatar;
   if (Array.isArray(body.genres)) {
     artist.genres = [
       ...new Set(
@@ -143,6 +161,9 @@ export async function patchCreatorMe(userId: string, body: Record<string, unknow
       "artistProfile.bio": artist.bio,
       "artistProfile.genre": artist.genres,
       location: artist.location || undefined,
+      ...(artist.avatarUrl
+        ? { avatar: artist.avatarUrl, avatarUpload: artist.avatarUrl }
+        : {}),
     },
   }).catch(() => undefined);
 

@@ -1,4 +1,5 @@
 import { Artist } from "../../models/artist.model";
+import { User } from "../../models/user.model";
 import fileUploadService from "../../service/fileUpload.service";
 import {
   ALLOWED_COVER_MIME,
@@ -114,6 +115,11 @@ export async function finalizeArtistImage(input: {
     artist.bannerPendingKey = null;
   }
   await artist.save();
+  if (input.kind === "avatar" && url) {
+    await User.findByIdAndUpdate(input.userId, {
+      $set: { avatar: url, avatarUpload: url },
+    }).catch(() => undefined);
+  }
   return {
     kind: input.kind,
     url,
