@@ -28,10 +28,10 @@ describe("fileUpload R2 public URL helpers", () => {
     return require("../../../service/fileUpload.service") as typeof import("../../../service/fileUpload.service");
   }
 
-  it("toPublicR2Url prefixes jevah on r2.dev when prefix unset", () => {
+  it("production without custom domain still uses r2.dev + jevah prefix", () => {
     delete process.env.R2_PUBLIC_KEY_PREFIX;
     delete process.env.R2_CUSTOM_DOMAIN;
-    process.env.NODE_ENV = "development";
+    process.env.NODE_ENV = "production";
     process.env.R2_PUBLIC_DEV_URL =
       "https://pub-17c463321ed44e22ba0d23a3505140ac.r2.dev";
 

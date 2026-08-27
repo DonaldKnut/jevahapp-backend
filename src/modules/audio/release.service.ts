@@ -20,6 +20,7 @@ import {
 } from "./track.constants";
 import { shapeReleaseCard } from "./release.formatter";
 import { TrackUploadError } from "./trackUpload.service";
+import { reviewImageNsfwWithGuardian } from "./trackReview.service";
 
 export class ReleaseError extends Error {
   status: number;
@@ -352,6 +353,20 @@ export async function finalizeReleaseCover(
   } catch {
     throw new ReleaseError("Cover object missing in R2", 400, "OBJECT_MISSING");
   }
+
+  const vision = await reviewImageNsfwWithGuardian({
+    title: release.title,
+    objectKey: key,
+    label: "release cover",
+  });
+  if (vision?.decision === "rejected") {
+    throw new ReleaseError(
+      vision.reason || "Inappropriate release cover rejected",
+      400,
+      "IMAGE_NSFW_REJECTED"
+    );
+  }
+
   const url = fileUploadService.generatePublicUrl(key);
   release.artwork = { key, url };
   await release.save();

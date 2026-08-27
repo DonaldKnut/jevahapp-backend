@@ -1,0 +1,15 @@
+---
+description: Colocate new backend work under src/modules/<domain>; never change public API paths.
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+# Module layout
+
+This is one Express app. Put the next change in `src/modules/<domain>/` (routes, controller, service, tests together).
+
+- Register mounts only in `src/modules/index.ts` (`registerModules`).
+- Do not add new files under `src/controllers` or `src/routes` unless you are shimming an old import.
+- Do not change `/api/...` URL paths.
+- Do not rewrite the whole repo or extract microservices.
+- Gold examples: `src/modules/bible`, `src/modules/engagement`, `src/modules/creators`.

@@ -1,8 +1,9 @@
 /**
- * Bible module: Bible text/search, bible facts
+ * Bible module: scripture catalog, verses, search, offline packs.
+ * Public URLs unchanged: /api/bible, /api/bible-facts
  */
 import { Router } from "express";
-import bibleRoutes from "../../routes/bible.routes";
+import bibleRoutes from "./bible.routes";
 import bibleFactsRoutes from "../../routes/bibleFacts.routes";
 
 export interface Mount {
@@ -16,3 +17,4 @@ export const mounts: Mount[] = [
 ];
 
 export default { mounts };
+export { default as bibleService } from "./bible.service";

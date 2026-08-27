@@ -1,7 +1,17 @@
 /**
  * Modular route registration.
- * All API routes are grouped by domain; this file mounts them on the Express app.
- * Add new domains under src/modules/<domain>/index.ts and register below.
+ *
+ * Target layout (colocate as you touch a feature — do not rewrite the repo):
+ *   src/modules/<domain>/
+ *     index.ts          mounts: [{ path: "/api/...", router }]
+ *     *.routes.ts
+ *     *.controller.ts
+ *     *.service.ts
+ *     __tests__/
+ *
+ * Public URL paths never change. Old files under src/routes|controllers|service
+ * may re-export from here until the next edit in that domain.
+ * Gold examples: modules/bible, modules/engagement, modules/creators.
  */
 import type { Application } from "express";
 import logger from "../utils/logger";
@@ -10,7 +20,6 @@ import * as auth from "./auth";
 import * as users from "./users";
 import * as media from "./media";
 import * as admin from "./admin";
-import * as content from "./content";
 import * as bible from "./bible";
 import * as community from "./community";
 import * as location from "./location";
@@ -26,6 +35,7 @@ import * as ebooks from "./ebooks";
 import * as playlists from "./playlists";
 import * as audio from "./audio";
 import * as music from "./music";
+import * as creators from "./creators";
 import * as sermons from "./sermons";
 import * as search from "./search";
 import * as feed from "./feed";
@@ -53,7 +63,6 @@ export function registerModules(app: Application): void {
     users,
     media,
     admin,
-    content,
     bible,
     community,
     location,
@@ -69,6 +78,7 @@ export function registerModules(app: Application): void {
     playlists,
     audio,
     music,
+    creators,
     sermons,
     search,
     feed,

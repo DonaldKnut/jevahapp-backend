@@ -11,7 +11,43 @@ import {
 import {
   reserveUserUploadForModeration,
 } from "../service/moderation/aiBudget.service";
+import fileUploadService from "../service/fileUpload.service";
 import logger from "../utils/logger";
+
+const THUMB_MAX_BYTES = 5 * 1024 * 1024;
+
+function mimeFromObjectKey(key: string): string {
+  const lower = String(key || "").toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+async function loadStagedThumbnail(
+  media: any
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const key =
+    media?.uploadIntent?.thumbnailStagingKey ||
+    (typeof media?.thumbnailObjectKey === "string" &&
+    !String(media.thumbnailObjectKey).startsWith("http")
+      ? media.thumbnailObjectKey
+      : null);
+  if (!key) return null;
+  try {
+    const buffer = await fileUploadService.getObjectBuffer(key, {
+      maxBytes: THUMB_MAX_BYTES,
+    });
+    if (!buffer?.length) return null;
+    return { buffer, mimeType: mimeFromObjectKey(key) };
+  } catch (err: any) {
+    logger.warn("Could not load staged thumbnail for moderation", {
+      key,
+      error: err?.message,
+    });
+    return null;
+  }
+}
 
 async function sha256File(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -108,6 +144,9 @@ export async function processMediaModeration(params: {
   const isVideo =
     (media.contentType === "videos" || media.contentType === "sermon") &&
     mime.startsWith("video/");
+
+  const stagedThumb = await loadStagedThumbnail(media);
+
   const result = isVideo
     ? await optimizedVerificationService.verifyVideoPathWithProgress(
         localFilePath,
@@ -116,7 +155,12 @@ export async function processMediaModeration(params: {
         media.title,
         media.description,
         mediaId,
-        { mediaId, contentHash }
+        {
+          mediaId,
+          contentHash,
+          thumbnailBuffer: stagedThumb?.buffer,
+          thumbnailMimeType: stagedThumb?.mimeType,
+        }
       )
     : await optimizedVerificationService.verifyContentWithProgress(
         fs.readFileSync(localFilePath),
@@ -126,8 +170,8 @@ export async function processMediaModeration(params: {
         media.description,
         mediaId,
         undefined,
-        undefined,
-        undefined,
+        stagedThumb?.buffer,
+        stagedThumb?.mimeType,
         { mediaId, contentHash }
       );
 

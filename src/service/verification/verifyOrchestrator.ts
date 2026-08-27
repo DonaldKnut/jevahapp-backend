@@ -122,7 +122,12 @@ export async function verifyVideoPathWithProgress(
   title: string,
   description: string | undefined,
   uploadId: string,
-  opts?: { mediaId?: string; contentHash?: string }
+  opts?: {
+    mediaId?: string;
+    contentHash?: string;
+    thumbnailBuffer?: Buffer;
+    thumbnailMimeType?: string;
+  }
 ): Promise<OptimizedVerificationResult> {
   await assertFfmpegForContentType(contentType);
 
@@ -150,9 +155,22 @@ export async function verifyVideoPathWithProgress(
       videoFrames = f;
     }
   );
+
+  let thumbnailBase64: string | undefined;
+  if (opts?.thumbnailBuffer?.length) {
+    logger.info("Including user thumbnail in staged video moderation", {
+      uploadId,
+      bytes: opts.thumbnailBuffer.length,
+    });
+    thumbnailBase64 = `data:${
+      opts.thumbnailMimeType || "image/jpeg"
+    };base64,${opts.thumbnailBuffer.toString("base64")}`;
+  }
+
   const moderationResult = await contentModerationService.moderateContent({
     transcript: transcript || undefined,
     videoFrames: videoFrames.length ? videoFrames : undefined,
+    thumbnail: thumbnailBase64,
     title,
     description,
     contentType,

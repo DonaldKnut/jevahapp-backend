@@ -195,6 +195,18 @@ bibleVerseSchema.index(
   { unique: true }
 );
 
+// Reader path: whole-book and whole-chapter fetches for one translation.
+// Prefix (translation, bookName, chapterNumber) is what the reader filters on.
+bibleVerseSchema.index({
+  translation: 1,
+  bookName: 1,
+  chapterNumber: 1,
+  verseNumber: 1,
+});
+
+// Corpus fingerprint: newest verse mtime per translation, without a blocking sort.
+bibleVerseSchema.index({ translation: 1, updatedAt: -1 });
+
 // Text search index for verse content
 bibleVerseSchema.index({ text: "text" });
 

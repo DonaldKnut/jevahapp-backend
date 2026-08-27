@@ -278,3 +278,109 @@ export function shouldAutoApproveVerifiedArtist(isVerified: boolean): boolean {
   // Opt-in skip only. Default: verified artists still get Guardian audio review.
   return process.env.TRACK_VERIFIED_SKIP_AUDIO === "true";
 }
+
+const COVER_VISION_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * NSFW / lewd-scene check for track covers (and similar public images).
+ * Contabo-safe: loads from R2 key or public URL, max 5MB.
+ * NSFW reject always blocks. Soft vision failure → under_review (never auto-approve porn miss).
+ */
+export async function reviewImageNsfwWithGuardian(input: {
+  title?: string;
+  imageUrl?: string | null;
+  objectKey?: string | null;
+  mimeType?: string | null;
+  label?: string;
+}): Promise<TrackReviewResult | null> {
+  if (!isGuardianConfigured()) return null;
+  if (process.env.TRACK_COVER_VISION === "false") return null;
+
+  const label = input.label || "cover";
+  let buf: Buffer | null = null;
+  let mime = input.mimeType || "image/jpeg";
+
+  try {
+    if (input.objectKey) {
+      const fileUploadService = (
+        await import("../../service/fileUpload.service")
+      ).default;
+      buf = await fileUploadService.getObjectBuffer(input.objectKey, {
+        maxBytes: COVER_VISION_MAX_BYTES,
+      });
+      const lower = input.objectKey.toLowerCase();
+      if (lower.endsWith(".png")) mime = "image/png";
+      else if (lower.endsWith(".webp")) mime = "image/webp";
+    }
+    if (!buf?.length && input.imageUrl) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 30_000);
+      const res = await fetch(input.imageUrl, {
+        headers: { Range: `bytes=0-${COVER_VISION_MAX_BYTES - 1}` },
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!(res.ok || res.status === 206)) {
+        logger.warn("Cover vision fetch failed", {
+          status: res.status,
+          label,
+        });
+        return null;
+      }
+      buf = Buffer.from(await res.arrayBuffer());
+      const ct = res.headers.get("content-type");
+      if (ct?.startsWith("image/")) mime = ct.split(";")[0].trim();
+    }
+  } catch (err: any) {
+    logger.warn("Cover vision load error", { error: err?.message, label });
+    return null;
+  }
+
+  if (!buf?.length || buf.length < 64) return null;
+
+  const thumbnail = `data:${mime};base64,${buf.toString("base64")}`;
+  const scored = await scoreWithGuardian({
+    title: input.title || label,
+    description: `Public ${label} image for gospel app`,
+    contentType: "videos", // enable vision soft-fail quarantine path
+    thumbnail,
+    runVision: true,
+  });
+  if (!scored) return null;
+
+  const outcome = fuseGuardianScores(scored, "videos");
+  const nsfw = scored.nsfw_score ?? 0;
+
+  if (
+    scored.vision_available === false &&
+    outcome.decision === "approve"
+  ) {
+    return {
+      decision: "under_review",
+      reason: `${label} vision unavailable — queued for admin`,
+      source: "guardian_audio",
+    };
+  }
+
+  if (outcome.decision === "reject" || nsfw >= 0.65) {
+    return {
+      decision: "rejected",
+      reason: `Rejected: inappropriate ${label} (NSFW/vision)`,
+      source: "guardian_audio",
+    };
+  }
+
+  if (outcome.decision === "review" || nsfw >= 0.25) {
+    return {
+      decision: "under_review",
+      reason: `${label} needs human review (vision gray-zone)`,
+      source: "guardian_audio",
+    };
+  }
+
+  return {
+    decision: "approved",
+    reason: `${label} passed vision NSFW check`,
+    source: "guardian_audio",
+  };
+}

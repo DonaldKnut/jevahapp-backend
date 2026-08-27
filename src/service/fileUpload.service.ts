@@ -33,15 +33,12 @@ export function getR2PublicKeyPrefix(): string {
 }
 
 export function r2PublicBaseUrl(): string {
-  const customDomain = process.env.R2_CUSTOM_DOMAIN;
+  const customDomain = String(process.env.R2_CUSTOM_DOMAIN || "").trim();
   if (customDomain) {
     return `https://${customDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "R2_CUSTOM_DOMAIN is required in production (hard-coded r2.dev URLs are not allowed)"
-    );
-  }
+  // Prod files already live on this r2.dev host. Missing R2_CUSTOM_DOMAIN must
+  // not 500 uploads / finalize / pack publish.
   return (
     process.env.R2_PUBLIC_DEV_URL || DEFAULT_R2_PUBLIC_DEV_URL
   ).replace(/\/+$/, "");

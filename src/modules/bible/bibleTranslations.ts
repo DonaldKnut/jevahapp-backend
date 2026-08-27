@@ -17,6 +17,12 @@ export type TranslationCatalogItem = {
   packBytes: number | null;
   verseCount: number;
   isDefault: boolean;
+  /**
+   * Opaque corpus fingerprint. Append as `?v=` to scripture reads to get
+   * year-long immutable caching; it changes whenever the text behind this
+   * translation changes. Null when it cannot be computed (omit `v` then).
+   */
+  corpusVersion: string | null;
   /** Legacy alias for old { code, name, count } clients */
   code: string;
   count: number;
@@ -150,6 +156,7 @@ export function shapeCatalogItem(input: {
   storedCode: string;
   verseCount: number;
   packBytes?: number | null;
+  corpusVersion?: string | null;
 }): TranslationCatalogItem {
   const id = toPublicTranslationId(input.storedCode);
   const meta = getTranslationMeta(id);
@@ -169,6 +176,7 @@ export function shapeCatalogItem(input: {
     packBytes,
     verseCount: input.verseCount,
     isDefault: id === DEFAULT_TRANSLATION_ID,
+    corpusVersion: input.corpusVersion || null,
     code: toStorageTranslationCode(id),
     count: input.verseCount,
   };

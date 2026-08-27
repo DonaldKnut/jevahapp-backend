@@ -6,6 +6,7 @@ import {
   TRACK_COVER_MAX_BYTES,
   TRACK_PRESIGN_EXPIRES_SEC,
 } from "../audio/track.constants";
+import { reviewImageNsfwWithGuardian } from "../audio/trackReview.service";
 import { CreatorProfileError } from "./creatorProfile.service";
 
 function extFromMime(mime: string, fileName?: string): string {
@@ -106,6 +107,20 @@ export async function finalizeArtistImage(input: {
       "OBJECT_MISSING"
     );
   }
+
+  const vision = await reviewImageNsfwWithGuardian({
+    title: artist.displayName,
+    objectKey: key,
+    label: input.kind,
+  });
+  if (vision?.decision === "rejected") {
+    throw new CreatorProfileError(
+      vision.reason || `Inappropriate ${input.kind} rejected`,
+      400,
+      "IMAGE_NSFW_REJECTED"
+    );
+  }
+
   const url = fileUploadService.generatePublicUrl(key);
   if (input.kind === "avatar") {
     artist.avatarUrl = url;

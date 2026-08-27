@@ -24,6 +24,12 @@ export const cacheMiddleware = (
      * Useful for "feed"/personalized endpoints with a short TTL.
      */
     varyByUserId?: boolean;
+    /**
+     * Request headers that change the response body (e.g. client profile).
+     * They join the cache key and are echoed in Vary, so one caller's variant
+     * is never replayed to another.
+     */
+    varyByHeaders?: string[];
   }
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -41,12 +47,23 @@ export const cacheMiddleware = (
       return next();
     }
 
+    const varyByHeaders = options?.varyByHeaders || [];
+    const headerVariant = varyByHeaders
+      .map(
+        (name) =>
+          `${name.toLowerCase()}=${String(
+            req.headers[name.toLowerCase()] || ""
+          ).toLowerCase()}`
+      )
+      .join("&");
+    const varyHeaderValue = ["Accept-Encoding", ...varyByHeaders].join(", ");
+
     // Generate cache key
     const cacheKey = keyGenerator
       ? keyGenerator(req)
       : `cache:${req.originalUrl}:${JSON.stringify(req.query)}${
           varyByUserId && req.userId ? `:user=${req.userId}` : ""
-        }`;
+        }${headerVariant ? `:${headerVariant}` : ""}`;
 
     try {
       // Try to get from cache
@@ -66,15 +83,25 @@ export const cacheMiddleware = (
         res.setHeader("X-Cache-Key", cacheKey);
         res.setHeader("Cache-Control", `public, max-age=${ttl}, stale-while-revalidate=${ttl * 2}`);
         res.setHeader("ETag", etag);
-        res.setHeader("Vary", "Accept-Encoding");
+        res.setHeader("Vary", varyHeaderValue);
         logger.debug(`Cache HIT: ${cacheKey}`);
-        res.json(cached);
+        // Only 2xx bodies are ever stored, so a hit is always a success replay.
+        res.status(200).json(cached);
         return;
       }
 
       // Cache miss - store original json method
       const originalJson = res.json.bind(res);
       res.json = function (data: any) {
+        // Never cache errors. A stored 404/400 body would be replayed as a 200
+        // on the next hit, so clients checking response.ok would accept it.
+        const cacheable = res.statusCode >= 200 && res.statusCode < 300;
+        if (!cacheable) {
+          res.setHeader("X-Cache", "BYPASS");
+          res.setHeader("Cache-Control", "no-store");
+          return originalJson(data);
+        }
+
         // Store in cache (async, don't block response)
         cacheService.set(cacheKey, data, ttl).catch((error) => {
           logger.error("Cache set error in middleware:", error);
@@ -86,7 +113,7 @@ export const cacheMiddleware = (
         // HTTP headers help CDN/proxy caching, but React Native needs client-side caching (React Query/SWR)
         res.setHeader("Cache-Control", `public, max-age=${ttl}, stale-while-revalidate=${ttl * 2}`);
         res.setHeader("ETag", `"${cacheKey}"`);
-        res.setHeader("Vary", "Accept-Encoding");
+        res.setHeader("Vary", varyHeaderValue);
         logger.debug(`Cache MISS: ${cacheKey}`);
         
         return originalJson(data);

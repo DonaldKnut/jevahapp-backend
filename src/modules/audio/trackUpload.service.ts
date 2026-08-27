@@ -22,6 +22,7 @@ import {
 import {
   reviewTrackMetadata,
   reviewTrackAudioWithGuardian,
+  reviewImageNsfwWithGuardian,
   shouldAutoApproveVerifiedArtist,
 } from "./trackReview.service";
 import { Artist } from "../../models/artist.model";
@@ -461,54 +462,95 @@ export async function finalizeTrackUpload(
 
     // Curated admin uploads: auto-approved. Artist lane: AI + admin gate.
     if (track.lane === "artist") {
-      emitTrackFinalizeProgress(
-        adminId,
-        trackId,
-        75,
-        "verifying",
-        "Running content review"
-      );
       let decision: "approved" | "under_review" | "rejected" = "under_review";
       let reason = "Queued for admin review";
       let source: string = "fail_open";
 
-      let isVerified = false;
-      if (track.artistId) {
-        const artist = await Artist.findById(track.artistId)
-          .select("isVerified")
-          .lean();
-        isVerified = Boolean((artist as any)?.isVerified);
-      }
+      emitTrackFinalizeProgress(
+        adminId,
+        trackId,
+        70,
+        "verifying",
+        "Screening cover art"
+      );
 
-      if (shouldAutoApproveVerifiedArtist(isVerified)) {
-        decision = "approved";
-        reason = "Auto-approved verified artist (TRACK_VERIFIED_SKIP_AUDIO)";
-        source = "auto_verified";
+      const coverVision = await reviewImageNsfwWithGuardian({
+        title: track.title,
+        imageUrl: coverUrl,
+        objectKey: coverKey,
+        label: "track cover",
+      });
+      if (coverVision?.decision === "rejected") {
+        decision = "rejected";
+        reason = coverVision.reason;
+        source = coverVision.source;
       } else {
-        const guardianAudio = await reviewTrackAudioWithGuardian({
-          title: track.title,
-          artistName: track.artistName || track.singer,
-          genre: track.genre,
-          category: track.category,
-          licenseNote: track.licenseNote,
-          audioUrl: playbackUrl,
-          mimeType: track.audio?.format || head.ContentType || "audio/mpeg",
-        });
-        if (guardianAudio) {
-          decision = guardianAudio.decision;
-          reason = guardianAudio.reason;
-          source = guardianAudio.source;
+        emitTrackFinalizeProgress(
+          adminId,
+          trackId,
+          75,
+          "verifying",
+          "Running content review"
+        );
+        let audioDecision: "approved" | "under_review" | "rejected" =
+          "under_review";
+        let audioReason = "Queued for admin review";
+        let audioSource: string = "fail_open";
+
+        let isVerified = false;
+        if (track.artistId) {
+          const artist = await Artist.findById(track.artistId)
+            .select("isVerified")
+            .lean();
+          isVerified = Boolean((artist as any)?.isVerified);
+        }
+
+        if (shouldAutoApproveVerifiedArtist(isVerified)) {
+          audioDecision = "approved";
+          audioReason =
+            "Auto-approved verified artist (TRACK_VERIFIED_SKIP_AUDIO)";
+          audioSource = "auto_verified";
         } else {
-          const ai = await reviewTrackMetadata({
+          const guardianAudio = await reviewTrackAudioWithGuardian({
             title: track.title,
             artistName: track.artistName || track.singer,
             genre: track.genre,
             category: track.category,
             licenseNote: track.licenseNote,
+            audioUrl: playbackUrl,
+            mimeType: track.audio?.format || head.ContentType || "audio/mpeg",
           });
-          decision = ai.decision;
-          reason = ai.reason;
-          source = ai.source;
+          if (guardianAudio) {
+            audioDecision = guardianAudio.decision;
+            audioReason = guardianAudio.reason;
+            audioSource = guardianAudio.source;
+          } else {
+            const ai = await reviewTrackMetadata({
+              title: track.title,
+              artistName: track.artistName || track.singer,
+              genre: track.genre,
+              category: track.category,
+              licenseNote: track.licenseNote,
+            });
+            audioDecision = ai.decision;
+            audioReason = ai.reason;
+            audioSource = ai.source;
+          }
+        }
+
+        // Cover gray-zone never upgrades an audio approval past under_review
+        if (coverVision?.decision === "under_review") {
+          decision =
+            audioDecision === "rejected" ? "rejected" : "under_review";
+          reason =
+            audioDecision === "rejected"
+              ? audioReason
+              : `${coverVision.reason}; ${audioReason}`;
+          source = coverVision.source;
+        } else {
+          decision = audioDecision;
+          reason = audioReason;
+          source = audioSource;
         }
       }
 
@@ -706,6 +748,20 @@ export async function finalizeReplaceCover(trackId: string, adminId: string) {
   const key = track.artwork?.key;
   if (!key) throw new TrackUploadError("No cover key on track");
   await fileUploadService.headObject(key);
+
+  const vision = await reviewImageNsfwWithGuardian({
+    title: track.title,
+    objectKey: key,
+    label: "track cover",
+  });
+  if (vision?.decision === "rejected") {
+    throw new TrackUploadError(
+      vision.reason || "Inappropriate cover rejected",
+      400,
+      "IMAGE_NSFW_REJECTED"
+    );
+  }
+
   const url = fileUploadService.generatePublicUrl(key);
   track.artwork = { key, url };
   track.thumbnailUrl = url;

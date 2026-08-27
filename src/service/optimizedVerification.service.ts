@@ -53,7 +53,12 @@ export class OptimizedVerificationService {
     title: string,
     description: string | undefined,
     uploadId: string,
-    opts?: { mediaId?: string; contentHash?: string }
+    opts?: {
+      mediaId?: string;
+      contentHash?: string;
+      thumbnailBuffer?: Buffer;
+      thumbnailMimeType?: string;
+    }
   ): Promise<OptimizedVerificationResult> {
     return verifyVideoPathWithProgress(
       filePath,

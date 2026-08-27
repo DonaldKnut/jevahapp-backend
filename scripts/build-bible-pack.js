@@ -11,11 +11,76 @@
  * Optional:
  *   BIBLE_PACK_DRY=1   — build + hash, skip R2 upload
  */
-require("dotenv").config();
+const path = require("path");
+const { execSync } = require("child_process");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const dns = require("dns");
 const mongoose = require("mongoose");
 
 const TARGET_GZIP_BYTES = 8 * 1024 * 1024;
+const R2_INHERIT_KEYS = [
+  "R2_CUSTOM_DOMAIN",
+  "R2_PUBLIC_KEY_PREFIX",
+  "R2_BUCKET",
+  "R2_ENDPOINT",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_ALLOWED_CDN_HOSTS",
+];
+
+function envNonEmpty(key) {
+  const v = process.env[key];
+  return Boolean(v && String(v).trim());
+}
+
+/** Shell npm run does not get PM2 env. Copy R2_* from the running API if missing. */
+function inheritR2EnvFromPm2() {
+  if (envNonEmpty("R2_CUSTOM_DOMAIN")) return;
+  try {
+    const raw = execSync("pm2 jlist", {
+      encoding: "utf8",
+      timeout: 10000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const list = JSON.parse(raw);
+    const proc = (list || []).find(
+      (p) => p && (p.name === "backend" || p.name === "backend-worker")
+    );
+    const env = proc?.pm2_env?.env || {};
+    let copied = 0;
+    for (const key of R2_INHERIT_KEYS) {
+      if (envNonEmpty(key)) continue;
+      if (env[key] && String(env[key]).trim()) {
+        process.env[key] = String(env[key]).trim();
+        copied += 1;
+      }
+    }
+    if (copied) {
+      console.log(
+        `Inherited ${copied} R2 env var(s) from pm2 process "${proc.name}".`
+      );
+    }
+  } catch {
+    /* pm2 not in PATH or not running — fall through to preflight */
+  }
+}
+
+function requireProductionCdn() {
+  inheritR2EnvFromPm2();
+  const dry = String(process.env.BIBLE_PACK_DRY || "") === "1";
+  if (dry) return;
+  if (String(process.env.NODE_ENV || "").toLowerCase() !== "production") return;
+  if (envNonEmpty("R2_CUSTOM_DOMAIN")) return;
+  console.error(`R2_CUSTOM_DOMAIN is required when NODE_ENV=production.
+The pack script does not see PM2 env unless we can inherit it.
+
+On Contabo, copy the same host the API already uses:
+  pm2 show backend | grep -i R2_CUSTOM
+  export R2_CUSTOM_DOMAIN='media.jevahapp.com'   # host only, no https://
+  npm run bible:pack`);
+  process.exit(1);
+}
 
 function ensureMongoDnsServers(mongoUri) {
   if (!String(mongoUri || "").startsWith("mongodb+srv://")) return;
@@ -53,6 +118,7 @@ function loadModule(distPath, srcPath) {
 }
 
 async function main() {
+  requireProductionCdn();
   const translationId = String(
     process.env.BIBLE_PACK_TRANSLATION || "web"
   )
