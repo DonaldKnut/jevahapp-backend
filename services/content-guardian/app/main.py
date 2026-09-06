@@ -171,6 +171,7 @@ def score(body: ScoreRequest):
         christian_scene=christian,
         secular_scene=secular_combined,
         content_type=body.content_type,
+        transcript_chars=len((body.transcript or "").strip()),
         nsfw_reject=config.NSFW_REJECT,
         nsfw_safe=config.NSFW_SAFE,
         christian_scene_approve=config.CHRISTIAN_SCENE_APPROVE,

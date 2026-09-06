@@ -34,7 +34,7 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("nsfw_reject");
   });
 
-  it("routes video strong gospel text without visual corroboration to review", () => {
+  it("routes video strong gospel text without spoken/visual corroboration to review", () => {
     const out = fuseGuardianScores(
       baseScores({
         gospel_score: 0.85,
@@ -42,10 +42,28 @@ describe("fuseGuardianScores", () => {
         secular_scene_score: 0.2,
         christian_scene_score: 0.1,
       }),
-      "videos"
+      "videos",
+      { transcriptChars: 10 }
     );
     expect(out.decision).toBe("review");
-    expect(out.signals).toContain("strong_gospel_text_needs_visual");
+    expect(out.signals).toContain("strong_gospel_text_needs_spoken_or_visual");
+  });
+
+  it("approves video with strong gospel transcript even without church scene", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.85,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.1,
+      }),
+      "videos",
+      {
+        transcriptChars: 120,
+      }
+    );
+    expect(out.decision).toBe("approve");
+    expect(out.signals).toContain("spoken_word_of_god");
   });
 
   it("approves video strong gospel text when christian scene corroborates", () => {
@@ -62,7 +80,7 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("video_visual_corroboration");
   });
 
-  it("does not approve video on mid christian score + gospel title text", () => {
+  it("does not approve video on mid christian score + gospel title text only", () => {
     const out = fuseGuardianScores(
       baseScores({
         gospel_score: 0.85,
@@ -70,10 +88,11 @@ describe("fuseGuardianScores", () => {
         secular_scene_score: 0.2,
         christian_scene_score: 0.45,
       }),
-      "videos"
+      "videos",
+      { transcriptChars: 0 }
     );
     expect(out.decision).toBe("review");
-    expect(out.signals).toContain("strong_gospel_text_needs_visual");
+    expect(out.signals).toContain("strong_gospel_text_needs_spoken_or_visual");
   });
 
   it("approves non-video strong gospel text with safe vision", () => {

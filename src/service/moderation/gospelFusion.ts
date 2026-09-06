@@ -22,10 +22,18 @@ export function getFusionThresholds() {
     secularSceneReject: envFloat("FUSION_SECULAR_SCENE_REJECT", 0.55),
     secularSceneSafe: envFloat("FUSION_SECULAR_SCENE_SAFE", 0.45),
     antiGospelReject: envFloat("FUSION_ANTI_GOSPEL_REJECT", 0.5),
+    /** Spoken gospel depth required to auto-approve videos without church visuals */
+    videoTranscriptMinChars: envFloat("FUSION_VIDEO_TRANSCRIPT_MIN_CHARS", 80),
   };
 }
 
 export type FusionDecision = "approve" | "reject" | "review";
+
+export interface FusionEvidence {
+  /** Characters of STT / spoken transcript (not title/description) */
+  transcriptChars?: number;
+  hasFrames?: boolean;
+}
 
 export interface FusionOutcome {
   decision: FusionDecision;
@@ -43,7 +51,8 @@ export interface FusionOutcome {
 
 export function fuseGuardianScores(
   scores: GuardianScoreResult,
-  contentType?: string
+  contentType?: string,
+  evidence?: FusionEvidence
 ): FusionOutcome {
   const t = getFusionThresholds();
   const gospel = scores.gospel_score ?? 0;
@@ -55,6 +64,9 @@ export function fuseGuardianScores(
   const secularCombined = Math.max(secularScene, secularText * 0.85);
   const ct = (contentType || "").toLowerCase();
   const signals = [...(scores.signals || [])];
+  const transcriptChars = Math.max(0, evidence?.transcriptChars ?? 0);
+  const spokenGospel =
+    transcriptChars >= t.videoTranscriptMinChars && gospel >= t.gospelTextStrong;
 
   const pack = (
     decision: FusionDecision,
@@ -94,6 +106,7 @@ export function fuseGuardianScores(
     ct
   );
 
+  // Church / worship visuals + gospel language (any setting that CLIP marks Christian)
   if (
     christian >= t.christianSceneApprove &&
     gospel >= t.gospelSceneApprove &&
@@ -102,8 +115,9 @@ export function fuseGuardianScores(
     return pack("approve", 0.9, ["church_scene_gospel"]);
   }
 
-  // Videos: gospel-looking title/description alone must not auto-approve.
-  // Require full Christian visual confirmation (or escalate to review/gray AI).
+  // Videos: never auto-approve on title/description alone.
+  // DO auto-approve when spoken transcript carries real gospel (home, car,
+  // street, studio talking-head — no church building required) OR visuals corroborate.
   if (isVideo) {
     if (
       gospel >= t.gospelTextStrong &&
@@ -116,8 +130,14 @@ export function fuseGuardianScores(
           "video_visual_corroboration",
         ]);
       }
+      if (spokenGospel) {
+        return pack("approve", 0.84, [
+          "strong_gospel_transcript",
+          "spoken_word_of_god",
+        ]);
+      }
       return pack("review", 0.5, [
-        "strong_gospel_text_needs_visual",
+        "strong_gospel_text_needs_spoken_or_visual",
         "video_metadata_insufficient",
       ]);
     }
@@ -139,9 +159,9 @@ export function fuseGuardianScores(
 
   const hint = scores.decision_hint;
   if (hint === "approve" && (scores.confidence ?? 0) >= 0.8) {
-    if (isVideo && christian < t.christianSceneApprove) {
+    if (isVideo && christian < t.christianSceneApprove && !spokenGospel) {
       return pack("review", 0.5, [
-        "guardian_hint_approve_needs_visual",
+        "guardian_hint_approve_needs_spoken_or_visual",
         "video_metadata_insufficient",
       ]);
     }

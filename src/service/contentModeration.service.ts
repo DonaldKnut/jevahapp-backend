@@ -160,7 +160,10 @@ export class ContentModerationService {
       return null;
     }
 
-    const outcome = fuseGuardianScores(scored, input.contentType);
+    const outcome = fuseGuardianScores(scored, input.contentType, {
+      transcriptChars: input.transcript?.trim().length || 0,
+      hasFrames: !!(input.videoFrames && input.videoFrames.length),
+    });
 
     // Fail-soft: vision requested but Guardian couldn't score images → never auto-approve
     const wantsVision =

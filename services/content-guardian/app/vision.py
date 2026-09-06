@@ -22,6 +22,10 @@ CHRISTIAN_PROMPTS = [
     "people worshipping God in a church with a cross and Bible",
     "a gospel choir singing praise music",
     "a preacher at a pulpit with an open Bible",
+    "a person praying with hands folded or open Bible at home",
+    "a Christian testimony or Bible study in a living room",
+    "outdoor Christian worship or street preaching with a Bible",
+    "a pastor teaching Scripture on camera in a studio",
 ]
 
 SECULAR_PROMPTS = [

@@ -94,6 +94,7 @@ def hint_from_text_scores(
     christian_scene: float = 0.0,
     secular_scene: float = 0.0,
     content_type: str = "",
+    transcript_chars: int = 0,
     nsfw_reject: float = 0.65,
     nsfw_safe: float = 0.25,
     christian_scene_approve: float = 0.55,
@@ -103,6 +104,7 @@ def hint_from_text_scores(
     secular_scene_reject: float = 0.55,
     secular_scene_safe: float = 0.45,
     anti_gospel_reject: float = 0.50,
+    video_transcript_min_chars: int = 80,
 ) -> tuple[str, float, list[str]]:
     """
     Pure fusion used by the Python service (mirrored in Node).
@@ -126,7 +128,7 @@ def hint_from_text_scores(
         signals.append("secular_off_theme")
         return "reject", 0.85, signals
 
-    # Strong visual church + gospel text
+    # Strong Christian visuals + gospel text (church, home study, prayer, etc.)
     if (
         christian_scene >= christian_scene_approve
         and gospel >= gospel_scene_approve
@@ -136,15 +138,22 @@ def hint_from_text_scores(
         return "approve", 0.9, signals
 
     is_video = ct in ("videos", "sermon", "live", "recording")
+    spoken_gospel = (
+        transcript_chars >= video_transcript_min_chars and gospel >= gospel_text_strong
+    )
 
-    # Strong text gospel, safe vision — videos still need visual corroboration
+    # Strong text gospel, safe vision — videos need spoken depth OR Christian visuals
     if gospel >= gospel_text_strong and nsfw < nsfw_safe and secular_scene < secular_scene_safe:
         if is_video:
             if christian_scene >= christian_scene_approve:
                 signals.append("strong_gospel_text")
                 signals.append("video_visual_corroboration")
                 return "approve", 0.82, signals
-            signals.append("strong_gospel_text_needs_visual")
+            if spoken_gospel:
+                signals.append("strong_gospel_transcript")
+                signals.append("spoken_word_of_god")
+                return "approve", 0.84, signals
+            signals.append("strong_gospel_text_needs_spoken_or_visual")
             return "review", 0.5, signals
         signals.append("strong_gospel_text")
         return "approve", 0.86, signals
