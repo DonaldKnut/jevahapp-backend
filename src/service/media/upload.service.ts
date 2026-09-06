@@ -3,6 +3,7 @@ import { Media, IMedia } from "../../models/media.model";
 import { User } from "../../models/user.model";
 import fileUploadService from "../fileUpload.service";
 import { MediaInput } from "./types";
+import { getDefaultMediaThumbnailUrl } from "../../lib/defaultThumbnail";
 
 export class MediaUploadService {
   async uploadMedia(data: MediaInput): Promise<IMedia> {
@@ -133,6 +134,17 @@ export class MediaUploadService {
       let downloadUrl: string | undefined;
       if (isDownloadable && fileUrl) {
         downloadUrl = `${process.env.API_URL || "https://api.example.com"}/media/download/${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+
+      // Thumbnail is optional — placeholder until FFmpeg poster; HTTP default if never generated.
+      if (!thumbnailUrl) {
+        const ct = String(data.contentType || "").toLowerCase();
+        // Music/books often skip video poster path — assign usable default immediately.
+        if (["music", "audio", "podcast", "books", "ebook"].includes(ct)) {
+          thumbnailUrl = getDefaultMediaThumbnailUrl();
+        } else {
+          thumbnailUrl = "pending://auto-thumbnail";
+        }
       }
 
       const mediaData = {

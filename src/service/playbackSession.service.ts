@@ -16,10 +16,15 @@ export interface StartPlaybackData {
 
 export interface UpdateProgressData {
   sessionId: string;
+  userId: string;
   position: number;
   duration: number;
   progressPercentage: number;
 }
+
+/** Coalesce Library writes during polling — flush at most every 8s per session. */
+const libraryFlushAt = new Map<string, number>();
+const LIBRARY_FLUSH_MS = 8_000;
 
 export class PlaybackSessionService {
   /**
@@ -113,55 +118,83 @@ export class PlaybackSessionService {
   }
 
   /**
-   * Update playback progress
+   * Update playback progress (single atomic write; Library flush coalesced).
    */
-  static async updateProgress(data: UpdateProgressData): Promise<any> {
+  static async updateProgress(data: UpdateProgressData): Promise<{
+    currentPosition: number;
+    progressPercentage: number;
+    totalWatchTime: number;
+    isActive: boolean;
+  }> {
     try {
-      const { sessionId, position, duration, progressPercentage } = data;
+      const { sessionId, userId, position, duration, progressPercentage } =
+        data;
 
-      const session = await PlaybackSession.findById(sessionId);
+      if (!Types.ObjectId.isValid(sessionId)) {
+        throw new Error("Playback session not found");
+      }
+
+      const session = await PlaybackSession.findOne({
+        _id: new Types.ObjectId(sessionId),
+        userId: new Types.ObjectId(userId),
+        isActive: true,
+      });
       if (!session) {
         throw new Error("Playback session not found");
       }
 
-      if (!session.isActive) {
-        throw new Error("Playback session is not active");
-      }
-
-      // Calculate watch time increment
       const previousPosition = session.currentPosition;
       const positionDiff = Math.max(0, position - previousPosition);
       const newTotalWatchTime = session.totalWatchTime + positionDiff;
+      const clampedPct = Math.min(100, Math.max(0, progressPercentage));
 
-      // Update session
-      const updatedSession = await PlaybackSession.findByIdAndUpdate(
-        sessionId,
+      const updatedSession = await PlaybackSession.findOneAndUpdate(
+        {
+          _id: session._id,
+          userId: session.userId,
+          isActive: true,
+        },
         {
           currentPosition: position,
           duration,
-          progressPercentage: Math.min(100, Math.max(0, progressPercentage)),
+          progressPercentage: clampedPct,
           lastProgressAt: new Date(),
           totalWatchTime: newTotalWatchTime,
         },
         { new: true }
       );
 
-      // Update library progress for resume functionality
-      await Library.findOneAndUpdate(
-        {
-          userId: session.userId,
-          mediaId: session.mediaId,
-          mediaType: "media",
-        },
-        {
-          watchProgress: position,
-          completionPercentage: progressPercentage,
-          lastWatched: new Date(),
-        },
-        { upsert: true }
-      );
+      if (!updatedSession) {
+        throw new Error("Playback session is not active");
+      }
 
-      return updatedSession;
+      // Coalesce Library upserts so polling every few seconds does not hammer Mongo.
+      const key = String(session._id);
+      const now = Date.now();
+      const lastFlush = libraryFlushAt.get(key) || 0;
+      if (now - lastFlush >= LIBRARY_FLUSH_MS) {
+        libraryFlushAt.set(key, now);
+        await Library.findOneAndUpdate(
+          {
+            userId: session.userId,
+            mediaId: session.mediaId,
+            mediaType: "media",
+          },
+          {
+            watchProgress: position,
+            completionPercentage: clampedPct,
+            lastWatched: new Date(),
+          },
+          { upsert: true }
+        );
+      }
+
+      return {
+        currentPosition: updatedSession.currentPosition,
+        progressPercentage: updatedSession.progressPercentage,
+        totalWatchTime: updatedSession.totalWatchTime,
+        isActive: updatedSession.isActive,
+      };
     } catch (error: any) {
       logger.error("Error updating playback progress:", error);
       throw error;
@@ -171,9 +204,12 @@ export class PlaybackSessionService {
   /**
    * Pause playback
    */
-  static async pausePlayback(sessionId: string): Promise<any> {
+  static async pausePlayback(sessionId: string, userId: string): Promise<any> {
     try {
-      const session = await PlaybackSession.findById(sessionId);
+      const session = await PlaybackSession.findOne({
+        _id: sessionId,
+        userId: new Types.ObjectId(userId),
+      });
       if (!session) {
         throw new Error("Playback session not found");
       }
@@ -182,8 +218,8 @@ export class PlaybackSessionService {
         throw new Error("Playback session is not active");
       }
 
-      const updatedSession = await PlaybackSession.findByIdAndUpdate(
-        sessionId,
+      const updatedSession = await PlaybackSession.findOneAndUpdate(
+        { _id: session._id, userId: session.userId, isActive: true },
         {
           isPaused: true,
           pausedAt: new Date(),
@@ -192,7 +228,6 @@ export class PlaybackSessionService {
         { new: true }
       );
 
-      // Update library progress
       await Library.findOneAndUpdate(
         {
           userId: session.userId,
@@ -206,7 +241,10 @@ export class PlaybackSessionService {
         }
       );
 
-      logger.info("Playback paused", { sessionId, userId: session.userId.toString() });
+      logger.info("Playback paused", {
+        sessionId,
+        userId: session.userId.toString(),
+      });
 
       return updatedSession;
     } catch (error: any) {
@@ -218,15 +256,18 @@ export class PlaybackSessionService {
   /**
    * Resume playback
    */
-  static async resumePlayback(sessionId: string): Promise<any> {
+  static async resumePlayback(sessionId: string, userId: string): Promise<any> {
     try {
-      const session = await PlaybackSession.findById(sessionId);
+      const session = await PlaybackSession.findOne({
+        _id: sessionId,
+        userId: new Types.ObjectId(userId),
+      });
       if (!session) {
         throw new Error("Playback session not found");
       }
 
-      const updatedSession = await PlaybackSession.findByIdAndUpdate(
-        sessionId,
+      const updatedSession = await PlaybackSession.findOneAndUpdate(
+        { _id: session._id, userId: session.userId },
         {
           isPaused: false,
           pausedAt: undefined,
@@ -235,7 +276,10 @@ export class PlaybackSessionService {
         { new: true }
       );
 
-      logger.info("Playback resumed", { sessionId, userId: session.userId.toString() });
+      logger.info("Playback resumed", {
+        sessionId,
+        userId: session.userId.toString(),
+      });
 
       return updatedSession;
     } catch (error: any) {
@@ -250,29 +294,34 @@ export class PlaybackSessionService {
   static async endPlayback(
     sessionId: string,
     options: {
+      userId: string;
       reason?: "completed" | "stopped" | "error";
       finalPosition?: number;
-    } = {}
+    }
   ): Promise<{
     session: any;
     viewRecorded: boolean;
   }> {
     try {
-      const { reason = "stopped", finalPosition } = options;
+      const { userId, reason = "stopped", finalPosition } = options;
 
-      const session = await PlaybackSession.findById(sessionId);
+      const session = await PlaybackSession.findOne({
+        _id: sessionId,
+        userId: new Types.ObjectId(userId),
+      });
       if (!session) {
         throw new Error("Playback session not found");
       }
 
-      const endPosition = finalPosition !== undefined ? finalPosition : session.currentPosition;
-      const finalProgressPercentage = session.duration > 0
-        ? Math.min(100, Math.round((endPosition / session.duration) * 100))
-        : session.progressPercentage;
+      const endPosition =
+        finalPosition !== undefined ? finalPosition : session.currentPosition;
+      const finalProgressPercentage =
+        session.duration > 0
+          ? Math.min(100, Math.round((endPosition / session.duration) * 100))
+          : session.progressPercentage;
 
-      // Mark session as inactive
-      const updatedSession = await PlaybackSession.findByIdAndUpdate(
-        sessionId,
+      const updatedSession = await PlaybackSession.findOneAndUpdate(
+        { _id: session._id, userId: session.userId },
         {
           isActive: false,
           isPaused: false,
@@ -284,7 +333,8 @@ export class PlaybackSessionService {
         { new: true }
       );
 
-      // Update library progress
+      libraryFlushAt.delete(String(session._id));
+
       await Library.findOneAndUpdate(
         {
           userId: session.userId,
@@ -299,22 +349,22 @@ export class PlaybackSessionService {
         { upsert: true }
       );
 
-      // Get media to determine interaction type
       const media = await Media.findById(session.mediaId);
       if (!media) {
         throw new Error("Media not found");
       }
 
-      // Determine interaction type based on content type
-      // Videos use "view", audio/music use "listen"
-      const isAudioContent = ["music", "audio", "podcast", "sermon"].includes(media.contentType);
+      const isAudioContent = ["music", "audio", "podcast", "sermon"].includes(
+        media.contentType
+      );
       const interactionType = isAudioContent ? "listen" : "view";
 
-      // Record view/listen if threshold met (30 seconds default)
       let viewRecorded = false;
-      const viewThreshold = 30; // seconds
-      if (session.totalWatchTime >= viewThreshold || endPosition >= viewThreshold) {
-        // Record interaction (view or listen)
+      const viewThreshold = 30;
+      if (
+        session.totalWatchTime >= viewThreshold ||
+        endPosition >= viewThreshold
+      ) {
         await Interaction.findOneAndUpdate(
           {
             user: session.userId,
@@ -336,11 +386,10 @@ export class PlaybackSessionService {
           { upsert: true }
         );
 
-        // Increment appropriate count on media
-        const updateField = isAudioContent 
-          ? { listenCount: 1 } 
+        const updateField = isAudioContent
+          ? { listenCount: 1 }
           : { viewCount: 1 };
-        
+
         await Media.findByIdAndUpdate(session.mediaId, {
           $inc: updateField,
         });

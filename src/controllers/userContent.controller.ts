@@ -223,7 +223,9 @@ export async function getMyContent(
         .sort(sort)
         .skip(skip)
         .limit(limit)
-        .select("_id title description contentType thumbnailUrl fileUrl viewCount likeCount commentCount shareCount downloadCount createdAt updatedAt")
+        .select(
+          "_id title description contentType thumbnailUrl fileUrl viewCount likeCount commentCount shareCount downloadCount moderationStatus publicationState createdAt updatedAt"
+        )
         .lean(),
       Media.countDocuments(query),
     ]);
@@ -236,6 +238,10 @@ export async function getMyContent(
       contentType: doc.contentType,
       thumbnailUrl: doc.thumbnailUrl,
       fileUrl: doc.fileUrl,
+      moderationStatus: doc.moderationStatus || "pending",
+      publicationState: doc.publicationState || null,
+      // Owners can always delete their own media, including under_review.
+      canDelete: true,
       engagement: {
         views: doc.viewCount || 0,
         likes: doc.likeCount || 0,

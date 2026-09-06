@@ -87,7 +87,7 @@ router.get(
 router.get(
   "/copyright-free/:songId/stream",
   apiRateLimiter,
-  cacheMiddleware(60),
+  cacheMiddleware(30),
   streamCopyrightFreeSong
 );
 

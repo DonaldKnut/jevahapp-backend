@@ -18,13 +18,31 @@ const ANTI_GOSPEL =
   /\b(?:porn|porno|xxx|nude|nudity|strip\s+club|nightclub|onlyfans|ashawo|olosho|twerk|blaspheme|blasphemy)\b/i;
 
 export function hasStrongGospelSignal(input: ModerationInput): boolean {
-  const text = policyText(input).toLowerCase();
   const title = (input.title || "").toLowerCase();
+  const description = (input.description || "").toLowerCase();
+  const transcript = (input.transcript || "").toLowerCase();
+  const body = `${description} ${transcript}`.trim();
   const titleHit = GOSPEL_STRONG.test(title);
-  const bodyHit = GOSPEL_STRONG.test(text);
-  if (ANTI_GOSPEL.test(text) && !titleHit) {
+  const bodyHit = GOSPEL_STRONG.test(body);
+  const fullText = `${title} ${body}`;
+  const ct = (input.contentType || "").toLowerCase();
+  const isVideo = ["videos", "sermon", "live", "recording"].includes(ct);
+
+  if (ANTI_GOSPEL.test(fullText) && !bodyHit) {
     return false;
   }
+
+  // Videos: a gospel title + any frames is NOT enough (JEV-003 title bypass).
+  // Require gospel signal in description/transcript (not title alone).
+  if (isVideo) {
+    if (!bodyHit) return false;
+    const hasTranscriptDepth = transcript.length > 40;
+    const hasFrames =
+      !!input.thumbnail ||
+      !!(input.videoFrames && input.videoFrames.length > 0);
+    return hasTranscriptDepth || (hasFrames && bodyHit);
+  }
+
   if (
     titleHit &&
     (input.thumbnail ||

@@ -64,35 +64,39 @@ export async function applyModerationStatus(params: {
     throw Object.assign(new Error("Media not found"), { code: "NOT_FOUND" });
   }
 
+  const playableUrl = [media.playbackUrl, media.hlsUrl, media.fileUrl]
+    .map(u => String(u || ""))
+    .find(u => u.startsWith("http"));
+  const processingDone = ["ready", "completed"].includes(
+    String(media.processing?.status || "").toLowerCase()
+  );
+  // Admin approve must make feed-visible Media when a playable URL already exists.
+  // Only keep isHidden + publishing when there is nothing HTTP to play yet.
   const needsProcessing =
     status === "approved" &&
-    ((media.uploadIntent?.stagingKey?.startsWith("staging/") &&
-      media.processing?.status !== "ready" &&
-      media.processing?.status !== "completed") ||
-      !(media.playbackUrl || media.hlsUrl || media.fileUrl)?.startsWith?.(
-        "http"
-      ));
+    !playableUrl &&
+    !processingDone &&
+    !!media.uploadIntent?.stagingKey?.startsWith("staging/");
 
   const updateData: any = {
     moderationStatus: status,
-    isHidden: true,
-    publicationState:
-      status === "rejected"
-        ? "tombstoned"
-        : status === "approved"
-          ? needsProcessing
-            ? "publishing"
-            : "live"
-          : "staged", // pending | under_review
   };
 
-  if (status === "approved" && !needsProcessing) {
-    updateData.isHidden = false;
-    updateData.publicationState = "live";
-    updateData.publishedAt = new Date();
-  }
-
-  if (status === "pending" || status === "under_review") {
+  if (status === "approved") {
+    if (needsProcessing) {
+      updateData.isHidden = true;
+      updateData.publicationState = "publishing";
+    } else {
+      // Same fields mobile feed queries (PUBLIC_MEDIA_FILTER)
+      updateData.isHidden = false;
+      updateData.publicationState = "live";
+      updateData.publishedAt = new Date();
+    }
+  } else if (status === "rejected") {
+    updateData.isHidden = true;
+    updateData.publicationState = "tombstoned";
+  } else {
+    // pending | under_review
     updateData.isHidden = true;
     updateData.publicationState = "staged";
   }
@@ -101,7 +105,7 @@ export async function applyModerationStatus(params: {
     updateData.adminModerationNotes = adminNotes;
   }
 
-  await Media.findByIdAndUpdate(mediaId, updateData);
+  await Media.findByIdAndUpdate(mediaId, { $set: updateData });
 
   const reviewerStatus =
     status === "approved"
@@ -132,13 +136,22 @@ export async function applyModerationStatus(params: {
         jobIdSuffix: `approval-${Date.now()}`,
         skipModeration: true,
       });
-    } else if (!needsProcessing) {
+    } else {
       const { invalidateFeedCaches } = await import(
         "../../lib/invalidateFeedCaches"
       );
       await invalidateFeedCaches(mediaId, String(media.uploadedBy));
       await cacheService.del(`media:public:${mediaId}`);
     }
+    await cacheService.delPattern("media:public:all-content*");
+  }
+
+  if (status === "rejected" || status === "pending" || status === "under_review") {
+    const { invalidateFeedCaches } = await import(
+      "../../lib/invalidateFeedCaches"
+    );
+    await invalidateFeedCaches(mediaId, String(media.uploadedBy));
+    await cacheService.del(`media:public:${mediaId}`);
     await cacheService.delPattern("media:public:all-content*");
   }
 
@@ -213,11 +226,29 @@ export async function applyReportReview(params: {
     const media = await Media.findByIdAndUpdate(
       report.mediaId,
       {
-        moderationStatus: "rejected",
-        isHidden: true,
+        $set: {
+          moderationStatus: "rejected",
+          isHidden: true,
+          publicationState: "tombstoned",
+        },
       },
       { new: true }
     );
+
+    if (media) {
+      try {
+        const { invalidateFeedCaches } = await import(
+          "../../lib/invalidateFeedCaches"
+        );
+        await invalidateFeedCaches(
+          String(media._id),
+          String(media.uploadedBy || "")
+        );
+        await cacheService.del(`media:public:${media._id}`);
+      } catch {
+        /* non-fatal */
+      }
+    }
 
     if (media?.uploadedBy) {
       try {

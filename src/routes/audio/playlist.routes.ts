@@ -38,7 +38,7 @@ router.get(
   "/playlists/:playlistId",
   verifyToken,
   apiRateLimiter,
-  cacheMiddleware(120, undefined, { allowAuthenticated: true }),
+  cacheMiddleware(120, undefined, { allowAuthenticated: true, varyByUserId: true }),
   getPlaylistById
 );
 
@@ -61,7 +61,22 @@ router.delete("/playlists/:playlistId", verifyToken, apiRateLimiter, deletePlayl
  * @desc    Add a song to a playlist (wrapper for /tracks endpoint)
  * @access  Protected (Authenticated users only - own playlists only)
  */
-router.post("/playlists/:playlistId/songs", verifyToken, apiRateLimiter, addTrackToPlaylist);
+router.post(
+  "/playlists/:playlistId/songs",
+  verifyToken,
+  apiRateLimiter,
+  (req, _res, next) => {
+    // Normalize FE body aliases before addTrackToPlaylist
+    if (!req.body.copyrightFreeSongId && req.body.songId) {
+      req.body.copyrightFreeSongId = req.body.songId;
+    }
+    if (!req.body.copyrightFreeSongId && !req.body.mediaId && req.body.trackId) {
+      req.body.copyrightFreeSongId = req.body.trackId;
+    }
+    next();
+  },
+  addTrackToPlaylist
+);
 
 /**
  * @route   DELETE /api/audio/playlists/:playlistId/songs/:songId

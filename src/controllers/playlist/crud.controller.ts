@@ -6,6 +6,8 @@ import {
   CreatePlaylistBody,
   UpdatePlaylistBody,
   populatePlaylistTracks,
+  playlistOwnerId,
+  invalidatePlaylistCaches,
 } from "./shared";
 
 /**
@@ -67,6 +69,8 @@ export const createPlaylist = async (
       userId,
       name: playlist.name,
     });
+
+    await invalidatePlaylistCaches(String(userId), String(playlist._id));
 
     response.status(201).json({
       success: true,
@@ -182,7 +186,7 @@ export const getPlaylistById = async (
     }
 
     // Check if user has access (own playlist or public playlist)
-    const isOwner = playlist.userId.toString() === userId;
+    const isOwner = playlistOwnerId(playlist) === String(userId);
     if (!isOwner && !playlist.isPublic) {
       response.status(403).json({
         success: false,
@@ -244,7 +248,7 @@ export const updatePlaylist = async (
     }
 
     // Check ownership
-    if (playlist.userId.toString() !== userId) {
+    if (playlistOwnerId(playlist) !== String(userId)) {
       response.status(403).json({
         success: false,
         message: "You can only edit your own playlists",
@@ -289,6 +293,8 @@ export const updatePlaylist = async (
       playlistId,
       userId,
     });
+
+    await invalidatePlaylistCaches(String(userId), playlistId);
 
     // Populate tracks using unified helper
     const populated = await populatePlaylistTracks(updatedPlaylist!);
@@ -344,7 +350,7 @@ export const deletePlaylist = async (
     }
 
     // Check ownership
-    if (playlist.userId.toString() !== userId) {
+    if (playlistOwnerId(playlist) !== String(userId)) {
       response.status(403).json({
         success: false,
         message: "You can only delete your own playlists",
@@ -362,6 +368,8 @@ export const deletePlaylist = async (
     }
 
     await Playlist.findByIdAndDelete(playlistId);
+
+    await invalidatePlaylistCaches(String(userId), playlistId);
 
     logger.info("Playlist deleted", {
       playlistId,

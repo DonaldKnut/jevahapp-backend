@@ -154,11 +154,13 @@ const playlistSchema = new Schema<IPlaylist>(
 
 // Indexes for better performance
 playlistSchema.index({ userId: 1, createdAt: -1 });
-playlistSchema.index({ userId: 1, name: 1 }); // For finding playlists by name
+playlistSchema.index({ userId: 1, name: 1 }); // name uniqueness enforced in create/update handlers
 playlistSchema.index({ isPublic: 1, playCount: -1 }); // For public playlist discovery
 playlistSchema.index({ "tracks.mediaId": 1 }); // For finding which playlists contain a media track
 playlistSchema.index({ "tracks.copyrightFreeSongId": 1 }); // For finding which playlists contain a copyright-free song
 playlistSchema.index({ "tracks.trackType": 1 }); // For filtering by track type
+// Note: MongoDB cannot enforce "unique mediaId within one playlist array" via index;
+// addTrackToPlaylistAtomic uses $nor+$push for race-safe uniqueness.
 
 // Pre-save middleware to update totalTracks
 playlistSchema.pre("save", function (next) {

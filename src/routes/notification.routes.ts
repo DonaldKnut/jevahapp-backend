@@ -12,18 +12,25 @@ router.get(
   notificationController.getUserNotifications.bind(notificationController)
 );
 
+// Lightweight unread badge (must be before /:notificationId routes)
+router.get(
+  "/unread-count",
+  verifyToken,
+  notificationController.getUnreadCount.bind(notificationController)
+);
+
+// Mark all notifications as read (before /:id routes)
+router.patch(
+  "/mark-all-read",
+  verifyToken,
+  notificationController.markAllAsRead.bind(notificationController)
+);
+
 // Mark notification as read
 router.patch(
   "/:notificationId/read",
   verifyToken,
   notificationController.markAsRead.bind(notificationController)
-);
-
-// Mark all notifications as read
-router.patch(
-  "/mark-all-read",
-  verifyToken,
-  notificationController.markAllAsRead.bind(notificationController)
 );
 
 // Get notification preferences

@@ -18,6 +18,10 @@ import {
 } from "../service/media/delivery/publishLive";
 import logger from "../utils/logger";
 import { probeMediaFile } from "../utils/mediaTools";
+import {
+  getDefaultMediaThumbnailUrl,
+  isPendingOrStagingThumbnail,
+} from "../lib/defaultThumbnail";
 
 const execFileAsync = promisify(execFile);
 
@@ -275,7 +279,7 @@ export async function processVideoTranscode(params: {
     // Snapshot prior prefix before reserving the next version (never overwrite it)
     const prior = await Media.findById(mediaId)
       .select(
-        "storagePrefix derivativeKeys moderationStatus uploadedBy uploadIntent.stagingKey uploadIntent.thumbnailStagingKey"
+        "storagePrefix derivativeKeys moderationStatus uploadedBy uploadIntent.stagingKey uploadIntent.thumbnailStagingKey thumbnailUrl thumbnailObjectKey"
       )
       .lean();
     const priorStoragePrefix = (prior as any)?.storagePrefix as
@@ -373,15 +377,31 @@ export async function processVideoTranscode(params: {
       await fileUploadService.headObject(masterObjectKey);
     }
 
+    const priorThumb = String((prior as any)?.thumbnailUrl || "");
+    const hasUserThumb = !isPendingOrStagingThumbnail(priorThumb);
+
+    let resolvedThumbUrl: string | undefined;
+    let resolvedThumbKey: string | undefined;
+    if (hasUserThumb) {
+      // keep existing user thumbnail — do not overwrite
+    } else if (posterUrl) {
+      resolvedThumbUrl = posterUrl;
+      resolvedThumbKey = posterObjectKey;
+    } else {
+      resolvedThumbUrl = getDefaultMediaThumbnailUrl();
+    }
+
     const urls = {
       playbackUrl: mp4Upload.secure_url,
       fileUrl: mp4Upload.secure_url,
       fileObjectKey: mp4Upload.objectKey,
-      ...(posterUrl
+      ...(resolvedThumbUrl
         ? {
-            thumbnailUrl: posterUrl,
-            coverImageUrl: posterUrl,
-            thumbnailObjectKey: posterObjectKey,
+            thumbnailUrl: resolvedThumbUrl,
+            coverImageUrl: resolvedThumbUrl,
+            ...(resolvedThumbKey
+              ? { thumbnailObjectKey: resolvedThumbKey }
+              : {}),
           }
         : {}),
       ...(hlsUrl ? { hlsUrl } : {}),
@@ -470,7 +490,7 @@ export async function processVideoTranscode(params: {
     return {
       playbackUrl: mp4Upload.secure_url,
       hlsUrl,
-      thumbnailUrl: posterUrl,
+      thumbnailUrl: resolvedThumbUrl || posterUrl,
       duration: duration || undefined,
     };
   } finally {

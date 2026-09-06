@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 import { Media } from "../../models/media.model";
 import { CopyrightFreeSong } from "../../models/copyrightFreeSong.model";
 import { enrichMediaPlaybackFields } from "../../service/media/playbackFields";
+import cacheService from "../../service/cache.service";
 
 export interface CreatePlaylistBody {
   name: string;
@@ -14,6 +15,8 @@ export interface CreatePlaylistBody {
 export interface AddTrackToPlaylistBody {
   mediaId?: string; // For regular Media items
   copyrightFreeSongId?: string; // For copyright-free songs
+  /** FE alias used by /api/audio/playlists/:id/songs */
+  songId?: string;
   notes?: string;
   position?: number; // Optional position to insert at
 }
@@ -35,13 +38,41 @@ export interface ReorderTracksBody {
   }>;
 }
 
+/** Normalize owner id whether userId is ObjectId or populated User doc. */
+export function playlistOwnerId(playlist: any): string {
+  const raw = playlist?.userId;
+  if (!raw) return "";
+  if (typeof raw === "object" && raw._id) return String(raw._id);
+  return String(raw);
+}
+
+/** Drop cached playlist list/detail so adds survive refresh. */
+export async function invalidatePlaylistCaches(
+  _userId: string,
+  playlistId?: string
+): Promise<void> {
+  try {
+    await cacheService.delPattern("cache:/api/playlists*");
+    await cacheService.delPattern("cache:/api/audio/playlists*");
+    if (playlistId) {
+      await cacheService.delPattern(`cache:*/playlists/${playlistId}*`);
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
 /**
  * Professional helper: Populate playlist tracks from both collections
  * Returns unified format for frontend consumption
  */
 export async function populatePlaylistTracks(playlist: any) {
-  if (!playlist || !playlist.tracks || playlist.tracks.length === 0) {
+  if (!playlist) {
     return playlist;
+  }
+  if (!playlist.tracks || playlist.tracks.length === 0) {
+    const empty = playlist.toObject ? playlist.toObject() : { ...playlist };
+    return { ...empty, tracks: [], totalTracks: 0 };
   }
 
   // Separate track IDs by type

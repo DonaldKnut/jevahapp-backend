@@ -158,8 +158,8 @@ export const streamSong = async (req: Request, res: Response): Promise<void> => 
   try {
     const { songId } = req.params;
 
-    const mongoose = await import("mongoose");
-    if (!mongoose.Types.ObjectId.isValid(songId)) {
+    const { Types } = await import("mongoose");
+    if (!Types.ObjectId.isValid(songId)) {
       res.status(400).json({ success: false, message: "Invalid song ID format" });
       return;
     }
@@ -170,14 +170,20 @@ export const streamSong = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const audioUrl = normalizeUrl((song as any).fileUrl);
+    // Prefer optimized playback URL (same resolution as track cards)
+    const audioUrl = normalizeUrl(
+      (song as any).audio?.playbackUrl ||
+        (song as any).fileUrl ||
+        (song as any).audioUrl ||
+        null
+    );
     if (!audioUrl) {
       res.status(404).json({ success: false, message: "Song audio URL not available" });
       return;
     }
 
-    // Short cache at API layer to reduce repeated DB lookups; CDN URL itself can be long-lived.
-    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+    // Do not cache the redirect long — CDN object URLs are long-lived; API resolves anew.
+    res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
     res.setHeader("Vary", "Accept-Encoding");
 
     // 302 so clients always re-resolve if we ever rotate the URL format.

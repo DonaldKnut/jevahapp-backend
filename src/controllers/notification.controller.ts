@@ -19,11 +19,16 @@ export class NotificationController {
         return;
       }
 
+      const unreadOnlyFlag =
+        String(unreadOnly || "").toLowerCase() === "true" ||
+        unreadOnly === "1";
+
       const notifications = await NotificationService.getUserNotifications(
         userId,
         Number(page),
         Number(limit),
-        type as string
+        type as string | undefined,
+        unreadOnlyFlag
       );
 
       res.json({
@@ -35,6 +40,30 @@ export class NotificationController {
       res.status(500).json({
         success: false,
         error: "Failed to get notifications",
+      });
+    }
+  }
+
+  /**
+   * Lightweight unread badge count (same query as list unreadCount / stats.unread)
+   */
+  async getUnreadCount(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).userId || (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+      const unreadCount = await NotificationService.getUnreadCount(userId);
+      res.json({
+        success: true,
+        data: { unreadCount },
+      });
+    } catch (error: any) {
+      logger.error("Failed to get unread count:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get unread count",
       });
     }
   }
@@ -52,13 +81,17 @@ export class NotificationController {
         return;
       }
 
-      const success = await NotificationService.markAsRead(
+      const result = await NotificationService.markAsRead(
         notificationId,
         userId
       );
 
-      if (success) {
-        res.json({ success: true, message: "Notification marked as read" });
+      if (result) {
+        res.json({
+          success: true,
+          message: "Notification marked as read",
+          unreadCount: result.unreadCount,
+        });
       } else {
         res.status(404).json({
           success: false,
@@ -86,12 +119,14 @@ export class NotificationController {
         return;
       }
 
-      const count = await NotificationService.markAllAsRead(userId);
+      const { count, unreadCount } =
+        await NotificationService.markAllAsRead(userId);
 
       res.json({
         success: true,
         message: `Marked ${count} notifications as read`,
         count,
+        unreadCount,
       });
     } catch (error: any) {
       logger.error("Failed to mark all notifications as read:", error);

@@ -26,6 +26,7 @@ import {
   markAsRead,
   markAllAsRead,
   getUserNotifications,
+  getUnreadCount,
 } from "./notification/inbox";
 
 export type { CreateNotificationData };
@@ -53,6 +54,7 @@ export class NotificationService {
   static markAsRead = markAsRead;
   static markAllAsRead = markAllAsRead;
   static getUserNotifications = getUserNotifications;
+  static getUnreadCount = getUnreadCount;
   /** @internal retained for any direct callers */
   static sendPushNotification = sendPushNotification;
 }

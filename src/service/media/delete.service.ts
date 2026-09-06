@@ -48,10 +48,8 @@ export class MediaDeleteService {
       throw new Error("Media not found");
     }
 
-    if (
-      media.uploadedBy.toString() !== userIdentifier &&
-      userRole !== "admin"
-    ) {
+    const ownerId = String((media as any).uploadedBy?._id ?? media.uploadedBy);
+    if (ownerId !== String(userIdentifier) && userRole !== "admin") {
       throw new Error("Unauthorized to delete this media");
     }
 
@@ -76,10 +74,10 @@ export class MediaDeleteService {
       throw new Error("Media not found");
     }
 
-    if (
-      media.uploadedBy.toString() !== userIdentifier &&
-      userRole !== "admin"
-    ) {
+    // Ownership only — moderationStatus (pending/under_review/rejected/approved)
+    // must not block the owner from deleting their own upload.
+    const ownerId = String((media as any).uploadedBy?._id ?? media.uploadedBy);
+    if (ownerId !== String(userIdentifier) && userRole !== "admin") {
       throw new Error("Unauthorized to delete this media");
     }
 
