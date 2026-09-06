@@ -89,6 +89,11 @@ export function fuseGuardianScores(
     return pack("reject", 0.85, ["secular_off_theme"]);
   }
 
+  const isVideo = ["videos", "sermon", "live", "recording"].includes(ct);
+  const isAudioBook = ["music", "audio", "podcast", "books", "ebook"].includes(
+    ct
+  );
+
   if (
     christian >= t.christianSceneApprove &&
     gospel >= t.gospelSceneApprove &&
@@ -97,7 +102,26 @@ export function fuseGuardianScores(
     return pack("approve", 0.9, ["church_scene_gospel"]);
   }
 
-  if (
+  // Videos: gospel-looking title/description alone must not auto-approve.
+  // Require full Christian visual confirmation (or escalate to review/gray AI).
+  if (isVideo) {
+    if (
+      gospel >= t.gospelTextStrong &&
+      nsfw < t.nsfwSafe &&
+      secularCombined < t.secularSceneSafe
+    ) {
+      if (christian >= t.christianSceneApprove) {
+        return pack("approve", 0.82, [
+          "strong_gospel_text",
+          "video_visual_corroboration",
+        ]);
+      }
+      return pack("review", 0.5, [
+        "strong_gospel_text_needs_visual",
+        "video_metadata_insufficient",
+      ]);
+    }
+  } else if (
     gospel >= t.gospelTextStrong &&
     nsfw < t.nsfwSafe &&
     secularCombined < t.secularSceneSafe
@@ -105,11 +129,7 @@ export function fuseGuardianScores(
     return pack("approve", 0.86, ["strong_gospel_text"]);
   }
 
-  if (
-    ["music", "audio", "podcast", "books", "ebook"].includes(ct) &&
-    gospel >= t.gospelTextStrong &&
-    anti < 0.35
-  ) {
+  if (isAudioBook && gospel >= t.gospelTextStrong && anti < 0.35) {
     return pack("approve", 0.84, ["audio_book_gospel"]);
   }
 
@@ -119,6 +139,12 @@ export function fuseGuardianScores(
 
   const hint = scores.decision_hint;
   if (hint === "approve" && (scores.confidence ?? 0) >= 0.8) {
+    if (isVideo && christian < t.christianSceneApprove) {
+      return pack("review", 0.5, [
+        "guardian_hint_approve_needs_visual",
+        "video_metadata_insufficient",
+      ]);
+    }
     return pack("approve", scores.confidence ?? 0.8, ["guardian_hint_approve"]);
   }
   if (hint === "reject" && (scores.confidence ?? 0) >= 0.8) {

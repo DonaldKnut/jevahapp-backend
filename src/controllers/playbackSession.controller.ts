@@ -92,9 +92,10 @@ export const updateProgress = async (
     if (!ValidationUtil.validateNumberRange(response, duration, "Duration", 1)) return;
     if (!ValidationUtil.validateNumberRange(response, progressPercentage, "Progress Percentage", 0, 100)) return;
 
-    // Update progress
+    // Update progress (ownership enforced; Library writes coalesced)
     const session = await PlaybackSessionService.updateProgress({
       sessionId,
+      userId,
       position,
       duration,
       progressPercentage,
@@ -103,9 +104,10 @@ export const updateProgress = async (
     ResponseUtil.success(
       response,
       {
-        session,
         position: session.currentPosition,
         progressPercentage: session.progressPercentage,
+        totalWatchTime: session.totalWatchTime,
+        isActive: session.isActive,
       },
       "Progress updated successfully"
     );
@@ -129,7 +131,7 @@ export const pausePlayback = async (
 
     if (!ValidationUtil.validateRequired(response, sessionId, "Session ID")) return;
 
-    const session = await PlaybackSessionService.pausePlayback(sessionId);
+    const session = await PlaybackSessionService.pausePlayback(sessionId, userId);
 
     ResponseUtil.success(
       response,
@@ -159,7 +161,7 @@ export const resumePlayback = async (
 
     if (!ValidationUtil.validateRequired(response, sessionId, "Session ID")) return;
 
-    const session = await PlaybackSessionService.resumePlayback(sessionId);
+    const session = await PlaybackSessionService.resumePlayback(sessionId, userId);
 
     ResponseUtil.success(
       response,
@@ -190,6 +192,7 @@ export const endPlayback = async (
     if (!ValidationUtil.validateRequired(response, sessionId, "Session ID")) return;
 
     const result = await PlaybackSessionService.endPlayback(sessionId, {
+      userId,
       reason: reason || "stopped",
       finalPosition,
     });

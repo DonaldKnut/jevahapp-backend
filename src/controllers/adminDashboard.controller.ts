@@ -380,24 +380,42 @@ export const updateModerationStatus = async (
 
     logger.info("Moderation status updated", { mediaId: id, adminId, status });
 
-    const refreshed = await Media.findById(id)
+    const refreshed = (await Media.findById(id)
       .select(
-        "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt"
+        "title description contentType category thumbnailUrl fileUrl playbackUrl hlsUrl fileObjectKey thumbnailObjectKey uploadIntent moderationStatus moderationResult adminModerationNotes isHidden reportCount likeCount viewCount publicationState processing uploadedBy createdAt updatedAt publishedAt"
       )
       .populate("uploadedBy", "firstName lastName email username")
-      .lean();
+      .lean()) as any;
 
     const preview = refreshed
-      ? await resolveAdminMediaPreview(refreshed as any)
+      ? await resolveAdminMediaPreview(refreshed)
       : null;
+
+    const publishable =
+      refreshed?.moderationStatus === "approved" &&
+      refreshed?.isHidden !== true &&
+      refreshed?.publicationState === "live";
 
     res.status(200).json({
       success: true,
-      message: "Moderation status updated successfully",
+      message: publishable
+        ? "Moderation status updated — content is live on the public feed"
+        : status === "approved"
+          ? "Approved — processing derivatives before public publish"
+          : "Moderation status updated successfully",
       data:
         refreshed && preview
-          ? shapeAdminMediaCard(refreshed, preview)
-          : { id, moderationStatus: status },
+          ? {
+              ...shapeAdminMediaCard(refreshed, preview),
+              publishable,
+              isHidden: refreshed.isHidden,
+              publicationState: refreshed.publicationState,
+            }
+          : {
+              id,
+              moderationStatus: status,
+              publishable,
+            },
     });
   } catch (error: any) {
     logger.error("Update moderation status error:", error);

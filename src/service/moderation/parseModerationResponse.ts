@@ -3,7 +3,7 @@ import type { ModerationInput, ModerationResult } from "./types";
 
 export function parseModerationResponse(
   aiResponse: string,
-  _input: ModerationInput
+  input: ModerationInput
 ): ModerationResult {
   try {
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
@@ -17,12 +17,38 @@ export function parseModerationResponse(
           typeof f === "string" &&
           /gospel|worship|biblical|christian|faith/i.test(f)
       );
-      const requiresReview =
-        isApproved && (confidence >= 0.8 || isClearGospel)
-          ? false
-          : parsed.requiresReview === true;
+      const ct = (input.contentType || "").toLowerCase();
+      const isVideo = ["videos", "sermon", "live", "recording"].includes(ct);
+      const hasFrameEvidence =
+        !!(input.videoFrames && input.videoFrames.length > 0) ||
+        !!input.thumbnail;
+
+      let requiresReview: boolean;
+      if (isVideo) {
+        // Title / gospel flags must never force-publish a video.
+        // Only allow auto-clear when frames exist, confidence is high, and the
+        // model itself did not request review.
+        if (!hasFrameEvidence) {
+          requiresReview = true;
+          flags.push("video_missing_visual_evidence");
+        } else if (parsed.requiresReview === true) {
+          requiresReview = true;
+          flags.push("video_model_requested_review");
+        } else if (!(isApproved && confidence >= 0.9)) {
+          requiresReview = true;
+          flags.push("video_low_confidence_review");
+        } else {
+          requiresReview = false;
+        }
+      } else {
+        requiresReview =
+          isApproved && (confidence >= 0.8 || isClearGospel)
+            ? false
+            : parsed.requiresReview === true;
+      }
+
       return {
-        isApproved,
+        isApproved: requiresReview && isVideo ? false : isApproved,
         confidence,
         reason: parsed.reason || "AI analysis completed",
         flags,

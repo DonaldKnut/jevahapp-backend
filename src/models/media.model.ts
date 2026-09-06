@@ -265,9 +265,9 @@ const mediaSchema = new Schema<IMedia>(
     },
     thumbnailUrl: {
       type: String,
-      required: function () {
-        return this.contentType !== "live"; // Thumbnail required for music, videos, books
-      },
+      // Optional at create time — pipeline assigns poster/default when missing
+      required: false,
+      default: "pending://auto-thumbnail",
     },
     // Cloudflare R2 object key for the thumbnail (needed to delete from storage)
     thumbnailObjectKey: {

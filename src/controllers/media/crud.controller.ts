@@ -386,9 +386,8 @@ export const deleteMedia = async (
   try {
     const { id } = request.params;
     const userIdentifier = request.userId;
-    const userRole = request.user?.role;
+    const userRole = request.userRole || request.user?.role;
 
-    // Debug logging
     logger.debug("Delete Media Request", {
       mediaId: id,
       userId: userIdentifier,
@@ -401,6 +400,7 @@ export const deleteMedia = async (
       logger.warn("Delete Media: No user identifier found");
       response.status(401).json({
         success: false,
+        code: "AUTH_REQUIRED",
         message: "Unauthorized: User not authenticated",
       });
       return;
@@ -409,19 +409,19 @@ export const deleteMedia = async (
     if (!Types.ObjectId.isValid(id)) {
       response.status(400).json({
         success: false,
+        code: "INVALID_MEDIA_ID",
         message: "Invalid media identifier",
       });
       return;
     }
 
+    // Owners may delete their media in any moderation state (including under_review).
     await mediaService.deleteMedia(id, userIdentifier, userRole || "");
 
-    // Invalidate cache for this media and related caches
     await cacheService.del(`media:public:${id}`);
     await cacheService.del(`media:${id}`);
     await cacheService.delPattern("media:public:*");
     await cacheService.delPattern("media:all:*");
-    // Structural feed change — drop shared feed list caches
     await invalidateFeedCaches(id, "");
 
     response.status(200).json({
@@ -430,9 +430,27 @@ export const deleteMedia = async (
     });
   } catch (error: any) {
     logger.error("Delete media error", { error: error?.message });
-    response.status(error.message === "Media not found" ? 404 : 400).json({
+    const msg = error?.message || "Failed to delete media";
+    if (msg === "Media not found") {
+      response.status(404).json({
+        success: false,
+        code: "NOT_FOUND",
+        message: msg,
+      });
+      return;
+    }
+    if (msg === "Unauthorized to delete this media") {
+      response.status(403).json({
+        success: false,
+        code: "FORBIDDEN",
+        message: msg,
+      });
+      return;
+    }
+    response.status(400).json({
       success: false,
-      message: error.message || "Failed to delete media",
+      code: "DELETE_FAILED",
+      message: msg,
     });
   }
 };

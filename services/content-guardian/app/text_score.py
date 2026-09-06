@@ -33,8 +33,9 @@ def score_text(
     Returns gospel_score, anti_gospel_score, secular_text_score in [0, 1],
     plus signal strings.
     """
-    # Title weighted higher — users see it first
-    blob = _normalize(f"{title} {title} {description} {transcript}")
+    # Title once + description + transcript. Avoid double-counting title so
+    # gospel-looking metadata cannot dominate over body/transcript evidence.
+    blob = _normalize(f"{title} {description} {transcript}")
     if not blob:
         return {
             "gospel_score": 0.0,
@@ -54,12 +55,17 @@ def score_text(
     anti_gospel_score = min(1.0, a_count / 2.0)
     secular_text_score = min(1.0, (s_count * 0.35 + a_count * 0.5) / 2.0)
 
-    # Title-only gospel boost
+    # Modest title boost only when transcript/description also support gospel
     title_n = _normalize(title)
+    body_n = _normalize(f"{description} {transcript}")
     if title_n:
         t_g, _ = _count_hits(title_n, GOSPEL_TERMS)
-        if t_g:
-            gospel_score = min(1.0, gospel_score + 0.15)
+        body_g, _ = _count_hits(body_n, GOSPEL_TERMS) if body_n else (0, [])
+        if t_g and body_g:
+            gospel_score = min(1.0, gospel_score + 0.1)
+        elif t_g and not body_n:
+            # Title-only assets (no body yet) keep a smaller boost
+            gospel_score = min(1.0, gospel_score + 0.08)
 
     signals: list[str] = []
     if g_hits:
@@ -129,8 +135,17 @@ def hint_from_text_scores(
         signals.append("church_scene_gospel")
         return "approve", 0.9, signals
 
-    # Strong text gospel, safe vision / no frames
+    is_video = ct in ("videos", "sermon", "live", "recording")
+
+    # Strong text gospel, safe vision — videos still need visual corroboration
     if gospel >= gospel_text_strong and nsfw < nsfw_safe and secular_scene < secular_scene_safe:
+        if is_video:
+            if christian_scene >= christian_scene_approve:
+                signals.append("strong_gospel_text")
+                signals.append("video_visual_corroboration")
+                return "approve", 0.82, signals
+            signals.append("strong_gospel_text_needs_visual")
+            return "review", 0.5, signals
         signals.append("strong_gospel_text")
         return "approve", 0.86, signals
 

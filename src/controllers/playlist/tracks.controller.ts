@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
 import { Playlist } from "../../models/playlist.model";
-import { Media } from "../../models/media.model";
-import { CopyrightFreeSong } from "../../models/copyrightFreeSong.model";
 import logger from "../../utils/logger";
 import {
-  AddTrackToPlaylistBody,
   ReorderTracksBody,
   populatePlaylistTracks,
+  playlistOwnerId,
+  invalidatePlaylistCaches,
 } from "./shared";
+import { addTrackToPlaylistAtomic } from "../../service/playlist/addTrack.service";
 
 /**
  * Add a track (media) to a playlist
@@ -37,30 +37,10 @@ export const addTrackToPlaylist = async (
       return;
     }
 
-    const playlist = await Playlist.findById(playlistId);
-    if (!playlist) {
-      response.status(404).json({
-        success: false,
-        message: "Playlist not found",
-      });
-      return;
-    }
-
-    // Check ownership
-    if (playlist.userId.toString() !== userId) {
-      response.status(403).json({
-        success: false,
-        message: "You can only add tracks to your own playlists",
-      });
-      return;
-    }
-
-    const { mediaId, copyrightFreeSongId, notes, position } =
-      request.body as AddTrackToPlaylistBody;
-
-    // Professional validation: Determine track type and validate
-    let trackType: "media" | "copyrightFree" | null = null;
-    let trackId: string | null = null;
+    const body = request.body || {};
+    const mediaId = body.mediaId;
+    const copyrightFreeSongId =
+      body.copyrightFreeSongId || body.songId || body.trackId || undefined;
 
     if (mediaId && copyrightFreeSongId) {
       response.status(400).json({
@@ -70,6 +50,8 @@ export const addTrackToPlaylist = async (
       return;
     }
 
+    let trackType: "media" | "copyrightFree" | null = null;
+    let trackId: string | null = null;
     if (mediaId) {
       trackType = "media";
       trackId = mediaId;
@@ -84,113 +66,41 @@ export const addTrackToPlaylist = async (
       return;
     }
 
-    if (!Types.ObjectId.isValid(trackId)) {
-      response.status(400).json({
-        success: false,
-        error: `Invalid ${trackType === "media" ? "media" : "copyright-free song"} ID`,
-      });
-      return;
-    }
-
-    // Verify content exists in appropriate collection
-    let contentExists = false;
-    if (trackType === "media") {
-      const media = await Media.findById(trackId);
-      contentExists = !!media;
-    } else {
-      const song = await CopyrightFreeSong.findById(trackId);
-      contentExists = !!song;
-      if (song) {
-        const url = String(
-          (song as any).audio?.playbackUrl || (song as any).fileUrl || ""
-        );
-        const status = String((song as any).processing?.status || "").toLowerCase();
-        if (url.startsWith("pending://") || status === "pending" || status === "failed") {
-          response.status(400).json({
-            success: false,
-            error: "Song is not ready to add to a playlist yet",
-            code: "TRACK_NOT_READY",
-          });
-          return;
-        }
-      }
-    }
-
-    if (!contentExists) {
-      response.status(404).json({
-        success: false,
-        error: `${trackType === "media" ? "Media" : "Copyright-free song"} not found`,
-      });
-      return;
-    }
-
-    // Check for duplicate (check both fields)
-    const existingTrack = playlist.tracks.find((t: any) => {
-      if (trackType === "media") {
-        return t.trackType === "media" && t.mediaId?.toString() === trackId;
-      } else {
-        return (
-          t.trackType === "copyrightFree" &&
-          t.copyrightFreeSongId?.toString() === trackId
-        );
-      }
+    const result = await addTrackToPlaylistAtomic({
+      playlistId,
+      userId: String(userId),
+      trackType,
+      trackId: String(trackId),
+      notes: body.notes,
+      position: body.position,
     });
 
-    if (existingTrack) {
-      response.status(400).json({
+    if (!result.ok) {
+      response.status(result.status).json({
         success: false,
-        error: "This song is already in the playlist",
-        message: "This song is already in the playlist",
+        error: result.error,
+        message: result.error,
+        code: result.code,
       });
       return;
     }
-
-    // Determine order (position or append to end)
-    let order = position !== undefined ? position : playlist.tracks.length;
-
-    // If inserting at specific position, update orders of subsequent tracks
-    if (position !== undefined && position < playlist.tracks.length) {
-      playlist.tracks.forEach((track: any) => {
-        if (track.order >= position) {
-          track.order += 1;
-        }
-      });
-    }
-
-    // Create track object
-    const newTrack: any = {
-      trackType,
-      addedAt: new Date(),
-      addedBy: new Types.ObjectId(userId),
-      order,
-      notes: notes?.trim(),
-    };
-
-    if (trackType === "media") {
-      newTrack.mediaId = new Types.ObjectId(trackId);
-    } else {
-      newTrack.copyrightFreeSongId = new Types.ObjectId(trackId);
-    }
-
-    // Add track
-    playlist.tracks.push(newTrack);
-    playlist.totalTracks = playlist.tracks.length;
-    await playlist.save();
-
-    // Return populated playlist with unified format
-    const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Track added to playlist", {
       playlistId,
       trackId,
       trackType,
       userId,
+      alreadyExists: !!result.alreadyExists,
     });
 
     response.status(200).json({
       success: true,
-      message: "Track added to playlist successfully",
-      data: populated,
+      code: result.alreadyExists ? "TRACK_ALREADY_IN_PLAYLIST" : undefined,
+      message: result.alreadyExists
+        ? "This song is already in the playlist"
+        : "Track added to playlist successfully",
+      data: result.playlist,
+      alreadyExists: !!result.alreadyExists,
     });
   } catch (error: any) {
     logger.error("Add track to playlist error:", error);
@@ -211,7 +121,7 @@ export const removeTrackFromPlaylist = async (
 ): Promise<void> => {
   try {
     const { playlistId, mediaId } = request.params;
-    const { copyrightFreeSongId, trackType } = request.query; // Support query params too
+    const { copyrightFreeSongId, trackType } = request.query;
     const userId = request.userId;
 
     if (!userId) {
@@ -239,8 +149,7 @@ export const removeTrackFromPlaylist = async (
       return;
     }
 
-    // Check ownership
-    if (playlist.userId.toString() !== userId) {
+    if (playlistOwnerId(playlist) !== String(userId)) {
       response.status(403).json({
         success: false,
         message: "You can only remove tracks from your own playlists",
@@ -248,7 +157,6 @@ export const removeTrackFromPlaylist = async (
       return;
     }
 
-    // Determine which track to remove
     const trackIdToRemove = mediaId || (copyrightFreeSongId as string);
     const trackTypeToRemove =
       (trackType as string) || (mediaId ? "media" : "copyrightFree");
@@ -261,18 +169,16 @@ export const removeTrackFromPlaylist = async (
       return;
     }
 
-    // Find and remove the track (check both types)
     const trackIndex = playlist.tracks.findIndex((t: any) => {
       if (trackTypeToRemove === "media") {
         return (
           t.trackType === "media" && t.mediaId?.toString() === trackIdToRemove
         );
-      } else {
-        return (
-          t.trackType === "copyrightFree" &&
-          t.copyrightFreeSongId?.toString() === trackIdToRemove
-        );
       }
+      return (
+        t.trackType === "copyrightFree" &&
+        t.copyrightFreeSongId?.toString() === trackIdToRemove
+      );
     });
 
     if (trackIndex === -1) {
@@ -284,22 +190,16 @@ export const removeTrackFromPlaylist = async (
     }
 
     const removedOrder = playlist.tracks[trackIndex].order;
-
-    // Remove the track
     playlist.tracks.splice(trackIndex, 1);
-
-    // Reorder remaining tracks
     playlist.tracks.forEach((track: any) => {
       if (track.order > removedOrder) {
         track.order -= 1;
       }
     });
-
     playlist.totalTracks = playlist.tracks.length;
-
     await playlist.save();
+    await invalidatePlaylistCaches(String(userId), playlistId);
 
-    // Return populated playlist with unified format
     const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Track removed from playlist", {
@@ -359,8 +259,7 @@ export const reorderPlaylistTracks = async (
       return;
     }
 
-    // Check ownership
-    if (playlist.userId.toString() !== userId) {
+    if (playlistOwnerId(playlist) !== String(userId)) {
       response.status(403).json({
         success: false,
         message: "You can only reorder tracks in your own playlists",
@@ -378,16 +277,14 @@ export const reorderPlaylistTracks = async (
       return;
     }
 
-    // Create track lookup map - support both track types
     const trackMap = new Map<string, number>();
-    tracks.forEach((t) => {
+    tracks.forEach(t => {
       const trackId = t.mediaId || t.copyrightFreeSongId;
       if (trackId) {
         trackMap.set(trackId, t.order);
       }
     });
 
-    // Update order for each track (support both types)
     playlist.tracks.forEach((track: any) => {
       const trackId =
         track.mediaId?.toString() || track.copyrightFreeSongId?.toString();
@@ -399,12 +296,10 @@ export const reorderPlaylistTracks = async (
       }
     });
 
-    // Sort tracks by order
     playlist.tracks.sort((a: any, b: any) => a.order - b.order);
-
     await playlist.save();
+    await invalidatePlaylistCaches(String(userId), playlistId);
 
-    // Return populated playlist with unified format
     const populated = await populatePlaylistTracks(playlist);
 
     logger.info("Playlist tracks reordered", {

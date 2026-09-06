@@ -52,11 +52,12 @@ export async function updateNotificationPreferences(
 
 export async function getNotificationStats(userId: string): Promise<any> {
   try {
+    const userOid = new Types.ObjectId(userId);
     const [total, unread, byType] = await Promise.all([
-      Notification.countDocuments({ user: userId }),
-      Notification.countDocuments({ user: userId, isRead: false }),
+      Notification.countDocuments({ user: userOid }),
+      Notification.countDocuments({ user: userOid, isRead: false }),
       Notification.aggregate([
-        { $match: { user: new Types.ObjectId(userId) } },
+        { $match: { user: userOid } },
         { $group: { _id: "$type", count: { $sum: 1 } } },
       ]),
     ]);
@@ -78,50 +79,73 @@ export async function getNotificationStats(userId: string): Promise<any> {
 export async function markAsRead(
   notificationId: string,
   userId: string
-): Promise<any> {
+): Promise<{ notification: any; unreadCount: number } | null> {
   try {
+    const userOid = new Types.ObjectId(userId);
     const notification = await Notification.findOneAndUpdate(
-      { _id: notificationId, user: userId },
+      { _id: notificationId, user: userOid },
       { isRead: true },
       { new: true }
     );
 
     if (!notification) {
-      throw new Error("Notification not found");
+      return null;
     }
 
-    return notification;
+    const unreadCount = await Notification.countDocuments({
+      user: userOid,
+      isRead: false,
+    });
+
+    return { notification, unreadCount };
   } catch (error) {
     logger.error("Failed to mark notification as read:", error);
     throw error;
   }
 }
 
-export async function markAllAsRead(userId: string): Promise<void> {
+export async function markAllAsRead(
+  userId: string
+): Promise<{ count: number; unreadCount: number }> {
   try {
-    await Notification.updateMany(
-      { user: userId, isRead: false },
+    const userOid = new Types.ObjectId(userId);
+    const result = await Notification.updateMany(
+      { user: userOid, isRead: false },
       { isRead: true }
     );
+    return {
+      count: result.modifiedCount || 0,
+      unreadCount: 0,
+    };
   } catch (error) {
     logger.error("Failed to mark all notifications as read:", error);
     throw error;
   }
 }
 
+export async function getUnreadCount(userId: string): Promise<number> {
+  return Notification.countDocuments({
+    user: new Types.ObjectId(userId),
+    isRead: false,
+  });
+}
+
 export async function getUserNotifications(
   userId: string,
   page: number = 1,
   limit: number = 20,
-  type?: string
+  type?: string,
+  unreadOnly?: boolean
 ): Promise<{
   notifications: any[];
   total: number;
   unreadCount: number;
 }> {
   try {
-    const query: any = { user: userId };
+    const userOid = new Types.ObjectId(userId);
+    const query: any = { user: userOid };
     if (type) query.type = type;
+    if (unreadOnly) query.isRead = false;
 
     const [notifications, total, unreadCount] = await Promise.all([
       Notification.find(query)
@@ -130,7 +154,8 @@ export async function getUserNotifications(
         .limit(limit)
         .lean(),
       Notification.countDocuments(query),
-      Notification.countDocuments({ user: userId, isRead: false }),
+      // Always global unread for badge consistency with /stats and /unread-count
+      Notification.countDocuments({ user: userOid, isRead: false }),
     ]);
 
     return { notifications, total, unreadCount };

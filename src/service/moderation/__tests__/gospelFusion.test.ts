@@ -34,13 +34,56 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("nsfw_reject");
   });
 
-  it("approves strong gospel text with safe vision", () => {
+  it("routes video strong gospel text without visual corroboration to review", () => {
     const out = fuseGuardianScores(
       baseScores({
         gospel_score: 0.85,
         nsfw_score: 0.05,
         secular_scene_score: 0.2,
-      })
+        christian_scene_score: 0.1,
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("review");
+    expect(out.signals).toContain("strong_gospel_text_needs_visual");
+  });
+
+  it("approves video strong gospel text when christian scene corroborates", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.85,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.55,
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("approve");
+    expect(out.signals).toContain("video_visual_corroboration");
+  });
+
+  it("does not approve video on mid christian score + gospel title text", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.85,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.45,
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("review");
+    expect(out.signals).toContain("strong_gospel_text_needs_visual");
+  });
+
+  it("approves non-video strong gospel text with safe vision", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.85,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+      }),
+      "image"
     );
     expect(out.decision).toBe("approve");
     expect(out.signals).toContain("strong_gospel_text");
@@ -120,7 +163,12 @@ describe("fuseGuardianScores", () => {
 describe("fusionToModerationResult", () => {
   it("maps approve to auto-publish flags", () => {
     const outcome = fuseGuardianScores(
-      baseScores({ gospel_score: 0.9, nsfw_score: 0.05 })
+      baseScores({
+        gospel_score: 0.9,
+        nsfw_score: 0.05,
+        christian_scene_score: 0.6,
+      }),
+      "videos"
     );
     const result = fusionToModerationResult(outcome, {
       contentType: "videos",

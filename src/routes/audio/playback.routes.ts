@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Types } from "mongoose";
 import {
   startPlayback,
   updateProgress,
@@ -9,6 +10,8 @@ import {
 } from "../../controllers/playbackSession.controller";
 import { verifyToken } from "../../middleware/auth.middleware";
 import { apiRateLimiter } from "../../middleware/rateLimiter";
+import { PlaybackSession } from "../../models/playbackSession.model";
+import { Library } from "../../models/library.model";
 
 const router = Router();
 
@@ -100,16 +103,35 @@ router.get(
         return;
       }
 
-      const { PlaybackSession } = await import("../../models/playbackSession.model");
-      const { Types } = await import("mongoose");
+      if (!Types.ObjectId.isValid(trackId)) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid track ID",
+        });
+        return;
+      }
 
-      const session: any = await PlaybackSession.findOne({
-        userId: new Types.ObjectId(userId),
-        mediaId: new Types.ObjectId(trackId),
-        isActive: true,
-      }).lean();
+      // Prefer Library resume progress (survives ended sessions), then active session.
+      const [libraryEntry, activeSession]: [any, any] = await Promise.all([
+        Library.findOne({
+          userId: new Types.ObjectId(userId),
+          mediaId: new Types.ObjectId(trackId),
+          mediaType: "media",
+        })
+          .select("watchProgress completionPercentage")
+          .lean(),
+        PlaybackSession.findOne({
+          userId: new Types.ObjectId(userId),
+          mediaId: new Types.ObjectId(trackId),
+          isActive: true,
+        })
+          .select("currentPosition progressPercentage")
+          .lean(),
+      ]);
 
-      if (!session) {
+      const position =
+        activeSession?.currentPosition ?? libraryEntry?.watchProgress ?? null;
+      if (position == null) {
         res.status(200).json({
           success: true,
           data: null,
@@ -120,8 +142,11 @@ router.get(
       res.status(200).json({
         success: true,
         data: {
-          position: session.currentPosition || 0,
-          progressPercentage: session.progressPercentage || 0,
+          position: position || 0,
+          progressPercentage:
+            activeSession?.progressPercentage ??
+            libraryEntry?.completionPercentage ??
+            0,
         },
       });
     } catch (error: any) {
