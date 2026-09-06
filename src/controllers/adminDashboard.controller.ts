@@ -15,6 +15,11 @@ import {
   normalizeModerationStatusInput,
   type ModerationStatus,
 } from "../service/admin/moderationActions.service";
+import {
+  BACKFILL_FILTERS,
+  backfillMissingModerationStatus,
+  type BackfillFilter,
+} from "../service/admin/moderationBackfill.service";
 import { isMasterAdminUser } from "../config/superAdmin";
 import logger from "../utils/logger";
 import { countArtistsNeedingOnboardEmail } from "../service/artistOnboardEmail.service";
@@ -511,6 +516,82 @@ export const bulkUpdateModerationStatus = async (
     res.status(500).json({
       success: false,
       message: "Failed to bulk update moderation",
+    });
+  }
+};
+
+/**
+ * POST /api/admin/moderation/backfill
+ * Seed missing/empty moderationStatus on already-playable public-ish media.
+ * Defaults to dryRun=true — must pass dryRun:false to write.
+ */
+export const backfillModerationStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const adminId = req.userId!;
+    const body = req.body || {};
+    const filterRaw = String(body.filter || "missing_or_empty").trim();
+    const setToRaw = String(body.setTo || "approved").trim().toLowerCase();
+    const dryRun = body.dryRun !== false && body.dryRun !== "false";
+
+    if (!(BACKFILL_FILTERS as readonly string[]).includes(filterRaw)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid filter. Must be one of: ${BACKFILL_FILTERS.join(", ")}`,
+      });
+      return;
+    }
+
+    const setTo = normalizeModerationStatusInput(setToRaw);
+    if (!setTo || setTo !== "approved") {
+      res.status(400).json({
+        success: false,
+        message: 'setTo must be "approved"',
+      });
+      return;
+    }
+
+    const result = await backfillMissingModerationStatus({
+      filter: filterRaw as BackfillFilter,
+      setTo,
+      dryRun,
+      adminId,
+    });
+
+    if (!dryRun) {
+      await AuditService.logAdminAction(
+        adminId,
+        "moderation_status_backfill",
+        "media",
+        {
+          filter: result.filter,
+          setTo: result.setTo,
+          matched: result.matched,
+          modified: result.modified,
+        },
+        req.ip,
+        req.get("User-Agent") || undefined
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: dryRun
+        ? `Dry-run: ${result.matched} media would be set to approved`
+        : `Backfill complete: ${result.modified} media updated`,
+      data: result,
+    });
+  } catch (error: any) {
+    if (error?.code === "INVALID_FILTER" || error?.code === "INVALID_STATUS") {
+      res.status(400).json({ success: false, message: error.message });
+      return;
+    }
+    logger.error("Moderation backfill error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to backfill moderation status",
     });
   }
 };

@@ -78,7 +78,7 @@ export async function getAllMedia(filters: any = {}, options: { enforceModeratio
   const skip = (page - 1) * limit;
 
   const mediaList = await Media.find(query)
-    .select("title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl uploadedBy createdAt viewCount likeCount shareCount duration fileSize width height bitrate topics processing processingMetadata")
+    .select("title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl uploadedBy createdAt viewCount likeCount shareCount duration fileSize width height bitrate topics processing processingMetadata moderationStatus isHidden publicationState")
     .sort(sort)
     .skip(skip)
     .limit(limit)

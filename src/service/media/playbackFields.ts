@@ -49,12 +49,23 @@ export function resolveProcessingStatus(doc: any): string {
 /** Attach duration + processingStatus without dropping existing fields. */
 export function enrichMediaPlaybackFields<T extends Record<string, any>>(
   doc: T
-): T & { duration: number | null; processingStatus: string } {
+): T & {
+  duration: number | null;
+  processingStatus: string;
+  moderationStatus: string;
+} {
   const duration = resolveDurationSeconds(doc);
   const processingStatus = resolveProcessingStatus(doc);
+  // Always emit lowercase status so FE filterVisibleMedia never treats cards as "missing"
+  const raw = doc?.moderationStatus;
+  const moderationStatus =
+    typeof raw === "string" && raw.trim()
+      ? raw.trim().toLowerCase()
+      : "pending";
   return attachPublicAuthor({
     ...doc,
     duration,
     processingStatus,
+    moderationStatus,
   });
 }

@@ -246,6 +246,10 @@ export function buildAggregationPipeline(
         topics: 1,
         duration: 1,
         processingStatus: 1,
+        // FE filterVisibleMedia requires this on every card (missing = owner-only)
+        moderationStatus: 1,
+        isHidden: 1,
+        publicationState: 1,
         fileSize: 1,
         width: 1, // Video width (videos only)
         height: 1, // Video height (videos only)

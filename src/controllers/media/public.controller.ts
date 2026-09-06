@@ -421,6 +421,7 @@ export const getDefaultContent = async (
         contentType: mapContentType(item.contentType),
         duration: enriched.duration,
         processingStatus: enriched.processingStatus,
+        moderationStatus: enriched.moderationStatus,
         fileUrl: item.fileUrl || null,
         playbackUrl: item.playbackUrl || null,
         hlsUrl: item.hlsUrl || null,
