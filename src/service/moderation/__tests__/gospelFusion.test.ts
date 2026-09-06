@@ -60,10 +60,29 @@ describe("fuseGuardianScores", () => {
       "videos",
       {
         transcriptChars: 120,
+        transcriptHasGospel: true,
       }
     );
     expect(out.decision).toBe("approve");
     expect(out.signals).toContain("spoken_word_of_god");
+  });
+
+  it("does not approve violence-style video with gospel title but no gospel in transcript", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.9, // title-inflated
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.05,
+      }),
+      "videos",
+      {
+        transcriptChars: 200, // long screams / non-gospel speech
+        transcriptHasGospel: false,
+      }
+    );
+    expect(out.decision).toBe("review");
+    expect(out.signals).toContain("strong_gospel_text_needs_spoken_or_visual");
   });
 
   it("approves video strong gospel text when christian scene corroborates", () => {

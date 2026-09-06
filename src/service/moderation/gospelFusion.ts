@@ -32,6 +32,8 @@ export type FusionDecision = "approve" | "reject" | "review";
 export interface FusionEvidence {
   /** Characters of STT / spoken transcript (not title/description) */
   transcriptChars?: number;
+  /** True only when gospel lexicon appears in the transcript itself */
+  transcriptHasGospel?: boolean;
   hasFrames?: boolean;
 }
 
@@ -65,8 +67,10 @@ export function fuseGuardianScores(
   const ct = (contentType || "").toLowerCase();
   const signals = [...(scores.signals || [])];
   const transcriptChars = Math.max(0, evidence?.transcriptChars ?? 0);
+  // Spoken approve must NOT use title-inflated gospel_score — only transcript lexicon.
   const spokenGospel =
-    transcriptChars >= t.videoTranscriptMinChars && gospel >= t.gospelTextStrong;
+    transcriptChars >= t.videoTranscriptMinChars &&
+    evidence?.transcriptHasGospel === true;
 
   const pack = (
     decision: FusionDecision,
