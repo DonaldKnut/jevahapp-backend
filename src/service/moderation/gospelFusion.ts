@@ -22,8 +22,12 @@ export function getFusionThresholds() {
     secularSceneReject: envFloat("FUSION_SECULAR_SCENE_REJECT", 0.55),
     secularSceneSafe: envFloat("FUSION_SECULAR_SCENE_SAFE", 0.45),
     antiGospelReject: envFloat("FUSION_ANTI_GOSPEL_REJECT", 0.5),
-    /** Spoken gospel depth required to auto-approve videos without church visuals */
     videoTranscriptMinChars: envFloat("FUSION_VIDEO_TRANSCRIPT_MIN_CHARS", 80),
+    violenceReject: envFloat("FUSION_VIOLENCE_REJECT", 0.45),
+    goreReject: envFloat("FUSION_GORE_REJECT", 0.4),
+    weaponsReject: envFloat("FUSION_WEAPONS_REJECT", 0.48),
+    drugsReject: envFloat("FUSION_DRUGS_REJECT", 0.48),
+    sexualSceneReject: envFloat("FUSION_SEXUAL_SCENE_REJECT", 0.5),
   };
 }
 
@@ -48,6 +52,11 @@ export interface FusionOutcome {
     nsfw_score: number;
     christian_scene_score: number;
     secular_scene_score: number;
+    violence_score: number;
+    gore_score: number;
+    weapons_score: number;
+    drugs_score: number;
+    sexual_scene_score: number;
   };
 }
 
@@ -63,11 +72,15 @@ export function fuseGuardianScores(
   const nsfw = scores.nsfw_score ?? 0;
   const christian = scores.christian_scene_score ?? 0;
   const secularScene = scores.secular_scene_score ?? 0;
+  const violence = scores.violence_score ?? 0;
+  const gore = scores.gore_score ?? 0;
+  const weapons = scores.weapons_score ?? 0;
+  const drugs = scores.drugs_score ?? 0;
+  const sexualScene = scores.sexual_scene_score ?? 0;
   const secularCombined = Math.max(secularScene, secularText * 0.85);
   const ct = (contentType || "").toLowerCase();
   const signals = [...(scores.signals || [])];
   const transcriptChars = Math.max(0, evidence?.transcriptChars ?? 0);
-  // Spoken approve must NOT use title-inflated gospel_score — only transcript lexicon.
   const spokenGospel =
     transcriptChars >= t.videoTranscriptMinChars &&
     evidence?.transcriptHasGospel === true;
@@ -87,11 +100,31 @@ export function fuseGuardianScores(
       nsfw_score: nsfw,
       christian_scene_score: christian,
       secular_scene_score: secularScene,
+      violence_score: violence,
+      gore_score: gore,
+      weapons_score: weapons,
+      drugs_score: drugs,
+      sexual_scene_score: sexualScene,
     },
   });
 
-  if (nsfw >= t.nsfwReject) {
-    return pack("reject", 0.92, ["nsfw_reject"]);
+  // Dedicated safety detectors (CLIP + NudeNet) — hard reject first
+  if (nsfw >= t.nsfwReject || sexualScene >= t.sexualSceneReject) {
+    return pack("reject", 0.94, [
+      nsfw >= t.nsfwReject ? "nsfw_reject" : "sexual_scene_reject",
+    ]);
+  }
+  if (violence >= t.violenceReject) {
+    return pack("reject", 0.93, ["violence_reject"]);
+  }
+  if (gore >= t.goreReject) {
+    return pack("reject", 0.93, ["gore_reject"]);
+  }
+  if (weapons >= t.weaponsReject) {
+    return pack("reject", 0.9, ["weapons_reject"]);
+  }
+  if (drugs >= t.drugsReject) {
+    return pack("reject", 0.9, ["drugs_reject"]);
   }
 
   if (anti >= t.antiGospelReject && gospel < 0.45) {
@@ -109,32 +142,34 @@ export function fuseGuardianScores(
   const isAudioBook = ["music", "audio", "podcast", "books", "ebook"].includes(
     ct
   );
+  const safetyClear =
+    violence < t.violenceReject * 0.7 &&
+    gore < t.goreReject * 0.7 &&
+    weapons < t.weaponsReject * 0.7 &&
+    drugs < t.drugsReject * 0.7;
 
-  // Church / worship visuals + gospel language (any setting that CLIP marks Christian)
   if (
     christian >= t.christianSceneApprove &&
     gospel >= t.gospelSceneApprove &&
-    nsfw < t.nsfwSafe
+    nsfw < t.nsfwSafe &&
+    safetyClear
   ) {
     return pack("approve", 0.9, ["church_scene_gospel"]);
   }
 
-  // Videos: never auto-approve on title/description alone.
-  // DO auto-approve when spoken transcript carries real gospel (home, car,
-  // street, studio talking-head — no church building required) OR visuals corroborate.
   if (isVideo) {
     if (
       gospel >= t.gospelTextStrong &&
       nsfw < t.nsfwSafe &&
       secularCombined < t.secularSceneSafe
     ) {
-      if (christian >= t.christianSceneApprove) {
+      if (christian >= t.christianSceneApprove && safetyClear) {
         return pack("approve", 0.82, [
           "strong_gospel_text",
           "video_visual_corroboration",
         ]);
       }
-      if (spokenGospel) {
+      if (spokenGospel && safetyClear) {
         return pack("approve", 0.84, [
           "strong_gospel_transcript",
           "spoken_word_of_god",
@@ -148,12 +183,13 @@ export function fuseGuardianScores(
   } else if (
     gospel >= t.gospelTextStrong &&
     nsfw < t.nsfwSafe &&
-    secularCombined < t.secularSceneSafe
+    secularCombined < t.secularSceneSafe &&
+    safetyClear
   ) {
     return pack("approve", 0.86, ["strong_gospel_text"]);
   }
 
-  if (isAudioBook && gospel >= t.gospelTextStrong && anti < 0.35) {
+  if (isAudioBook && gospel >= t.gospelTextStrong && anti < 0.35 && safetyClear) {
     return pack("approve", 0.84, ["audio_book_gospel"]);
   }
 
@@ -163,11 +199,18 @@ export function fuseGuardianScores(
 
   const hint = scores.decision_hint;
   if (hint === "approve" && (scores.confidence ?? 0) >= 0.8) {
-    if (isVideo && christian < t.christianSceneApprove && !spokenGospel) {
+    if (
+      isVideo &&
+      christian < t.christianSceneApprove &&
+      !spokenGospel
+    ) {
       return pack("review", 0.5, [
         "guardian_hint_approve_needs_spoken_or_visual",
         "video_metadata_insufficient",
       ]);
+    }
+    if (!safetyClear) {
+      return pack("review", 0.45, ["guardian_hint_blocked_by_safety"]);
     }
     return pack("approve", scores.confidence ?? 0.8, ["guardian_hint_approve"]);
   }

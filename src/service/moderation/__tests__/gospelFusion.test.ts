@@ -14,6 +14,11 @@ function baseScores(
     nsfw_score: 0,
     christian_scene_score: 0,
     secular_scene_score: 0,
+    violence_score: 0,
+    gore_score: 0,
+    weapons_score: 0,
+    drugs_score: 0,
+    sexual_scene_score: 0,
     decision_hint: "review",
     confidence: 0.5,
     signals: [],
@@ -195,6 +200,45 @@ describe("fuseGuardianScores", () => {
     );
     expect(out.decision).toBe("review");
     expect(out.signals).toContain("gray_zone");
+  });
+  it("rejects violence even with gospel title scores", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.95,
+        nsfw_score: 0.05,
+        violence_score: 0.7,
+        christian_scene_score: 0.1,
+      }),
+      "videos",
+      { transcriptChars: 10, transcriptHasGospel: false }
+    );
+    expect(out.decision).toBe("reject");
+    expect(out.signals).toContain("violence_reject");
+  });
+
+  it("rejects pornographic sexual scene score", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.9,
+        sexual_scene_score: 0.7,
+        nsfw_score: 0.1,
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("reject");
+    expect(out.signals).toContain("sexual_scene_reject");
+  });
+
+  it("rejects weapons threats", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.2,
+        weapons_score: 0.6,
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("reject");
+    expect(out.signals).toContain("weapons_reject");
   });
 });
 

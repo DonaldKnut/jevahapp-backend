@@ -22,6 +22,11 @@ export interface GuardianScoreResult {
   nsfw_score: number;
   christian_scene_score: number;
   secular_scene_score: number;
+  violence_score?: number;
+  gore_score?: number;
+  weapons_score?: number;
+  drugs_score?: number;
+  sexual_scene_score?: number;
   decision_hint: GuardianDecisionHint;
   confidence: number;
   signals: string[];
