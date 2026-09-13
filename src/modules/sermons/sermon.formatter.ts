@@ -1,5 +1,6 @@
 import { normalizeUrl } from "../../controllers/copyrightFreeSong/shared";
-import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../lib/publicMediaVisibility";
+import { resolveProcessingStatus } from "../../service/media/playbackFields";
 
 export type SermonCard = {
   id: string;
@@ -23,6 +24,7 @@ export type SermonCard = {
   playCount: number;
   likeCount: number;
   processingStatus: string;
+  moderationStatus: string;
   contentType: "sermon";
 };
 
@@ -32,30 +34,12 @@ function asIso(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function mapProcessingStatus(doc: any): string {
-  const s = String(doc?.processing?.status || "").toLowerCase();
-  if (s === "ready" || s === "completed") return "ready";
-  if (s === "failed" || s === "rejected") return "failed";
-  if (s === "pending" || s === "uploaded" || s === "queued") return "pending";
-  if (
-    s === "processing" ||
-    s === "transcoding" ||
-    s === "moderating" ||
-    s === "publishing"
-  ) {
-    return "processing";
-  }
-  // Live approved media without processing blob → treat as ready
-  if (doc?.moderationStatus === "approved" && (doc?.playbackUrl || doc?.fileUrl || doc?.hlsUrl)) {
-    return "ready";
-  }
-  return s || "ready";
-}
-
 function inferMediaType(doc: any): "audio" | "video" {
   if (doc.mediaType === "audio" || doc.mediaType === "video") return doc.mediaType;
   const mime = String(doc.fileMimeType || doc.uploadIntent?.declaredMime || "").toLowerCase();
   if (mime.startsWith("audio/")) return "audio";
+  const url = String(doc.fileUrl || doc.playbackUrl || "");
+  if (/\.(mp3|m4a|wav|aac|ogg)(\?|$)/i.test(url)) return "audio";
   return "video";
 }
 
@@ -77,6 +61,11 @@ export function shapeSermonCard(doc: any): SermonCard {
     Number.isFinite(durationSec as number) && (durationSec as number) > 0
       ? (durationSec as number)
       : null;
+  const rawMod = doc.moderationStatus;
+  const moderationStatus =
+    typeof rawMod === "string" && rawMod.trim()
+      ? rawMod.trim().toLowerCase()
+      : "approved";
 
   return {
     id: doc._id?.toString?.() || doc.id,
@@ -98,37 +87,39 @@ export function shapeSermonCard(doc: any): SermonCard {
     publishedAt: asIso(doc.publishedAt || doc.createdAt),
     playCount: doc.viewCount ?? doc.totalViews ?? 0,
     likeCount: doc.likeCount ?? doc.totalLikes ?? 0,
-    processingStatus: mapProcessingStatus(doc),
+    processingStatus: resolveProcessingStatus(doc),
+    moderationStatus,
     contentType: "sermon",
   };
 }
 
-/** Public sermons: Media contentType=sermon, approved, not hidden, playable */
+/** Public sermons: Media contentType=sermon, catalog-visible, playable */
 export function publicSermonFilter(extra: Record<string, unknown> = {}) {
-  return {
+  const extraAnd = Array.isArray(extra.$and)
+    ? extra.$and
+    : extra.$and
+      ? [extra.$and]
+      : [];
+  const rest = { ...extra };
+  delete rest.$and;
+  return publicCatalogFilter({
     contentType: "sermon",
-    ...PUBLIC_MEDIA_FILTER,
     $and: [
       {
         $or: [
           { "processing.status": { $in: ["ready", "completed"] } },
           { processing: { $exists: false } },
           { "processing.status": { $exists: false } },
-          // legacy approved live without processing field
-          {
-            moderationStatus: "approved",
-            $or: [
-              { playbackUrl: { $exists: true, $nin: [null, ""] } },
-              { fileUrl: { $exists: true, $nin: [null, ""] } },
-              { hlsUrl: { $exists: true, $nin: [null, ""] } },
-            ],
-          },
+          { playbackUrl: { $exists: true, $nin: [null, ""] } },
+          { fileUrl: { $exists: true, $nin: [null, ""] } },
+          { hlsUrl: { $exists: true, $nin: [null, ""] } },
         ],
       },
       {
         fileUrl: { $not: /^staging:\/\// },
       },
+      ...extraAnd,
     ],
-    ...extra,
-  };
+    ...rest,
+  });
 }

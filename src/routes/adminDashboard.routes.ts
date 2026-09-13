@@ -4,6 +4,7 @@ import {
   getModerationQueue,
   updateModerationStatus,
   bulkUpdateModerationStatus,
+  backfillModerationStatus,
   getAdminActivityLog,
 } from "../controllers/adminDashboard.controller";
 import {
@@ -669,6 +670,14 @@ router.post(
   requireAdmin,
   apiRateLimiter,
   bulkUpdateModerationStatus
+);
+
+router.post(
+  "/moderation/backfill",
+  verifyToken,
+  requireAdmin,
+  apiRateLimiter,
+  backfillModerationStatus
 );
 
 router.post(

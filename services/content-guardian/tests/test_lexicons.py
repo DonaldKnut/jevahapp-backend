@@ -54,6 +54,29 @@ def test_fusion_reject_nsfw():
     assert "nsfw_reject" in signals
 
 
+def test_fusion_reject_violence_with_gospel_title_scores():
+    hint, conf, signals = hint_from_text_scores(
+        0.95,
+        0.0,
+        0.1,
+        nsfw=0.05,
+        christian_scene=0.1,
+        secular_scene=0.2,
+        content_type="videos",
+        violence=0.7,
+    )
+    assert hint == "reject"
+    assert "violence_reject" in signals
+
+
+def test_fusion_reject_sexual_scene():
+    hint, _, signals = hint_from_text_scores(
+        0.9, 0.0, 0.0, nsfw=0.1, sexual_scene=0.75
+    )
+    assert hint == "reject"
+    assert "sexual_scene_reject" in signals
+
+
 def test_fusion_reject_secular():
     hint, _, signals = hint_from_text_scores(
         0.15, 0.6, 0.6, nsfw=0.1, christian_scene=0.1, secular_scene=0.7

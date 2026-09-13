@@ -15,7 +15,7 @@ import {
   getEvidenceProfile,
   hasMinimumEvidence,
 } from "./moderation/evidenceProfile";
-import { offlineModeration } from "./moderation/offlineModeration";
+import { offlineModeration, transcriptHasGospelLexicon } from "./moderation/offlineModeration";
 import { buildModerationPrompt } from "./moderation/moderationPrompt";
 import { parseModerationResponse } from "./moderation/parseModerationResponse";
 import {
@@ -160,7 +160,11 @@ export class ContentModerationService {
       return null;
     }
 
-    const outcome = fuseGuardianScores(scored, input.contentType);
+    const outcome = fuseGuardianScores(scored, input.contentType, {
+      transcriptChars: input.transcript?.trim().length || 0,
+      transcriptHasGospel: transcriptHasGospelLexicon(input.transcript),
+      hasFrames: !!(input.videoFrames && input.videoFrames.length),
+    });
 
     // Fail-soft: vision requested but Guardian couldn't score images → never auto-approve
     const wantsVision =

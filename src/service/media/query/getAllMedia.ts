@@ -2,6 +2,7 @@ import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
 import { DurationRangeKey } from "../types";
 import { buildMediaVisibilityQuery } from "./visibility";
+import { mediaContentTypeQuery } from "../../../lib/mediaContentTypeQuery";
 import { enrichMediaPlaybackFields } from "../playbackFields";
 
 export async function getAllMedia(filters: any = {}, options: { enforceModeration?: boolean; actingUserId?: string } = { enforceModeration: true }) {
@@ -13,8 +14,9 @@ export async function getAllMedia(filters: any = {}, options: { enforceModeratio
     query.title = { $regex: filters.search, $options: "i" };
   }
 
-  if (filters.contentType) {
-    query.contentType = filters.contentType;
+  const typeMatch = mediaContentTypeQuery(filters.contentType);
+  if (typeMatch) {
+    Object.assign(query, typeMatch);
   }
 
   if (filters.category) {
@@ -78,7 +80,7 @@ export async function getAllMedia(filters: any = {}, options: { enforceModeratio
   const skip = (page - 1) * limit;
 
   const mediaList = await Media.find(query)
-    .select("title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl uploadedBy createdAt viewCount likeCount shareCount duration fileSize width height bitrate topics processing processingMetadata")
+    .select("title description contentType category fileUrl playbackUrl hlsUrl thumbnailUrl coverImageUrl uploadedBy createdAt viewCount likeCount shareCount duration fileSize width height bitrate topics processing processingMetadata moderationStatus isHidden publicationState")
     .sort(sort)
     .skip(skip)
     .limit(limit)

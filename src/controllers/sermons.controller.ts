@@ -77,10 +77,7 @@ export const listPublicSermons = async (req: Request, res: Response) => {
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     const items = pageRows.map(shapeSermonCard);
-    // Only return playable ready items (belt + suspenders)
-    const playable = items.filter(
-      (s) => s.processingStatus === "ready" && s.playbackUrl
-    );
+    const playable = items.filter((s) => s.playbackUrl);
 
     const nextCursor =
       hasMore && pageRows.length
@@ -90,7 +87,7 @@ export const listPublicSermons = async (req: Request, res: Response) => {
     res.status(200).json({
       success: true,
       data: {
-        items: playable.length ? playable : items.filter((s) => s.playbackUrl),
+        items: playable,
         total,
         page: cursor ? undefined : page,
         limit,
@@ -131,7 +128,7 @@ export const listFeaturedSermons = async (_req: Request, res: Response) => {
       .lean();
     const items = rows
       .map(shapeSermonCard)
-      .filter((s) => s.playbackUrl && s.processingStatus === "ready");
+      .filter((s) => s.playbackUrl);
     res.status(200).json({ success: true, data: { items } });
   } catch (error: any) {
     logger.error("Featured sermons error", { error: error.message });

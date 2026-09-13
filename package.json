@@ -18,6 +18,8 @@
     "heal:media-duration:dry": "node scripts/heal-media-duration.js --dry-run",
     "migrate:like-indexes": "node scripts/migrate-like-indexes.js",
     "migrate:like-indexes:dry": "node scripts/migrate-like-indexes.js --dry-run",
+    "seed:moderation-status": "node scripts/seed-moderation-status.js --apply",
+    "seed:moderation-status:dry": "node scripts/seed-moderation-status.js --dry-run",
     "reconcile:like-counts": "node scripts/reconcile-like-counts.js",
     "reconcile:like-counts:dry": "node scripts/reconcile-like-counts.js --dry-run",
     "cleanup:notification-dedupe": "node scripts/cleanup-legacy-notification-dedupe-keys.js",

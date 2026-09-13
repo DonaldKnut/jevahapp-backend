@@ -94,6 +94,12 @@ def hint_from_text_scores(
     christian_scene: float = 0.0,
     secular_scene: float = 0.0,
     content_type: str = "",
+    transcript_chars: int = 0,
+    violence: float = 0.0,
+    gore: float = 0.0,
+    weapons: float = 0.0,
+    drugs: float = 0.0,
+    sexual_scene: float = 0.0,
     nsfw_reject: float = 0.65,
     nsfw_safe: float = 0.25,
     christian_scene_approve: float = 0.55,
@@ -103,6 +109,12 @@ def hint_from_text_scores(
     secular_scene_reject: float = 0.55,
     secular_scene_safe: float = 0.45,
     anti_gospel_reject: float = 0.50,
+    video_transcript_min_chars: int = 80,
+    violence_reject: float = 0.45,
+    gore_reject: float = 0.40,
+    weapons_reject: float = 0.48,
+    drugs_reject: float = 0.48,
+    sexual_scene_reject: float = 0.50,
 ) -> tuple[str, float, list[str]]:
     """
     Pure fusion used by the Python service (mirrored in Node).
@@ -112,9 +124,26 @@ def hint_from_text_scores(
     ct = (content_type or "").lower()
     is_av = ct in ("videos", "sermon", "music", "audio", "podcast") or not ct
 
-    if nsfw >= nsfw_reject:
-        signals.append("nsfw_reject")
-        return "reject", 0.92, signals
+    # Hard safety rejects first (vision detectors)
+    if nsfw >= nsfw_reject or sexual_scene >= sexual_scene_reject:
+        signals.append("nsfw_reject" if nsfw >= nsfw_reject else "sexual_scene_reject")
+        return "reject", 0.94, signals
+
+    if violence >= violence_reject:
+        signals.append("violence_reject")
+        return "reject", 0.93, signals
+
+    if gore >= gore_reject:
+        signals.append("gore_reject")
+        return "reject", 0.93, signals
+
+    if weapons >= weapons_reject:
+        signals.append("weapons_reject")
+        return "reject", 0.9, signals
+
+    if drugs >= drugs_reject:
+        signals.append("drugs_reject")
+        return "reject", 0.9, signals
 
     if anti >= anti_gospel_reject and gospel < 0.45:
         signals.append("anti_gospel_reject")
@@ -126,35 +155,42 @@ def hint_from_text_scores(
         signals.append("secular_off_theme")
         return "reject", 0.85, signals
 
-    # Strong visual church + gospel text
     if (
         christian_scene >= christian_scene_approve
         and gospel >= gospel_scene_approve
         and nsfw < nsfw_safe
+        and violence < violence_reject * 0.7
+        and gore < gore_reject * 0.7
     ):
         signals.append("church_scene_gospel")
         return "approve", 0.9, signals
 
     is_video = ct in ("videos", "sermon", "live", "recording")
+    spoken_gospel = (
+        transcript_chars >= video_transcript_min_chars and gospel >= gospel_text_strong
+    )
+    # Note: Node applies transcriptHasGospel separately; Python hint uses length+score
+    # and Node fusion is authoritative for spoken path.
 
-    # Strong text gospel, safe vision — videos still need visual corroboration
     if gospel >= gospel_text_strong and nsfw < nsfw_safe and secular_scene < secular_scene_safe:
         if is_video:
             if christian_scene >= christian_scene_approve:
                 signals.append("strong_gospel_text")
                 signals.append("video_visual_corroboration")
                 return "approve", 0.82, signals
-            signals.append("strong_gospel_text_needs_visual")
+            if spoken_gospel and violence < 0.3 and gore < 0.25:
+                signals.append("strong_gospel_transcript")
+                signals.append("spoken_word_of_god")
+                return "approve", 0.84, signals
+            signals.append("strong_gospel_text_needs_spoken_or_visual")
             return "review", 0.5, signals
         signals.append("strong_gospel_text")
         return "approve", 0.86, signals
 
-    # Audio / books: text-led approve
     if ct in ("music", "audio", "podcast", "books", "ebook") and gospel >= gospel_text_strong and anti < 0.35:
         signals.append("audio_book_gospel")
         return "approve", 0.84, signals
 
-    # Explicit secular entertainment with weak gospel
     if is_av and gospel < 0.35 and secular >= 0.5 and christian_scene < 0.35:
         signals.append("secular_entertainment")
         return "reject", 0.8, signals

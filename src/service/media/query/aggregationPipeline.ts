@@ -182,6 +182,34 @@ export function buildAggregationPipeline(
               },
               {
                 case: {
+                  $or: [
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$fileUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$playbackUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$hlsUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                  ],
+                },
+                then: "ready",
+              },
+              {
+                case: {
                   $in: [
                     { $toLower: { $ifNull: ["$processing.status", ""] } },
                     ["pending", "uploaded", "queued", "idle"],
@@ -209,7 +237,12 @@ export function buildAggregationPipeline(
               $cond: [
                 {
                   $and: [
-                    { $eq: ["$moderationStatus", "approved"] },
+                    {
+                      $or: [
+                        { $eq: ["$moderationStatus", "approved"] },
+                        { $eq: ["$isDefaultContent", true] },
+                      ],
+                    },
                     {
                       $or: [
                         { $ne: ["$fileUrl", null] },
@@ -223,6 +256,20 @@ export function buildAggregationPipeline(
                 "processing",
               ],
             },
+          },
+        },
+        moderationStatus: {
+          $toLower: {
+            $ifNull: [
+              "$moderationStatus",
+              {
+                $cond: [
+                  { $eq: ["$isDefaultContent", true] },
+                  "approved",
+                  "pending",
+                ],
+              },
+            ],
           },
         },
       },
@@ -246,6 +293,10 @@ export function buildAggregationPipeline(
         topics: 1,
         duration: 1,
         processingStatus: 1,
+        // FE filterVisibleMedia requires this on every card (missing = owner-only)
+        moderationStatus: 1,
+        isHidden: 1,
+        publicationState: 1,
         fileSize: 1,
         width: 1, // Video width (videos only)
         height: 1, // Video height (videos only)

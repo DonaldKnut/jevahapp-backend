@@ -5,8 +5,9 @@ import enhancedMediaService from "../../enhancedMedia.service";
 import { recommendationEngineService } from "../../recommendationEngine.service";
 import logger from "../../../utils/logger";
 import { LeanUserViewedMedia } from "../types";
-import { PUBLIC_MEDIA_FILTER } from "../../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../../lib/publicMediaVisibility";
 import { buildAggregationPipeline } from "./aggregationPipeline";
+import { enrichMediaPlaybackFields } from "../playbackFields";
 
 export async function getRecommendationsForAllContent(
   userId?: string,
@@ -72,17 +73,18 @@ export async function getRecommendationsForAllContent(
     }
   }
 
-  // Helper to exclude seen ids
+  // Helper to exclude seen ids + enforce public feed visibility
   const excludeSeen = (match: Record<string, any> = {}) => {
-    if (seenMediaIds.size > 0) {
-      return {
-        ...match,
-        _id: {
-          $nin: Array.from(seenMediaIds).map(id => new Types.ObjectId(id)),
-        },
-      };
-    }
-    return match;
+    const extra =
+      seenMediaIds.size > 0
+        ? {
+            ...match,
+            _id: {
+              $nin: Array.from(seenMediaIds).map(id => new Types.ObjectId(id)),
+            },
+          }
+        : match;
+    return publicCatalogFilter(extra);
   };
 
   // Get A/B test variant for section ordering
@@ -324,5 +326,12 @@ export async function getRecommendationsForAllContent(
     .map(key => sections.find(s => s.key === key))
     .filter(Boolean) as typeof sections;
 
-  return { sections: orderedSections };
+  return {
+    sections: orderedSections.map(section => ({
+      ...section,
+      media: (section.media || []).map((row: any) =>
+        enrichMediaPlaybackFields(row)
+      ),
+    })),
+  };
 }

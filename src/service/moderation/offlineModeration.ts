@@ -17,6 +17,13 @@ const GOSPEL_STRONG =
 const ANTI_GOSPEL =
   /\b(?:porn|porno|xxx|nude|nudity|strip\s+club|nightclub|onlyfans|ashawo|olosho|twerk|blaspheme|blasphemy)\b/i;
 
+/** Gospel lexicon hits in spoken transcript only (ignores title/description). */
+export function transcriptHasGospelLexicon(transcript?: string): boolean {
+  const t = (transcript || "").trim();
+  if (t.length < 40) return false;
+  return GOSPEL_STRONG.test(t);
+}
+
 export function hasStrongGospelSignal(input: ModerationInput): boolean {
   const title = (input.title || "").toLowerCase();
   const description = (input.description || "").toLowerCase();

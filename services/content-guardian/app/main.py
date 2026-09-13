@@ -42,6 +42,11 @@ class ScoreResponse(BaseModel):
     nsfw_score: float
     christian_scene_score: float
     secular_scene_score: float
+    violence_score: float = 0.0
+    gore_score: float = 0.0
+    weapons_score: float = 0.0
+    drugs_score: float = 0.0
+    sexual_scene_score: float = 0.0
     decision_hint: str
     confidence: float
     signals: List[str]
@@ -137,6 +142,11 @@ def score(body: ScoreRequest):
     nsfw = 0.0
     christian = 0.0
     secular_scene = 0.0
+    violence = 0.0
+    gore = 0.0
+    weapons = 0.0
+    drugs = 0.0
+    sexual_scene = 0.0
     frame_count = 0
     vision_signals: list[str] = []
     vision_available = True
@@ -146,19 +156,22 @@ def score(body: ScoreRequest):
         nsfw = float(v["nsfw_score"])
         christian = float(v["christian_scene_score"])
         secular_scene = float(v["secular_scene_score"])
+        violence = float(v.get("violence_score") or 0)
+        gore = float(v.get("gore_score") or 0)
+        weapons = float(v.get("weapons_score") or 0)
+        drugs = float(v.get("drugs_score") or 0)
+        sexual_scene = float(v.get("sexual_scene_score") or 0)
         frame_count = int(v["frame_count_scored"])
         vision_signals = list(v.get("signals") or [])
         vision_available = bool(v.get("vision_available", True))
         if not vision_available:
             vision_signals.append("vision_unavailable")
     elif body.run_vision:
-        # Caller expected vision but sent no frames — mark unavailable for Node quarantine rules
         status = vision.vision_status()
         vision_available = bool(status.get("nudenet") or status.get("clip"))
         if not vision_available:
             vision_signals.append("vision_unavailable")
 
-    # Combine secular text into scene-ish signal for fusion
     secular_combined = max(
         secular_scene, float(text["secular_text_score"]) * 0.85
     )
@@ -171,6 +184,12 @@ def score(body: ScoreRequest):
         christian_scene=christian,
         secular_scene=secular_combined,
         content_type=body.content_type,
+        transcript_chars=len((body.transcript or "").strip()),
+        violence=violence,
+        gore=gore,
+        weapons=weapons,
+        drugs=drugs,
+        sexual_scene=sexual_scene,
         nsfw_reject=config.NSFW_REJECT,
         nsfw_safe=config.NSFW_SAFE,
         christian_scene_approve=config.CHRISTIAN_SCENE_APPROVE,
@@ -180,9 +199,13 @@ def score(body: ScoreRequest):
         secular_scene_reject=config.SECULAR_SCENE_REJECT,
         secular_scene_safe=config.SECULAR_SCENE_SAFE,
         anti_gospel_reject=config.ANTI_GOSPEL_REJECT,
+        violence_reject=config.VIOLENCE_REJECT,
+        gore_reject=config.GORE_REJECT,
+        weapons_reject=config.WEAPONS_REJECT,
+        drugs_reject=config.DRUGS_REJECT,
+        sexual_scene_reject=config.SEXUAL_SCENE_REJECT,
     )
 
-    # Fail-soft: if vision was requested but unavailable, never auto-approve
     if body.run_vision and (body.thumbnail or body.frames) and not vision_available:
         if hint == "approve":
             hint = "review"
@@ -205,6 +228,11 @@ def score(body: ScoreRequest):
         nsfw_score=nsfw,
         christian_scene_score=christian,
         secular_scene_score=secular_scene,
+        violence_score=violence,
+        gore_score=gore,
+        weapons_score=weapons,
+        drugs_score=drugs,
+        sexual_scene_score=sexual_scene,
         decision_hint=hint,
         confidence=confidence,
         signals=signals,
