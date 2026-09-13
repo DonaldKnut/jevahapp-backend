@@ -9,7 +9,8 @@ import { attachFreshEngagementCounts } from "../../service/media/feedCountOverla
 import { attachFeedUserInteractionFlags } from "../../service/media/feedUserFlags";
 import logger from "../../utils/logger";
 import { extractObjectKeyFromUrl, mapContentType } from "./shared";
-import { PUBLIC_MEDIA_FILTER } from "../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../lib/publicMediaVisibility";
+import { mediaContentTypeQuery } from "../../lib/mediaContentTypeQuery";
 import { enrichMediaPlaybackFields } from "../../service/media/playbackFields";
 import {
   compactFeedItems,
@@ -385,17 +386,14 @@ export const getDefaultContent = async (
     const pageNum = parseInt(page as string) || 1;
     const skip = (pageNum - 1) * limitNum;
 
-    // Build filter for default content
-    const filter: any = {
+    const typeMatch = mediaContentTypeQuery(
+      contentType && contentType !== "all" ? String(contentType) : undefined
+    );
+    const filter: any = publicCatalogFilter({
       isDefaultContent: true,
       isOnboardingContent: true,
-      ...PUBLIC_MEDIA_FILTER,
-    };
-
-    // Add contentType filter if provided
-    if (contentType && contentType !== "all") {
-      filter.contentType = contentType;
-    }
+      ...(typeMatch || {}),
+    });
 
     // Get total count for pagination
     const total = await Media.countDocuments(filter);
@@ -552,11 +550,12 @@ export const getOnboardingContent = async (
     }
 
     // Get a curated selection of onboarding content
-    const onboardingContent = await Media.find({
-      isOnboardingContent: true,
-      isDefaultContent: true,
-      ...PUBLIC_MEDIA_FILTER,
-    })
+    const onboardingContent = await Media.find(
+      publicCatalogFilter({
+        isOnboardingContent: true,
+        isDefaultContent: true,
+      })
+    )
       .sort({ createdAt: -1 })
       .limit(15) // Show 15 items for onboarding
       .populate("uploadedBy", "firstName lastName username email avatar")

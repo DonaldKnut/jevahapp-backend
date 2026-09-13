@@ -5,7 +5,7 @@ import enhancedMediaService from "../../enhancedMedia.service";
 import { recommendationEngineService } from "../../recommendationEngine.service";
 import logger from "../../../utils/logger";
 import { LeanUserViewedMedia } from "../types";
-import { PUBLIC_MEDIA_FILTER } from "../../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../../lib/publicMediaVisibility";
 import { buildAggregationPipeline } from "./aggregationPipeline";
 import { enrichMediaPlaybackFields } from "../playbackFields";
 
@@ -75,16 +75,16 @@ export async function getRecommendationsForAllContent(
 
   // Helper to exclude seen ids + enforce public feed visibility
   const excludeSeen = (match: Record<string, any> = {}) => {
-    const withPublic = { ...PUBLIC_MEDIA_FILTER, ...match };
-    if (seenMediaIds.size > 0) {
-      return {
-        ...withPublic,
-        _id: {
-          $nin: Array.from(seenMediaIds).map(id => new Types.ObjectId(id)),
-        },
-      };
-    }
-    return withPublic;
+    const extra =
+      seenMediaIds.size > 0
+        ? {
+            ...match,
+            _id: {
+              $nin: Array.from(seenMediaIds).map(id => new Types.ObjectId(id)),
+            },
+          }
+        : match;
+    return publicCatalogFilter(extra);
   };
 
   // Get A/B test variant for section ordering

@@ -2,6 +2,7 @@ import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
 import { DurationRangeKey } from "../types";
 import { buildMediaVisibilityQuery } from "./visibility";
+import { mediaContentTypeQuery } from "../../../lib/mediaContentTypeQuery";
 import { enrichMediaPlaybackFields } from "../playbackFields";
 
 export async function getAllMedia(filters: any = {}, options: { enforceModeration?: boolean; actingUserId?: string } = { enforceModeration: true }) {
@@ -13,8 +14,9 @@ export async function getAllMedia(filters: any = {}, options: { enforceModeratio
     query.title = { $regex: filters.search, $options: "i" };
   }
 
-  if (filters.contentType) {
-    query.contentType = filters.contentType;
+  const typeMatch = mediaContentTypeQuery(filters.contentType);
+  if (typeMatch) {
+    Object.assign(query, typeMatch);
   }
 
   if (filters.category) {

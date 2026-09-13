@@ -51,12 +51,19 @@ describe("playbackFields", () => {
       resolveProcessingStatus({ processing: { status: "ready" } })
     ).toBe("ready");
     expect(
-      resolveProcessingStatus({ processing: { status: "transcoding" } })
-    ).toBe("processing");
+      resolveProcessingStatus({ processing: { status: "failed" } })
+    ).toBe("failed");
     expect(
       resolveProcessingStatus({
         moderationStatus: "approved",
         fileUrl: "https://cdn.example/v.mp4",
+      })
+    ).toBe("ready");
+    expect(
+      resolveProcessingStatus({
+        processing: { status: "processing" },
+        fileUrl: "https://cdn.example/sermon.mp3",
+        contentType: "sermon",
       })
     ).toBe("ready");
   });
@@ -69,5 +76,26 @@ describe("playbackFields", () => {
     });
     expect(out.duration).toBe(9.9);
     expect(out.processingStatus).toBe("ready");
+  });
+
+  it("always emits moderationStatus and does not set videoUrl on ebooks", () => {
+    const ebook = enrichMediaPlaybackFields({
+      title: "Fasting",
+      contentType: "ebook",
+      fileUrl: "https://cdn.example/book.pdf",
+      isDefaultContent: true,
+    });
+    expect(ebook.moderationStatus).toBe("approved");
+    expect(ebook.processingStatus).toBe("ready");
+    expect(ebook.videoUrl).toBeNull();
+
+    const sermon = enrichMediaPlaybackFields({
+      contentType: "sermon",
+      fileUrl: "https://cdn.example/talk.mp3",
+      processing: { status: "pending" },
+    });
+    expect(sermon.processingStatus).toBe("ready");
+    expect(sermon.audioUrl).toContain(".mp3");
+    expect(sermon.videoUrl).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { Media } from "../../../models/media.model";
 import logger from "../../../utils/logger";
-import { PUBLIC_MEDIA_FILTER } from "../../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../../lib/publicMediaVisibility";
+import { mediaContentTypeQuery } from "../../../lib/mediaContentTypeQuery";
 import { enrichMediaPlaybackFields } from "../playbackFields";
 import { buildAggregationPipeline } from "./aggregationPipeline";
 
@@ -27,16 +28,9 @@ export async function getAllContentForAllTab(options?: {
     const limit = Math.min(Math.max(rawLimit, 10), 100);
     const skip = (page - 1) * limit;
 
-    // Global feed: same public visibility rules as like/view/metadata.
-    // (Previously omitted publicationState → staged/draft items could appear then 404 on like.)
-    const matchQuery: Record<string, any> = {
-      ...PUBLIC_MEDIA_FILTER,
-    };
-
-    // Content type filter
-    if (options?.contentType && options.contentType !== "ALL") {
-      matchQuery.contentType = options.contentType;
-    }
+    // Approved uploads + HQ/default catalog (legacy rows missing moderationStatus).
+    const typeMatch = mediaContentTypeQuery(options?.contentType);
+    const matchQuery: Record<string, any> = publicCatalogFilter(typeMatch || {});
 
     // Category filter
     if (options?.category) {

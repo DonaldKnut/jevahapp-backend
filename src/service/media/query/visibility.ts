@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { PUBLIC_MEDIA_FILTER } from "../../../lib/publicMediaVisibility";
+import { publicCatalogFilter } from "../../../lib/publicMediaVisibility";
 
 /** Build Mongo filter for public vs owner-visible media lists. */
 export function buildMediaVisibilityQuery(options: {
@@ -12,11 +12,11 @@ export function buildMediaVisibilityQuery(options: {
   if (options.actingUserId) {
     return {
       $or: [
-        { ...PUBLIC_MEDIA_FILTER },
+        publicCatalogFilter(),
         { uploadedBy: new Types.ObjectId(options.actingUserId) },
       ],
     };
   }
 
-  return { ...PUBLIC_MEDIA_FILTER };
+  return publicCatalogFilter();
 }

@@ -4,6 +4,7 @@
  */
 import type { Request } from "express";
 import { shapePublicAuthor, pickAuthorSource } from "./publicAuthor";
+import { typedPlaybackUrls } from "../../service/media/playbackFields";
 
 export type ClientProfile = "full" | "lite";
 
@@ -30,9 +31,10 @@ export function liteDefaultLimit(requested?: number, max = 12): number {
 export function compactFeedItem(item: any): any {
   if (!item || typeof item !== "object") return item;
   const id = item._id?.toString?.() || item.id;
+  const urls = typedPlaybackUrls(item);
   const hlsUrl = item.hlsUrl || null;
-  const playbackUrl = item.playbackUrl || item.fileUrl || item.videoUrl || null;
-  const audioUrl = item.audioUrl || item.fileUrl || playbackUrl || null;
+  const playbackUrl = item.playbackUrl || item.fileUrl || urls.videoUrl || urls.audioUrl || null;
+  const audioUrl = urls.audioUrl || item.audioUrl || (urls.videoUrl ? null : playbackUrl);
 
   const author = shapePublicAuthor(pickAuthorSource(item));
 
@@ -49,8 +51,8 @@ export function compactFeedItem(item: any): any {
     // Playback: prefer adaptive HLS (player picks 360p on weak devices)
     hlsUrl,
     playbackUrl,
-    fileUrl: playbackUrl,
-    videoUrl: playbackUrl,
+    fileUrl: item.fileUrl || playbackUrl,
+    videoUrl: urls.videoUrl,
     audioUrl,
     duration: item.duration ?? item.durationSec ?? null,
     durationSec: item.durationSec ?? item.duration ?? null,

@@ -44,13 +44,9 @@ function missingFilter() {
     $and: [
       {
         $or: [
-          { moderationStatus: { $exists: false } },
-          { moderationStatus: null },
-          { moderationStatus: "" },
+          { deletedAt: null },
+          { deletedAt: { $exists: false } },
         ],
-      },
-      {
-        $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
       },
       {
         $or: [
@@ -59,7 +55,26 @@ function missingFilter() {
           { hlsUrl: /^https?:\/\//i },
         ],
       },
-      { isHidden: { $ne: true } },
+      {
+        $or: [
+          {
+            $and: [
+              {
+                $or: [
+                  { moderationStatus: { $exists: false } },
+                  { moderationStatus: null },
+                  { moderationStatus: "" },
+                ],
+              },
+              { isHidden: { $ne: true } },
+            ],
+          },
+          {
+            isDefaultContent: true,
+            moderationStatus: { $nin: ["rejected", "under_review", "approved"] },
+          },
+        ],
+      },
     ],
   };
 }
@@ -135,6 +150,7 @@ async function main() {
       isHidden: false,
       publicationState: "live",
       publishedAt: now,
+      "processing.status": "ready",
       "moderationResult.isApproved": true,
       "moderationResult.reason": SEED_REASON,
     },

@@ -1,6 +1,7 @@
 import cacheService from "../cache.service";
 import { Media } from "../../models/media.model";
 import logger from "../../utils/logger";
+import { invalidateFeedCaches } from "../../lib/invalidateFeedCaches";
 import {
   MODERATION_STATUSES,
   type ModerationStatus,
@@ -16,16 +17,8 @@ export function missingModerationStatusFilter(): Record<string, unknown> {
   return {
     $and: [
       {
-        $or: [
-          { moderationStatus: { $exists: false } },
-          { moderationStatus: null },
-          { moderationStatus: "" },
-        ],
-      },
-      {
         $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
       },
-      // Already-serving / public-ish catalog only
       {
         $or: [
           { fileUrl: /^https?:\/\//i },
@@ -33,8 +26,26 @@ export function missingModerationStatusFilter(): Record<string, unknown> {
           { hlsUrl: /^https?:\/\//i },
         ],
       },
-      // Do not revive intentionally hidden rows
-      { isHidden: { $ne: true } },
+      {
+        $or: [
+          {
+            $and: [
+              {
+                $or: [
+                  { moderationStatus: { $exists: false } },
+                  { moderationStatus: null },
+                  { moderationStatus: "" },
+                ],
+              },
+              { isHidden: { $ne: true } },
+            ],
+          },
+          {
+            isDefaultContent: true,
+            moderationStatus: { $nin: ["rejected", "under_review", "approved"] },
+          },
+        ],
+      },
     ],
   };
 }
@@ -111,6 +122,7 @@ export async function backfillMissingModerationStatus(params: {
         isHidden: false,
         publicationState: "live",
         publishedAt: now,
+        "processing.status": "ready",
         "moderationResult.isApproved": true,
         "moderationResult.reason": SEED_REASON,
       },
@@ -118,9 +130,10 @@ export async function backfillMissingModerationStatus(params: {
     modified = result.modifiedCount || 0;
 
     try {
-      await cacheService.delPattern("media:public:all-content*");
+      await invalidateFeedCaches("moderation-backfill", params.adminId || "");
+      await cacheService.delPattern("media:public:*");
     } catch (err: any) {
-      logger.warn("Failed to invalidate all-content cache after backfill", {
+      logger.warn("Failed to invalidate feed cache after backfill", {
         error: err?.message,
       });
     }

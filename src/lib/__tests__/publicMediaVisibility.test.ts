@@ -69,4 +69,20 @@ describe("publicMediaVisibility contract", () => {
       })
     ).toBe(false);
   });
+
+  it("allows HQ default catalog without an approved key", () => {
+    expect(
+      isPubliclyVisibleMedia({
+        isDefaultContent: true,
+        isHidden: false,
+      })
+    ).toBe(true);
+    expect(
+      isPubliclyVisibleMedia({
+        isDefaultContent: true,
+        isHidden: false,
+        moderationStatus: "rejected",
+      })
+    ).toBe(false);
+  });
 });

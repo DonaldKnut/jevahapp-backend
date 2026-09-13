@@ -182,6 +182,34 @@ export function buildAggregationPipeline(
               },
               {
                 case: {
+                  $or: [
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$fileUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$playbackUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                    {
+                      $regexMatch: {
+                        input: { $ifNull: ["$hlsUrl", ""] },
+                        regex: "^https?://",
+                        options: "i",
+                      },
+                    },
+                  ],
+                },
+                then: "ready",
+              },
+              {
+                case: {
                   $in: [
                     { $toLower: { $ifNull: ["$processing.status", ""] } },
                     ["pending", "uploaded", "queued", "idle"],
@@ -209,7 +237,12 @@ export function buildAggregationPipeline(
               $cond: [
                 {
                   $and: [
-                    { $eq: ["$moderationStatus", "approved"] },
+                    {
+                      $or: [
+                        { $eq: ["$moderationStatus", "approved"] },
+                        { $eq: ["$isDefaultContent", true] },
+                      ],
+                    },
                     {
                       $or: [
                         { $ne: ["$fileUrl", null] },
@@ -223,6 +256,20 @@ export function buildAggregationPipeline(
                 "processing",
               ],
             },
+          },
+        },
+        moderationStatus: {
+          $toLower: {
+            $ifNull: [
+              "$moderationStatus",
+              {
+                $cond: [
+                  { $eq: ["$isDefaultContent", true] },
+                  "approved",
+                  "pending",
+                ],
+              },
+            ],
           },
         },
       },

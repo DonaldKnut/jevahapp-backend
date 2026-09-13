@@ -3,6 +3,88 @@ import ebookService from "../service/ebook.service";
 import logger from "../utils/logger";
 import { Media } from "../models/media.model";
 import textToSpeechService, { TTSOptions } from "../service/textToSpeech.service";
+import {
+  publicEbookFilter,
+  shapeEbookCard,
+} from "../modules/ebooks/ebook.formatter";
+
+const EBOOK_SELECT =
+  "title description category topics thumbnailUrl coverImageUrl fileUrl pdfUrl playbackUrl viewCount readCount likeCount totalLikes moderationStatus isHidden publicationState publishedAt processing createdAt updatedAt uploadedBy authorInfo";
+
+/**
+ * GET /api/ebooks?page&limit&search&topic
+ */
+export const listPublicEbooks = async (
+  request: Request,
+  response: Response
+): Promise<void> => {
+  try {
+    const limit = Math.min(
+      Math.max(parseInt(String(request.query.limit || "20"), 10) || 20, 1),
+      50
+    );
+    const page = Math.max(parseInt(String(request.query.page || "1"), 10) || 1, 1);
+    const search = String(request.query.search || "").trim();
+    const topic = String(request.query.topic || request.query.topics || "").trim();
+
+    const extra: Record<string, unknown> = {};
+    const andExtra: Record<string, unknown>[] = [];
+    if (topic) {
+      andExtra.push({ topics: new RegExp(topic, "i") });
+    }
+    if (search.length >= 2) {
+      andExtra.push({
+        $or: [
+          { title: new RegExp(search, "i") },
+          { description: new RegExp(search, "i") },
+        ],
+      });
+    }
+    if (andExtra.length) extra.$and = andExtra;
+
+    const filter = publicEbookFilter(extra);
+    const [rows, total] = await Promise.all([
+      Media.find(filter)
+        .select(EBOOK_SELECT)
+        .populate("uploadedBy", "firstName lastName")
+        .sort({ publishedAt: -1, createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Media.countDocuments(filter),
+    ]);
+
+    const items = rows.map(shapeEbookCard).filter((e) => e.fileUrl);
+
+    response.status(200).json({
+      success: true,
+      data: {
+        items,
+        total,
+        page,
+        limit,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error("List public ebooks error", { error: error.message });
+    response.status(200).json({
+      success: true,
+      data: {
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+      },
+    });
+  }
+};
 
 /**
  * Get text from ebook PDF
