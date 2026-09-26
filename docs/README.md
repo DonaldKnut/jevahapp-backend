@@ -34,7 +34,7 @@ Last updated: July 2026 (post-modularization refactor)
 11i2. **[FRONTEND_AUDIO_SEEK_VIEWS_HANDOFF.md](./FRONTEND_AUDIO_SEEK_VIEWS_HANDOFF.md)** — Feed/CF audio seek duration + dual view stacks (`counted`)
 11j. **[FRONTEND_UPLOAD_PROGRESS_HANDOFF.md](./FRONTEND_UPLOAD_PROGRESS_HANDOFF.md)** — Upload detect/verify + `X-Upload-ID` progress + password reset for admin/creators
 11k. **[FRONTEND_MARKETING_EMAIL_HANDOFF.md](./FRONTEND_MARKETING_EMAIL_HANDOFF.md)** — Admin marketing blasts, opt-out, public unsubscribe
-12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Moderation + reports handoff for the web admin team (card shapes, P1 wiring)
+12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Complete admin moderation consume guide (queue, reports, player URL rules, tracks)
 12b. **[CONTENT_GUARDIAN.md](./CONTENT_GUARDIAN.md)** — Python Content Guardian (Whisper/NudeNet/CLIP) + Node fusion; Gemini gray-zone only
 12b2. **[CONTENT_VERIFICATION_ADVANCED.md](./CONTENT_VERIFICATION_ADVANCED.md)** — Fail-soft harden + ebook full-sample + creator audio STT
 12c. **[ENGAGEMENT_TIKTOK_STANDARD.md](./ENGAGEMENT_TIKTOK_STANDARD.md)** — Lifetime vs live counts, CF view/like rate limits, FE fire-and-forget rules

@@ -15,7 +15,7 @@ function resolveResendFromEmail(): string {
 }
 
 const fromEmail = resolveResendFromEmail();
-const fromName = "Jevah Support";
+const fromName = process.env.RESEND_FROM_NAME || "Jevah";
 const smtpTransporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.zoho.com",
   port: parseInt(process.env.SMTP_PORT || "587", 10),

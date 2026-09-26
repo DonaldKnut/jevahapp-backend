@@ -26,11 +26,14 @@ export const authRateLimiter =
         max: 20,
         standardHeaders: true,
         legacyHeaders: false,
-        handler: (_req: Request, res: Response) =>
+        handler: (_req: Request, res: Response) => {
+          res.setHeader("Retry-After", "900");
           res.status(429).json({
             success: false,
+            code: "RATE_LIMITED",
             message: "Too many authentication attempts, please try again later",
-          }),
+          });
+        },
       });
 
 // Sensitive operations rate limiter (very strict)
@@ -42,11 +45,14 @@ export const sensitiveEndpointRateLimiter =
         max: 5,
         standardHeaders: true,
         legacyHeaders: false,
-        handler: (_req: Request, res: Response) =>
+        handler: (_req: Request, res: Response) => {
+          res.setHeader("Retry-After", "3600");
           res.status(429).json({
             success: false,
+            code: "RATE_LIMITED",
             message: "Too many attempts, please try again in an hour",
-          }),
+          });
+        },
       });
 
 // Media upload rate limiter
@@ -106,11 +112,14 @@ export const emailRateLimiter =
         max: 5, // limit to 5 email requests per hour
         standardHeaders: true,
         legacyHeaders: false,
-        handler: (_req: Request, res: Response) =>
+        handler: (_req: Request, res: Response) => {
+          res.setHeader("Retry-After", "3600");
           res.status(429).json({
             success: false,
+            code: "RATE_LIMITED",
             message: "Too many email requests, please try again in an hour",
-          }),
+          });
+        },
       });
 
 // Games section rate limiter (for kids)

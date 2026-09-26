@@ -17,4 +17,21 @@ export const mounts: Mount[] = [
 ];
 
 export { publicAnnouncementsRouter };
+export {
+  notifyCreator,
+  notifyCreatorSafe,
+  notifyMediaModerationOutcomeSafe,
+  maybeNotifyViewMilestone,
+} from "./creatorNotify.service";
+export {
+  creatorNotifyCopy,
+  viewMilestoneEvent,
+  VIEW_MILESTONES,
+  BUZZING_THRESHOLD,
+} from "./creatorNotify.catalog";
+export {
+  JEVAH_GOSPEL_STANDARD,
+  creatorFacingModerationReason,
+} from "./creatorFacingReason";
+export type { CreatorNotifyEvent } from "./creatorNotify.catalog";
 export default { mounts };

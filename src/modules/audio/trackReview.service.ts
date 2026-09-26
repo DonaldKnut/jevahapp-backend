@@ -8,6 +8,7 @@ import {
   scoreAudioWithGuardian,
   scoreWithGuardian,
 } from "../../service/moderation/guardianClient";
+import { transcriptHasGospelLexicon } from "../../service/moderation/offlineModeration";
 
 export type TrackModerationDecision = "approved" | "under_review" | "rejected";
 
@@ -18,8 +19,33 @@ export type TrackReviewResult = {
   transcriptPreview?: string;
 };
 
+const SAFETY_TRACK_SIGNALS = [
+  "nsfw_reject",
+  "sexual_scene_reject",
+  "violence_reject",
+  "gore_reject",
+  "weapons_reject",
+  "drugs_reject",
+];
+
 /**
- * Light metadata review for creator uploads (fallback when Guardian audio unavailable).
+ * After the track is heard: publish only a clear gospel pass.
+ * Safety fails reject. Everything else waits for admin — never approve from title.
+ */
+export function heardTrackDecision(signals: string[], fusionDecision: string): TrackModerationDecision {
+  if (fusionDecision === "approve") return "approved";
+  if (
+    fusionDecision === "reject" &&
+    signals.some(s => SAFETY_TRACK_SIGNALS.includes(s))
+  ) {
+    return "rejected";
+  }
+  return "under_review";
+}
+
+/**
+ * Fallback when the track could not be heard. Title/artist never auto-publish.
+ * Only explicit metadata is a hard reject; the rest goes to admin.
  */
 export async function reviewTrackMetadata(input: {
   title: string;
@@ -48,117 +74,12 @@ export async function reviewTrackMetadata(input: {
     };
   }
 
-  // Prefer Guardian text score on metadata alone when audio sample missing
-  if (isGuardianConfigured()) {
-    const scored = await scoreWithGuardian({
-      title: input.title,
-      description: [input.artistName, input.genre, input.category, input.licenseNote]
-        .filter(Boolean)
-        .join(" · "),
-      contentType: "music",
-      runVision: false,
-    });
-    if (scored) {
-      const outcome = fuseGuardianScores(scored, "music");
-      if (outcome.decision === "approve") {
-        return {
-          decision: "approved",
-          reason: "Approved by Content Guardian (metadata/gospel lexicon)",
-          source: "guardian_audio",
-        };
-      }
-      if (outcome.decision === "reject") {
-        return {
-          decision: "rejected",
-          reason: "Rejected by Content Guardian (metadata)",
-          source: "guardian_audio",
-        };
-      }
-    }
-  }
-
-  const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey || process.env.TRACK_AI_REVIEW === "false") {
-    return {
-      decision: "under_review",
-      reason: "Queued for admin review (AI review disabled or unavailable)",
-      source: "fail_open",
-    };
-  }
-
-  try {
-    const model =
-      process.env.GEMINI_MODERATION_MODEL ||
-      process.env.GEMINI_DEFAULT_MODEL ||
-      "gemini-2.5-flash";
-    const prompt = `You moderate metadata for a Christian gospel music app (Jevah).
-Return ONLY JSON: {"decision":"approved"|"under_review"|"rejected","reason":"short"}.
-Approve clearly faith/gospel/worship/ministerial music metadata.
-Use under_review for unclear, secular-only, or copyright-risk claims.
-Reject explicit sexual, hate, or scam content.
-
-Title: ${input.title}
-Artist: ${input.artistName}
-Genre: ${input.genre || ""}
-Category: ${input.category || ""}
-License: ${input.licenseNote || ""}`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 120 },
-      }),
-      signal: AbortSignal.timeout(
-        Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 20000)
-      ),
-    });
-
-    if (!resp.ok) {
-      logger.warn("Track AI review HTTP error", { status: resp.status });
-      return {
-        decision: "under_review",
-        reason: "AI review failed; queued for admin",
-        source: "fail_open",
-      };
-    }
-
-    const json: any = await resp.json();
-    const text =
-      json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("") ||
-      "";
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return {
-        decision: "under_review",
-        reason: "AI returned unparseable result",
-        source: "fail_open",
-      };
-    }
-    const parsed = JSON.parse(match[0]);
-    const decision = String(parsed.decision || "under_review").toLowerCase();
-    if (!["approved", "under_review", "rejected"].includes(decision)) {
-      return {
-        decision: "under_review",
-        reason: "Invalid AI decision",
-        source: "fail_open",
-      };
-    }
-    return {
-      decision: decision as TrackModerationDecision,
-      reason: String(parsed.reason || "AI metadata review").slice(0, 300),
-      source: "ai",
-    };
-  } catch (err: any) {
-    logger.warn("Track AI review error", { error: err?.message });
-    return {
-      decision: "under_review",
-      reason: "AI review error; queued for admin",
-      source: "fail_open",
-    };
-  }
+  return {
+    decision: "under_review",
+    reason:
+      "Track was not heard by moderation — queued for admin review. A gospel title alone is not enough.",
+    source: "fail_open",
+  };
 }
 
 /**
@@ -212,60 +133,51 @@ export async function reviewTrackAudioWithGuardian(input: {
     });
     if (!scored) return null;
 
-    // Empty STT → quarantine (don't approve silent/instrumental without gospel metadata strength)
-    if (scored.stt_available === false || !(scored.transcript || "").trim()) {
-      const meta = await scoreWithGuardian({
-        title: input.title,
-        description: [input.artistName, input.genre].filter(Boolean).join(" "),
-        contentType: "music",
-        runVision: false,
-      });
-      if (meta) {
-        const mo = fuseGuardianScores(meta, "music");
-        if (mo.decision === "approve" && mo.scores.gospel_score >= 0.7) {
-          return {
-            decision: "approved",
-            reason:
-              "Instrumental/no lyrics — approved on strong gospel metadata via Guardian",
-            source: "guardian_audio",
-          };
-        }
-      }
+    const heardLyrics = (scored.transcript || "").trim();
+    // Empty STT: we did not hear lyrics. Do not approve from the title.
+    if (scored.stt_available === false || !heardLyrics) {
       return {
         decision: "under_review",
-        reason: "Audio STT empty — queued for admin (possible instrumental)",
+        reason:
+          "Could not hear lyrics on this track — queued for admin (instrumental or unclear audio)",
         source: "guardian_audio",
       };
     }
 
-    const outcome = fuseGuardianScores(scored, "music");
+    const outcome = fuseGuardianScores(scored, "music", {
+      transcriptChars: heardLyrics.length,
+      transcriptHasGospel: transcriptHasGospelLexicon(heardLyrics),
+    });
     const mapped = fusionToModerationResult(outcome, {
       title: input.title,
       contentType: "music",
-      transcript: scored.transcript,
+      transcript: heardLyrics,
     });
+    const decision = heardTrackDecision(outcome.signals, outcome.decision);
+    const preview = heardLyrics.slice(0, 200);
 
-    if (outcome.decision === "approve") {
+    if (decision === "approved") {
       return {
-        decision: "approved",
-        reason: mapped.reason || "Approved by Content Guardian (audio STT)",
+        decision,
+        reason: mapped.reason || "Approved after hearing the track (gospel lyrics)",
         source: "guardian_audio",
-        transcriptPreview: (scored.transcript || "").slice(0, 200),
+        transcriptPreview: preview,
       };
     }
-    if (outcome.decision === "reject") {
+    if (decision === "rejected") {
       return {
-        decision: "rejected",
-        reason: mapped.reason || "Rejected by Content Guardian (audio STT)",
+        decision,
+        reason: mapped.reason || "Rejected after hearing the track (safety)",
         source: "guardian_audio",
-        transcriptPreview: (scored.transcript || "").slice(0, 200),
+        transcriptPreview: preview,
       };
     }
     return {
       decision: "under_review",
-      reason: "Guardian gray-zone — queued for admin",
+      reason:
+        "Heard the track but it isn’t a clear gospel pass — queued for admin review",
       source: "guardian_audio",
-      transcriptPreview: (scored.transcript || "").slice(0, 200),
+      transcriptPreview: preview,
     };
   } catch (err: any) {
     logger.warn("Track Guardian audio review error", { error: err?.message });

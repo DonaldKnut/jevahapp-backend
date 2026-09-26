@@ -138,6 +138,8 @@ export interface IMedia extends Document {
     isApproved: boolean;
     confidence: number;
     reason?: string;
+    /** Sentence shown to the uploader in Studio / email / inbox. */
+    creatorReason?: string;
     flags: string[];
     requiresReview: boolean;
     moderatedAt?: Date;
@@ -625,6 +627,9 @@ const mediaSchema = new Schema<IMedia>(
         max: 1,
       },
       reason: {
+        type: String,
+      },
+      creatorReason: {
         type: String,
       },
       flags: {

@@ -5,6 +5,7 @@ import logger from "../../../utils/logger";
 import { ViewEvent } from "../../../models/viewEvent.model";
 import { setPostCounter } from "../../../lib/redisCounters";
 import { normalizeContentType } from "../shared/contentType.resolver";
+import { maybeNotifyViewMilestoneSafe } from "../../creators/creatorNotify.service";
 
 type ContentType =
   | "media"
@@ -342,6 +343,11 @@ const viewService = {
         count: viewCount,
       });
       emitViewUpdated(contentId, contentType, viewCount);
+      maybeNotifyViewMilestoneSafe({
+        contentId,
+        contentType,
+        viewCount,
+      });
     }
 
     return {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import authController from "../controllers/auth.controller";
 import { verifyToken } from "../middleware/auth.middleware";
+import { verifyTokenOptional } from "../middleware/optionalAuth.middleware";
 import {
   authRateLimiter,
   sensitiveEndpointRateLimiter,
@@ -45,6 +46,13 @@ router.post(
   asyncHandler(authController.oauthLogin)
 );
 
+// GET /registration-status
+// Public gate so web/mobile can hide signup when admin pauses registration
+router.get(
+  "/registration-status",
+  asyncHandler(authController.getRegistrationStatus)
+);
+
 // POST /register
 // Registers a new user with email and password
 // - Uses authRateLimiter to prevent abuse
@@ -81,8 +89,14 @@ router.post("/login", authRateLimiter, asyncHandler(authController.loginUser));
 // Verifies a user's email address using a verification code
 // - Uses sensitiveEndpointRateLimiter for stricter rate limiting
 // - Calls authController.verifyEmail to validate code and mark email as verified
+router.get(
+  "/verify-email",
+  sensitiveEndpointRateLimiter,
+  asyncHandler(authController.verifyEmailLink)
+);
 router.post(
   "/verify-email",
+  verifyTokenOptional,
   sensitiveEndpointRateLimiter,
   asyncHandler(authController.verifyEmail)
 );

@@ -54,6 +54,20 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("strong_gospel_text_needs_spoken_or_visual");
   });
 
+  it("does not approve a church scene without a spoken Christ/Scripture anchor", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.6,
+        christian_scene_score: 0.7,
+        nsfw_score: 0.1,
+      }),
+      "videos",
+      { transcriptChars: 200, transcriptHasGospel: false }
+    );
+    expect(out.decision).toBe("review");
+    expect(out.signals).toContain("church_scene_needs_spoken_anchor");
+  });
+
   it("approves video with strong gospel transcript even without church scene", () => {
     const out = fuseGuardianScores(
       baseScores({
@@ -90,7 +104,7 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("strong_gospel_text_needs_spoken_or_visual");
   });
 
-  it("approves video strong gospel text when christian scene corroborates", () => {
+  it("approves video strong gospel text when christian scene corroborates a spoken anchor", () => {
     const out = fuseGuardianScores(
       baseScores({
         gospel_score: 0.85,
@@ -98,10 +112,15 @@ describe("fuseGuardianScores", () => {
         secular_scene_score: 0.2,
         christian_scene_score: 0.55,
       }),
-      "videos"
+      "videos",
+      { transcriptChars: 120, transcriptHasGospel: true }
     );
     expect(out.decision).toBe("approve");
-    expect(out.signals).toContain("video_visual_corroboration");
+    expect(
+      out.signals.some(s =>
+        ["video_visual_corroboration", "church_scene_gospel"].includes(s)
+      )
+    ).toBe(true);
   });
 
   it("does not approve video on mid christian score + gospel title text only", () => {
@@ -132,16 +151,32 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("strong_gospel_text");
   });
 
-  it("approves church scene + gospel", () => {
+  it("approves church scene + spoken gospel anchor", () => {
     const out = fuseGuardianScores(
       baseScores({
         gospel_score: 0.6,
         christian_scene_score: 0.7,
         nsfw_score: 0.1,
-      })
+      }),
+      "videos",
+      { transcriptChars: 120, transcriptHasGospel: true }
     );
     expect(out.decision).toBe("approve");
     expect(out.signals).toContain("church_scene_gospel");
+  });
+
+  it("rejects generic motivation with no gospel anchor", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.2,
+        secular_text_score: 0.2,
+        christian_scene_score: 0.1,
+        signals: ["motivation_lexicon"],
+      }),
+      "videos"
+    );
+    expect(out.decision).toBe("reject");
+    expect(out.signals).toContain("secular_motivation");
   });
 
   it("rejects weak gospel + secular scene", () => {
@@ -250,7 +285,8 @@ describe("fusionToModerationResult", () => {
         nsfw_score: 0.05,
         christian_scene_score: 0.6,
       }),
-      "videos"
+      "videos",
+      { transcriptChars: 120, transcriptHasGospel: true }
     );
     const result = fusionToModerationResult(outcome, {
       contentType: "videos",

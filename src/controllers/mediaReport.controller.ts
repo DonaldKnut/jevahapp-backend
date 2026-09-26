@@ -103,6 +103,20 @@ export const reportMedia = async (
     const uploader = await User.findById(media.uploadedBy).select("email");
     const uploaderEmail = uploader?.email || "Unknown";
 
+    if (media.uploadedBy) {
+      const { notifyCreatorSafe } = await import(
+        "../modules/creators/creatorNotify.service"
+      );
+      notifyCreatorSafe({
+        userId: String(media.uploadedBy),
+        event: "media_reported",
+        contentTitle: media.title,
+        reason,
+        relatedId: id,
+        contentType: media.contentType,
+      });
+    }
+
     // Increment report count on media
     const newReportCount = (media.reportCount || 0) + 1;
     await Media.findByIdAndUpdate(id, {

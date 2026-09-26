@@ -267,7 +267,8 @@ export const patchAdminArtist = async (req: Request, res: Response) => {
     if (typeof body.isVerified === "boolean") {
       artist.isVerified = body.isVerified;
     }
-    if (["pending", "active", "suspended"].includes(body.status)) {
+    const previousStatus = artist.status;
+    if (["pending", "active", "suspended", "rejected"].includes(body.status)) {
       artist.status = body.status;
       artist.reviewedByAdminId = adminId
         ? new Types.ObjectId(adminId)
@@ -312,6 +313,10 @@ export const patchAdminArtist = async (req: Request, res: Response) => {
           typeof body.onboardSubject === "string"
             ? body.onboardSubject
             : undefined,
+        templateId:
+          typeof body.onboardTemplate === "string"
+            ? body.onboardTemplate
+            : "creator_welcome_v1",
         dryRun: false,
       });
       artist.onboardEmailSentAt = new Date();
@@ -323,6 +328,39 @@ export const patchAdminArtist = async (req: Request, res: Response) => {
         isVerified: artist.isVerified,
         sendOnboardEmail: shouldSendOnboard,
       });
+    }
+
+    if (artist.userId && body.status && body.status !== previousStatus) {
+      const { notifyCreatorSafe } = await import(
+        "../modules/creators/creatorNotify.service"
+      );
+      const reason =
+        typeof body.reviewNote === "string"
+          ? body.reviewNote
+          : typeof body.rejectionReason === "string"
+            ? body.rejectionReason
+            : undefined;
+      if (body.status === "active") {
+        notifyCreatorSafe({
+          userId: String(artist.userId),
+          event: "application_accepted",
+          relatedId: id,
+        });
+      } else if (body.status === "rejected") {
+        notifyCreatorSafe({
+          userId: String(artist.userId),
+          event: "application_rejected",
+          reason,
+          relatedId: id,
+        });
+      } else if (body.status === "suspended") {
+        notifyCreatorSafe({
+          userId: String(artist.userId),
+          event: "application_suspended",
+          reason,
+          relatedId: id,
+        });
+      }
     }
 
     const justActivated = body.status === "active";
@@ -341,7 +379,7 @@ export const patchAdminArtist = async (req: Request, res: Response) => {
                 severity: "high",
                 title: "Send onboard email",
                 message:
-                  "Artist activated. Send them the creator onboard email so they know how to upload to Music → Artists.",
+                  "Creator activated. Send them the Welcome to Jevah email so they can open Studio.",
                 action: {
                   method: "POST",
                   path: "/api/admin/email/artist-onboard",
@@ -385,7 +423,7 @@ export const applyAsCreator = async (req: Request, res: Response) => {
     }
 
     const existing = await Artist.findOne({ userId });
-    if (existing) {
+    if (existing && existing.status !== "rejected") {
       const trackCount = await CopyrightFreeSong.countDocuments({
         artistId: existing._id,
         lane: "artist",
@@ -431,6 +469,39 @@ export const applyAsCreator = async (req: Request, res: Response) => {
     const { displayName, creatorTypes, genres, bio, socials, avatarUrl, applicationNote } =
       parsed.data;
 
+    const { notifyCreatorSafe } = await import(
+      "../modules/creators/creatorNotify.service"
+    );
+
+    if (existing && existing.status === "rejected") {
+      existing.displayName = displayName;
+      existing.creatorTypes = creatorTypes;
+      existing.genres = genres;
+      existing.bio = bio;
+      existing.socials = socials;
+      existing.applicationNote = applicationNote;
+      if (avatarUrl) existing.avatarUrl = avatarUrl;
+      existing.status = "pending";
+      existing.isVerified = false;
+      existing.reviewedAt = null;
+      await existing.save();
+      notifyCreatorSafe({
+        userId,
+        event: "application_received",
+        relatedId: String(existing._id),
+      });
+      res.status(201).json({
+        success: true,
+        data: shapeCreatorMePayload(existing, {
+          trackCount: 0,
+          emailVerified: true,
+        }),
+        message:
+          "Application received. You can upload to the artist catalog after an admin activates your profile.",
+      });
+      return;
+    }
+
     const slug = await uniqueSlug(displayName);
     const doc = await Artist.create({
       userId,
@@ -444,6 +515,12 @@ export const applyAsCreator = async (req: Request, res: Response) => {
       avatarUrl,
       status: "pending",
       isVerified: false,
+    });
+
+    notifyCreatorSafe({
+      userId,
+      event: "application_received",
+      relatedId: String(doc._id),
     });
 
     res.status(201).json({

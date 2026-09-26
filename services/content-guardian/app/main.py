@@ -185,6 +185,7 @@ def score(body: ScoreRequest):
         secular_scene=secular_combined,
         content_type=body.content_type,
         transcript_chars=len((body.transcript or "").strip()),
+        transcript_has_anchor="gospel_anchor" in (text.get("signals") or []),
         violence=violence,
         gore=gore,
         weapons=weapons,

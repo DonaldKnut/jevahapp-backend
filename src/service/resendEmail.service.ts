@@ -29,12 +29,20 @@ class ResendEmailService {
     return sendEmailCore(data);
   }
 
-  generateVerificationEmail(firstName: string, code: string): string {
-    return genVerify(firstName, code);
+  generateVerificationEmail(
+    firstName: string,
+    code: string,
+    verifyLink?: string
+  ): string {
+    return genVerify(firstName, code, verifyLink);
   }
 
-  generatePasswordResetEmail(firstName: string, resetCode: string): string {
-    return genReset(firstName, resetCode);
+  generatePasswordResetEmail(
+    firstName: string,
+    resetCode: string,
+    resetUrl?: string
+  ): string {
+    return genReset(firstName, resetCode, resetUrl);
   }
 
   generateWelcomeEmail(
@@ -44,11 +52,16 @@ class ResendEmailService {
     return genWelcome(firstName, variant);
   }
 
-  async sendVerificationEmail(email: string, firstName: string, code: string) {
-    const html = this.generateVerificationEmail(firstName, code);
+  async sendVerificationEmail(
+    email: string,
+    firstName: string,
+    code: string,
+    verifyLink?: string
+  ) {
+    const html = this.generateVerificationEmail(firstName, code, verifyLink);
     return this.sendEmail({
       to: email,
-      subject: "Verify Your Email Address - Jevah",
+      subject: "Verify your Jevah account",
       html,
     });
   }
@@ -56,12 +69,13 @@ class ResendEmailService {
   async sendPasswordResetEmail(
     email: string,
     firstName: string,
-    resetCode: string
+    resetCode: string,
+    resetUrl?: string
   ) {
-    const html = this.generatePasswordResetEmail(firstName, resetCode);
+    const html = this.generatePasswordResetEmail(firstName, resetCode, resetUrl);
     return this.sendEmail({
       to: email,
-      subject: "Reset Your Password - Verification Code",
+      subject: "Reset your Jevah password",
       html,
     });
   }
@@ -74,7 +88,7 @@ class ResendEmailService {
     const html = this.generateWelcomeEmail(firstName, variant);
     const subject =
       variant === "artist"
-        ? "Welcome to Jevah Creators"
+        ? "You're in — apply as a creator"
         : "Welcome to Jevah! 🎉";
     return this.sendEmail({
       to: email,

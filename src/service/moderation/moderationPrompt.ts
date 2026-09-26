@@ -42,20 +42,22 @@ ${thumbnailText}
 ${framesText}
 ${imageOrderText}
 
+**Jevah publish rule (do not break):**
+Jevah publishes worship, Scripture, and teaching centered on Jesus Christ.
+- To **auto-APPROVE** (requiresReview = false), the spoken or written body **must name Jesus**: Jesus, Christ, Jesu, Yesu, or Jisos (including “Jesus dey”, “Jesu Kristi”, “in Jesus name”). Quiet sermons in Pidgin, Yoruba, Igbo, or Hausa are welcome **when they say His name**.
+- Prayer, amen, pastor, ministry, grace, Adura, Ekpere, Addu’a, “make we pray” are Jevah sermon language — but **without Jesus’ name they must not go live**. Set requiresReview = true.
+- **REJECT** generic motivational speaking about mindset, hustle, money, or self-help. A gospel title or pulpit alone is not enough.
+
 **Your Task:**
 Analyze this content and determine if it is:
-1. **Gospel-inclined/Christian content** - Content that aligns with Christian values, biblical teachings, worship, prayer, spiritual growth, or Christian community
+1. **Gospel-inclined/Christian content** - Worship, Scripture, and teaching centered on Jesus Christ (not generic spirituality or motivation)
    - This includes gospel music and videos in ANY language (English, Yoruba, Hausa, Igbo, or any other language)
    - Gospel songs without preaching are still valid gospel content
    - Worship songs, praise songs, and hymns in any language are acceptable
    - Contemporary gospel, traditional gospel, and gospel in local languages are all acceptable
    - **MARITAL & RELATIONSHIP TEACHINGS**: Biblical teachings on marriage, sex within marriage, and godly relationships are VALID gospel content. Pastor-led discussions or sermons on these topics should be APPROVED if they are presented from a biblical perspective and are not explicit or inappropriate in a secular sense.
-   - **SERMONS**: A sermon may scarcely or never mention "Jesus" by name but can still be clearly Christian. Look for:
-     * Scriptural and theological language: salvation, redemption, repentance, grace, covenant, righteousness, resurrection, Holy Spirit, kingdom of God, Word of God, cross, crucified, risen
-     * Biblical concepts and terms: testimony, preaching, pastor, congregation, altar, born again, sanctification, disciple, apostle, parable
-     * Bible book names or figures: Genesis, Romans, Isaiah, Matthew, Paul, Moses, David, Peter, etc.
-     * Phrases like "the Lord", "Scripture says", "the Bible", "God's word", "eternal life", "kingdom of heaven"
-     If the content is clearly teaching or preaching from a Christian/biblical perspective, APPROVE it even without the word "Jesus"
+   - **SERMONS**: APPROVE quiet pastor-led talks in Pidgin, Yoruba, Igbo, and Hausa **when the transcript names Jesus / Christ / Jesu / Yesu / Jisos**. Prayer and amen without His name → requiresReview = true.
+   - **REJECT generic motivation**: success, mindset, hustle, confidence, or "believe in yourself" talks.
 2. **Inappropriate content** - Content that contains:
    - Explicit sexual content, nudity, or *unbiblical/pornographic* sexual themes
    - Violence, hate speech, or harmful content
@@ -83,7 +85,7 @@ Analyze this content and determine if it is:
 
 **CRITICAL - Video frames (must use together with transcript):**
 - The attached images include **video stills** sampled across the timeline (not only the opening).
-- Use **visual context**: **APPROVE** when frames suggest **church, pulpit, open Bible, cross, choir robes, congregation, prayer/worship posture**, or other clear **Christian gathering** signals — especially if the transcript sounds like preaching or teaching.
+- Use **visual context**: church, pulpit, open Bible, choir, or congregation **supports** a spoken sermon or prayer. Visuals alone do **not** approve a hustle / mindset talk.
 - **REJECT** when frames suggest **nightclub, strip club, sexualized performance**, nudity, or **primary focus on lewd dancing** with no gospel context — even if the audio language is hard to judge.
 - If **audio says something coarse** but **visuals + transcript** indicate a **sermon or teaching**, prefer **APPROVE** (or requiresReview = true only if genuinely ambiguous).
 
@@ -118,17 +120,17 @@ Respond in this exact JSON format:
 - **Worship songs** in any language that align with Christian values are acceptable
 - Do NOT reject content just because it's in a language other than English
 - Analyze the CONTENT and MEANING, not the language
-- If transcript contains gospel/Christian themes, biblical references, worship, praise, or prayer in ANY language, approve it
+- If the transcript names Jesus (or Jesu / Yesu / Jisos) in worship, prayer, or teaching in ANY language — including Pidgin, Yoruba, Igbo, Hausa — approve it.
 
 **Important:**
 - Be strict about non-gospel content (secular music, non-Christian teachings)
 - Allow Christian content even if it's contemporary or modern in style
 - Consider context - Christian rap, contemporary worship, gospel in local languages, etc. are all acceptable
-- **Sermons and teaching**: Do NOT require the word "Jesus" or "Christ" to be present. Scriptural language, Bible references, theological terms (salvation, grace, covenant, resurrection, etc.), and preaching style are strong signals of gospel content. Approve when the content is clearly biblical/Christian teaching.
-- Reject content that promotes values contrary to Christianity, regardless of language
+- **Sermons**: Approve when they name Jesus. Prayer/amen/pastor without His name → requiresReview = true (do not auto-publish).
+- Reject generic motivational content (mindset, hustle, self-help) with no sermon or prayer in the body, regardless of language
 - When in doubt, set requiresReview = true
 - Remember: A gospel song in Yoruba, Hausa, or Igbo is just as valid as one in English
-- **Positive requirement**: Content should be **meaningfully gospel-centered** — worship, Bible, Jesus Christ, Christian teaching, testimony, or choir/gospel music that clearly serves faith. Purely secular topics without a Christian frame should be rejected.
+- **Positive requirement**: Publish worship, Scripture, and teaching centered on Jesus Christ. Purely secular or self-help topics without that frame should be rejected.
 
 Now analyze the content and provide your response in the exact JSON format above.`;
 }

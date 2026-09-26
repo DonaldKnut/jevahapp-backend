@@ -1,8 +1,22 @@
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import { User } from "../../models/user.model";
 import emailService from "../email.service";
 import fileUploadService from "../fileUpload.service";
+import { AuthError } from "../../modules/auth/authErrors";
+import {
+  generateNumericOtp,
+  isOtpLocked,
+  OTP_MAX_ATTEMPTS,
+  otpExpiresAt,
+  RESEND_COOLDOWN_SEC,
+  resendRetryAfterSec,
+} from "../../modules/auth/otp";
+import { assertPasswordPolicy } from "../../modules/auth/passwordPolicy";
+import { isCreatorWebSource } from "../../modules/auth/signupSource";
+import {
+  publicApiOrigin,
+  signEmailVerifyLinkToken,
+} from "../../modules/auth/sessionIssue";
 import { normalizeAuthCode, setVerificationFlags } from "./shared";
 
 export function normalizeEmail(email: string): string {
@@ -23,22 +37,33 @@ export async function registerUser(
   firstName: string,
   lastName: string,
   avatarBuffer?: Buffer,
-  avatarMimeType?: string
+  avatarMimeType?: string,
+  options: { signupSource?: string } = {}
 ) {
   const normalizedEmail = normalizeEmail(email);
+  assertPasswordPolicy(password, normalizedEmail);
 
   const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
-    throw new Error("Email address is already registered");
+    if (existingUser.isBanned) {
+      throw new AuthError(
+        "BANNED",
+        "This account cannot be used. Contact support.",
+        403
+      );
+    }
+    throw new AuthError(
+      "EMAIL_TAKEN",
+      "That email already has a Jevah account. Sign in instead.",
+      409,
+      { email: "That email already has a Jevah account." }
+    );
   }
 
   const role = "learner";
-
-  const verificationCode = crypto
-    .randomBytes(3)
-    .toString("hex")
-    .toUpperCase();
-  const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
+  const autoVerify = process.env.AUTH_AUTO_VERIFY_EMAIL === "true";
+  const verificationCode = autoVerify ? undefined : generateNumericOtp();
+  const verificationCodeExpires = autoVerify ? undefined : otpExpiresAt();
   const hashedPassword = await bcrypt.hash(password, 10);
 
   const verificationFlags = setVerificationFlags(role);
@@ -69,40 +94,49 @@ export async function registerUser(
       password: hashedPassword,
       verificationCode,
       verificationCodeExpires,
-      isEmailVerified: false,
+      isEmailVerified: autoVerify,
       isProfileComplete: false,
       age: 0,
       isKid: false,
       section: "adults",
       role,
       hasConsentedToPrivacyPolicy: false,
+      signupSource: options.signupSource,
+      verificationAttempts: 0,
+      verificationResendAt: autoVerify ? undefined : new Date(),
       ...verificationFlags,
     });
   } catch (error) {
     // Concurrent registration with the same email can slip past the
     // existence check above; the unique index catches it here.
     if (isDuplicateKeyError(error)) {
-      throw new Error("Email address is already registered");
+      throw new AuthError(
+        "EMAIL_TAKEN",
+        "That email already has a Jevah account. Sign in instead.",
+        409,
+        { email: "That email already has a Jevah account." }
+      );
     }
     throw error;
   }
 
   // Fire-and-forget: registration must not fail because the email provider is
-  // down. The user can use /resend-verification-email if this doesn't arrive.
-  emailService
-    .sendVerificationEmail(normalizedEmail, firstName, verificationCode)
-    .catch(emailError => {
-      console.error("Failed to send verification email:", emailError);
-    });
+  // down. The user can use /resend-verification if this doesn't arrive.
+  if (!autoVerify && verificationCode) {
+    const verifyLink = `${publicApiOrigin()}/api/auth/verify-email?token=${signEmailVerifyLinkToken(newUser._id.toString())}`;
+    emailService
+      .sendVerificationEmail(
+        normalizedEmail,
+        firstName,
+        verificationCode,
+        verifyLink
+      )
+      .catch(emailError => {
+        console.error("Failed to send verification email:", emailError);
+      });
+  }
 
-  return {
-    id: newUser._id,
-    email: newUser.email,
-    firstName: newUser.firstName,
-    lastName: newUser.lastName,
-    avatar: newUser.avatar,
-    role: newUser.role,
-  };
+  return newUser;
 }
 
 export async function registerArtist(
@@ -129,7 +163,19 @@ export async function registerArtist(
 
   const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
-    throw new Error("Email address is already registered");
+    if (existingUser.isBanned) {
+      throw new AuthError(
+        "BANNED",
+        "This account cannot be used. Contact support.",
+        403
+      );
+    }
+    throw new AuthError(
+      "EMAIL_TAKEN",
+      "That email already has a Jevah account. Sign in instead.",
+      409,
+      { email: "That email already has a Jevah account." }
+    );
   }
 
   if (!artistName || artistName.trim().length < 2) {
@@ -167,12 +213,10 @@ export async function registerArtist(
     );
   }
 
+  assertPasswordPolicy(password, normalizedEmail);
   const hashedPassword = await bcrypt.hash(password, 10);
-  const verificationCode = crypto
-    .randomBytes(3)
-    .toString("hex")
-    .toUpperCase();
-  const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
+  const verificationCode = generateNumericOtp();
+  const verificationCodeExpires = otpExpiresAt();
   let avatarUrl: string | undefined;
 
   if (avatarBuffer && avatarMimeType) {
@@ -219,14 +263,25 @@ export async function registerArtist(
     });
   } catch (error) {
     if (isDuplicateKeyError(error)) {
-      throw new Error("Email address is already registered");
+      throw new AuthError(
+        "EMAIL_TAKEN",
+        "That email already has a Jevah account. Sign in instead.",
+        409,
+        { email: "That email already has a Jevah account." }
+      );
     }
     throw error;
   }
 
   // Same as learner register: verify first, welcome after POST /verify-email.
+  const artistVerifyLink = `${publicApiOrigin()}/api/auth/verify-email?token=${signEmailVerifyLinkToken(newArtist._id.toString())}`;
   emailService
-    .sendVerificationEmail(normalizedEmail, firstName || "Artist", verificationCode)
+    .sendVerificationEmail(
+      normalizedEmail,
+      firstName || "Artist",
+      verificationCode,
+      artistVerifyLink
+    )
     .catch(emailError => {
       console.error("Failed to send artist verification email:", emailError);
     });
@@ -331,35 +386,26 @@ export async function updateArtistProfile(
   };
 }
 
-export async function verifyEmail(email: string, code: string) {
-  const normalizedCode = normalizeAuthCode(code);
-  if (!normalizedCode) {
-    throw new Error("Invalid email or code");
-  }
-
-  const user = await User.findOne({
-    email: normalizeEmail(email),
-    verificationCode: normalizedCode,
-  });
-  if (!user) {
-    throw new Error("Invalid email or code");
-  }
-
-  if (
-    user.verificationCodeExpires &&
-    user.verificationCodeExpires < new Date()
-  ) {
-    throw new Error("Verification code expired");
+async function markEmailVerified(user: InstanceType<typeof User>) {
+  if (user.isEmailVerified) {
+    throw new AuthError(
+      "ALREADY_VERIFIED",
+      "This email is already verified. Sign in to continue.",
+      409
+    );
   }
 
   user.isEmailVerified = true;
   user.verificationCode = undefined;
   user.verificationCodeExpires = undefined;
+  user.verificationAttempts = 0;
+  user.verificationLockedUntil = undefined;
   await user.save();
 
-  // Non-blocking: verification already succeeded; a failed welcome email
-  // must not turn this into an error response.
-  const welcomeVariant = user.role === "artist" ? "artist" : "default";
+  const welcomeVariant =
+    user.role === "artist" || isCreatorWebSource(user.signupSource)
+      ? "artist"
+      : "default";
   emailService
     .sendWelcomeEmail(
       user.email,
@@ -373,36 +419,130 @@ export async function verifyEmail(email: string, code: string) {
   return user;
 }
 
+async function consumeVerificationCode(
+  user: InstanceType<typeof User>,
+  code: string
+) {
+  if (user.isEmailVerified) {
+    throw new AuthError(
+      "ALREADY_VERIFIED",
+      "This email is already verified. Sign in to continue.",
+      409
+    );
+  }
+
+  if (isOtpLocked(user.verificationLockedUntil)) {
+    throw new AuthError(
+      "RATE_LIMITED",
+      "Too many verification attempts. Request a new code.",
+      429,
+      undefined,
+      { retryAfterSec: 60 }
+    );
+  }
+
+  const normalizedCode = normalizeAuthCode(code);
+  if (!normalizedCode) {
+    throw new AuthError("INVALID_CODE", "That code is incorrect.", 400);
+  }
+
+  if (
+    user.verificationCodeExpires &&
+    user.verificationCodeExpires < new Date()
+  ) {
+    throw new AuthError(
+      "CODE_EXPIRED",
+      "That code has expired. Resend a new code.",
+      400
+    );
+  }
+
+  if (!user.verificationCode || user.verificationCode !== normalizedCode) {
+    const attempts = (user.verificationAttempts || 0) + 1;
+    user.verificationAttempts = attempts;
+    if (attempts >= OTP_MAX_ATTEMPTS) {
+      user.verificationLockedUntil = new Date(Date.now() + 15 * 60 * 1000);
+      user.verificationCode = undefined;
+      user.verificationCodeExpires = undefined;
+    }
+    await user.save();
+    throw new AuthError("INVALID_CODE", "That code is incorrect.", 400);
+  }
+
+  return markEmailVerified(user);
+}
+
+export async function verifyEmail(email: string, code: string) {
+  const user = await User.findOne({ email: normalizeEmail(email) });
+  if (!user) {
+    throw new AuthError("INVALID_CODE", "That code is incorrect.", 400);
+  }
+  return consumeVerificationCode(user, code);
+}
+
+export async function verifyEmailForUserId(userId: string, code: string) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AuthError("INVALID_CODE", "That code is incorrect.", 400);
+  }
+  return consumeVerificationCode(user, code);
+}
+
+export async function verifyEmailByLinkToken(userId: string) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AuthError(
+      "CODE_EXPIRED",
+      "This verification link is invalid or expired.",
+      400
+    );
+  }
+  if (user.isEmailVerified) {
+    return user;
+  }
+  return markEmailVerified(user);
+}
+
 export async function resendVerificationEmail(email: string) {
+  const generic = {
+    retryAfterSec: RESEND_COOLDOWN_SEC,
+    sent: false as boolean,
+  };
+
   const user = await User.findOne({
     email: normalizeEmail(email),
     provider: "email",
   });
-  if (!user) {
-    throw new Error("User not found");
+  if (!user || user.isEmailVerified) {
+    return generic;
   }
 
-  if (user.isEmailVerified) {
-    throw new Error("Email already verified");
+  const wait = resendRetryAfterSec(user.verificationResendAt);
+  if (wait > 0) {
+    return { retryAfterSec: wait, sent: false };
   }
 
-  const verificationCode = crypto
-    .randomBytes(3)
-    .toString("hex")
-    .toUpperCase();
-  const verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
-
+  const verificationCode = generateNumericOtp();
   user.verificationCode = verificationCode;
-  user.verificationCodeExpires = verificationCodeExpires;
+  user.verificationCodeExpires = otpExpiresAt();
+  user.verificationAttempts = 0;
+  user.verificationLockedUntil = undefined;
+  user.verificationResendAt = new Date();
   await user.save();
 
-  await emailService.sendVerificationEmail(
-    user.email,
-    user.firstName || "User",
-    verificationCode
-  );
+  const verifyLink = `${publicApiOrigin()}/api/auth/verify-email?token=${signEmailVerifyLinkToken(user._id.toString())}`;
+  emailService
+    .sendVerificationEmail(
+      user.email,
+      user.firstName || "User",
+      verificationCode,
+      verifyLink
+    )
+    .catch(emailError => {
+      console.error("Failed to resend verification email:", emailError);
+    });
 
-  return user;
+  return { retryAfterSec: RESEND_COOLDOWN_SEC, sent: true };
 }
 
 export async function completeUserProfile(

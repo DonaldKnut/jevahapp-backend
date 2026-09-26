@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export type ArtistStatus = "pending" | "active" | "suspended";
+export type ArtistStatus = "pending" | "active" | "suspended" | "rejected";
 export type CreatorType = "artist" | "minister" | "podcaster";
 
 /**
@@ -68,7 +68,7 @@ const artistSchema = new Schema<IArtist>(
     isVerified: { type: Boolean, default: false, index: true },
     status: {
       type: String,
-      enum: ["pending", "active", "suspended"],
+      enum: ["pending", "active", "suspended", "rejected"],
       default: "pending",
       index: true,
     },

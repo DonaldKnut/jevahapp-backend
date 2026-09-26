@@ -3,7 +3,6 @@ import { Media } from "../../models/media.model";
 import { User } from "../../models/user.model";
 import { MediaReport } from "../../models/mediaReport.model";
 import { AuditService } from "../audit.service";
-import resendEmailService from "../resendEmail.service";
 import cacheService from "../cache.service";
 import fileUploadService from "../fileUpload.service";
 import { enqueueMediaPostUpload } from "../../queues/enqueue";
@@ -105,6 +104,19 @@ export async function applyModerationStatus(params: {
     updateData.adminModerationNotes = adminNotes;
   }
 
+  const { creatorFacingModerationReason } = await import(
+    "../../modules/creators/creatorFacingReason"
+  );
+  const creatorReason = creatorFacingModerationReason({
+    outcome: status,
+    adminNotes,
+    flags: media.moderationResult?.flags,
+    internalReason: media.moderationResult?.reason,
+  });
+  if (creatorReason) {
+    updateData["moderationResult.creatorReason"] = creatorReason;
+  }
+
   await Media.findByIdAndUpdate(mediaId, { $set: updateData });
 
   const reviewerStatus =
@@ -166,23 +178,20 @@ export async function applyModerationStatus(params: {
     );
   }
 
-  if (status === "rejected" && media.uploadedBy) {
-    const uploader = await User.findById(media.uploadedBy);
-    if (uploader?.email) {
-      try {
-        await resendEmailService.sendContentRemovedEmail(
-          uploader.email,
-          uploader.firstName || "User",
-          media.title,
-          adminNotes ||
-            media.moderationResult?.reason ||
-            "Content violates community guidelines",
-          media.moderationResult?.flags || []
-        );
-      } catch (emailError) {
-        logger.error("Failed to send content removed email:", emailError);
-      }
-    }
+  if (media.uploadedBy) {
+    const { notifyMediaModerationOutcomeSafe } = await import(
+      "../../modules/creators/creatorNotify.service"
+    );
+    notifyMediaModerationOutcomeSafe({
+      userId: String(media.uploadedBy),
+      mediaId,
+      title: media.title,
+      contentType: media.contentType,
+      status,
+      adminNotes,
+      flags: media.moderationResult?.flags,
+      internalReason: media.moderationResult?.reason,
+    });
   }
 
   return { id: mediaId, moderationStatus: status };

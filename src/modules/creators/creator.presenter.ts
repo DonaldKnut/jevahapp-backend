@@ -3,7 +3,7 @@
  * Single place for FE-facing shape + capability flags (Open/Closed for new nextSteps).
  */
 export type CreatorType = "artist" | "minister" | "podcaster";
-export type ArtistStatus = "pending" | "active" | "suspended";
+export type ArtistStatus = "pending" | "active" | "suspended" | "rejected";
 
 export type CreatorNextStep =
   | "verify_email"
@@ -129,6 +129,24 @@ export function buildCreatorCapabilities(
       nextStep: "wait_review",
       statusMessage:
         "Your creator application is under review. We’ll notify you when you’re approved.",
+      emailVerified: true,
+      needsEmailVerification: false,
+    };
+  }
+
+  if (artist.status === "rejected") {
+    return {
+      canApply: true,
+      canEditProfile: true,
+      canUploadTracks: false,
+      canPublishTracks: false,
+      showPendingBanner: false,
+      showCreatorHub: true,
+      showPublicProfile: false,
+      publicProfilePath: null,
+      nextStep: "apply",
+      statusMessage:
+        "Your last application was not approved. You can update your profile and apply again.",
       emailVerified: true,
       needsEmailVerification: false,
     };

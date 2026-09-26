@@ -564,7 +564,30 @@ export const uploadMedia = async (
       requestId: (request as any).requestId,
     });
 
-    const underReview = media.moderationStatus === "under_review";
+    const decision = String(media.moderationStatus || "");
+    const underReview = decision === "under_review";
+    const { notifyCreatorSafe, notifyMediaModerationOutcomeSafe } = await import(
+      "../../../modules/creators/creatorNotify.service"
+    );
+    if (decision === "rejected" || decision === "under_review") {
+      notifyMediaModerationOutcomeSafe({
+        userId,
+        mediaId: mediaIdString,
+        title: media.title,
+        contentType,
+        status: decision,
+        flags: media.moderationResult?.flags,
+        internalReason: media.moderationResult?.reason,
+      });
+    } else {
+      notifyCreatorSafe({
+        userId,
+        event: "media_uploaded",
+        contentTitle: media.title,
+        relatedId: mediaIdString,
+        contentType,
+      });
+    }
     const processingStatus =
       (media as any).processing?.status === "ready" ||
       (media as any).processing?.status === "completed"

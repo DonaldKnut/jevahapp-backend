@@ -224,7 +224,7 @@ export async function getMyContent(
         .skip(skip)
         .limit(limit)
         .select(
-          "_id title description contentType thumbnailUrl fileUrl viewCount likeCount commentCount shareCount downloadCount moderationStatus publicationState createdAt updatedAt"
+          "_id title description contentType thumbnailUrl fileUrl viewCount likeCount commentCount shareCount downloadCount moderationStatus publicationState moderationResult.creatorReason adminModerationNotes createdAt updatedAt"
         )
         .lean(),
       Media.countDocuments(query),
@@ -240,6 +240,10 @@ export async function getMyContent(
       fileUrl: doc.fileUrl,
       moderationStatus: doc.moderationStatus || "pending",
       publicationState: doc.publicationState || null,
+      creatorReason:
+        doc.moderationResult?.creatorReason ||
+        doc.adminModerationNotes ||
+        null,
       // Owners can always delete their own media, including under_review.
       canDelete: true,
       engagement: {
@@ -303,6 +307,11 @@ export async function getUserContentById(
         comments: doc.commentCount || 0,
         description: doc.description,
         tags: doc.tags,
+        moderationStatus: doc.moderationStatus || "pending",
+        creatorReason:
+          doc.moderationResult?.creatorReason ||
+          doc.adminModerationNotes ||
+          null,
       };
     } else if (["audio", "music", "podcast"].includes(doc.contentType)) {
       item = {

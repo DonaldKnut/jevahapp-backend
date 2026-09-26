@@ -59,7 +59,8 @@ class EmailService {
   async sendVerificationEmail(
     email: string,
     firstName: string,
-    code: string
+    code: string,
+    verifyLink?: string
   ): Promise<EmailResult> {
     if (this.useResend) {
       try {
@@ -67,7 +68,8 @@ class EmailService {
         const result = await resendEmailService.sendVerificationEmail(
           email,
           firstName,
-          code
+          code,
+          verifyLink
         );
 
         logger.info("✅ Verification email sent via Resend", {
@@ -86,14 +88,24 @@ class EmailService {
           logger.warn("Retrying verification email via SMTP fallback...", {
             email,
           });
-          return this.sendVerificationEmailSMTP(email, firstName, code);
+          return this.sendVerificationEmailSMTP(
+            email,
+            firstName,
+            code,
+            verifyLink
+          );
         }
         throw error;
       }
     }
 
     if (this.fallbackEnabled) {
-      return this.sendVerificationEmailSMTP(email, firstName, code);
+      return this.sendVerificationEmailSMTP(
+        email,
+        firstName,
+        code,
+        verifyLink
+      );
     }
 
     throw new Error("No email provider configured");
@@ -105,13 +117,18 @@ class EmailService {
   private async sendVerificationEmailSMTP(
     email: string,
     firstName: string,
-    code: string
+    code: string,
+    verifyLink?: string
   ): Promise<EmailResult> {
-    const html = resendEmailService.generateVerificationEmail(firstName, code);
+    const html = resendEmailService.generateVerificationEmail(
+      firstName,
+      code,
+      verifyLink
+    );
     const info = await this.smtpTransporter.sendMail({
-      from: `"${this.smtpFromName}" <${this.smtpFromEmail}>`,
+      from: `"Jevah" <${this.smtpFromEmail}>`,
       to: email,
-      subject: "Verify Your Email Address - Jevah",
+      subject: "Verify your Jevah account",
       html,
     });
     logger.info("✅ Verification email sent via SMTP", {
@@ -131,7 +148,8 @@ class EmailService {
   async sendPasswordResetEmail(
     email: string,
     firstName: string,
-    resetCode: string
+    resetCode: string,
+    resetUrl?: string
   ): Promise<EmailResult> {
     if (this.useResend) {
       try {
@@ -139,7 +157,8 @@ class EmailService {
         const result = await resendEmailService.sendPasswordResetEmail(
           email,
           firstName,
-          resetCode
+          resetCode,
+          resetUrl
         );
 
         logger.info("✅ Password reset email sent via Resend", {
@@ -158,14 +177,24 @@ class EmailService {
           logger.warn("Retrying password reset email via SMTP fallback...", {
             email,
           });
-          return this.sendPasswordResetEmailSMTP(email, firstName, resetCode);
+          return this.sendPasswordResetEmailSMTP(
+            email,
+            firstName,
+            resetCode,
+            resetUrl
+          );
         }
         throw error;
       }
     }
 
     if (this.fallbackEnabled) {
-      return this.sendPasswordResetEmailSMTP(email, firstName, resetCode);
+      return this.sendPasswordResetEmailSMTP(
+        email,
+        firstName,
+        resetCode,
+        resetUrl
+      );
     }
 
     throw new Error("No email provider configured");
@@ -177,16 +206,18 @@ class EmailService {
   private async sendPasswordResetEmailSMTP(
     email: string,
     firstName: string,
-    resetCode: string
+    resetCode: string,
+    resetUrl?: string
   ): Promise<EmailResult> {
     const html = resendEmailService.generatePasswordResetEmail(
       firstName,
-      resetCode
+      resetCode,
+      resetUrl
     );
     const info = await this.smtpTransporter.sendMail({
-      from: `"${this.smtpFromName}" <${this.smtpFromEmail}>`,
+      from: `"Jevah" <${this.smtpFromEmail}>`,
       to: email,
-      subject: "Reset Your Password - Verification Code",
+      subject: "Reset your Jevah password",
       html,
     });
     logger.info("✅ Password reset email sent via SMTP", {

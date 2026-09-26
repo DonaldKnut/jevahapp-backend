@@ -24,7 +24,8 @@ export async function requireRegistrationEnabled(
     if (!cfg.registrationEnabled) {
       res.status(403).json({
         success: false,
-        message: "New registrations are temporarily disabled",
+        message:
+          "New accounts are paused. Sign in if you already have a Jevah account.",
         code: "REGISTRATION_DISABLED",
       });
       return;

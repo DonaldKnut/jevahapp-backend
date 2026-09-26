@@ -81,9 +81,18 @@ export function fuseGuardianScores(
   const ct = (contentType || "").toLowerCase();
   const signals = [...(scores.signals || [])];
   const transcriptChars = Math.max(0, evidence?.transcriptChars ?? 0);
-  const spokenGospel =
+  const spokenAnchor =
     transcriptChars >= t.videoTranscriptMinChars &&
     evidence?.transcriptHasGospel === true;
+  const knownNonVideo = [
+    "music",
+    "audio",
+    "podcast",
+    "books",
+    "ebook",
+    "image",
+  ];
+  const isVideo = !knownNonVideo.includes(ct);
 
   const pack = (
     decision: FusionDecision,
@@ -138,7 +147,6 @@ export function fuseGuardianScores(
     return pack("reject", 0.85, ["secular_off_theme"]);
   }
 
-  const isVideo = ["videos", "sermon", "live", "recording"].includes(ct);
   const isAudioBook = ["music", "audio", "podcast", "books", "ebook"].includes(
     ct
   );
@@ -148,12 +156,16 @@ export function fuseGuardianScores(
     weapons < t.weaponsReject * 0.7 &&
     drugs < t.drugsReject * 0.7;
 
+  // Church / pulpit footage plus spoken prayer, sermon, or Christ language.
   if (
     christian >= t.christianSceneApprove &&
     gospel >= t.gospelSceneApprove &&
     nsfw < t.nsfwSafe &&
     safetyClear
   ) {
+    if (isVideo && !spokenAnchor) {
+      return pack("review", 0.5, ["church_scene_needs_spoken_anchor"]);
+    }
     return pack("approve", 0.9, ["church_scene_gospel"]);
   }
 
@@ -163,13 +175,13 @@ export function fuseGuardianScores(
       nsfw < t.nsfwSafe &&
       secularCombined < t.secularSceneSafe
     ) {
-      if (christian >= t.christianSceneApprove && safetyClear) {
+      if (christian >= t.christianSceneApprove && spokenAnchor && safetyClear) {
         return pack("approve", 0.82, [
           "strong_gospel_text",
           "video_visual_corroboration",
         ]);
       }
-      if (spokenGospel && safetyClear) {
+      if (spokenAnchor && safetyClear) {
         return pack("approve", 0.84, [
           "strong_gospel_transcript",
           "spoken_word_of_god",
@@ -193,17 +205,22 @@ export function fuseGuardianScores(
     return pack("approve", 0.84, ["audio_book_gospel"]);
   }
 
-  if (gospel < 0.35 && secularText >= 0.5 && christian < 0.35) {
-    return pack("reject", 0.8, ["secular_entertainment"]);
+  if (
+    gospel < 0.35 &&
+    christian < 0.35 &&
+    (secularText >= 0.5 ||
+      (scores.signals || []).includes("motivation_lexicon"))
+  ) {
+    return pack("reject", 0.8, [
+      (scores.signals || []).includes("motivation_lexicon")
+        ? "secular_motivation"
+        : "secular_entertainment",
+    ]);
   }
 
   const hint = scores.decision_hint;
   if (hint === "approve" && (scores.confidence ?? 0) >= 0.8) {
-    if (
-      isVideo &&
-      christian < t.christianSceneApprove &&
-      !spokenGospel
-    ) {
+    if (isVideo && !spokenAnchor) {
       return pack("review", 0.5, [
         "guardian_hint_approve_needs_spoken_or_visual",
         "video_metadata_insufficient",

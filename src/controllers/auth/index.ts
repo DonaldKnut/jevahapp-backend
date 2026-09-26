@@ -10,8 +10,10 @@ class AuthController {
 
   loginUser = loginController.loginUser;
   verifyEmail = loginController.verifyEmail;
+  verifyEmailLink = loginController.verifyEmailLink;
   resendVerificationEmail = loginController.resendVerificationEmail;
 
+  getRegistrationStatus = registerController.getRegistrationStatus;
   registerUser = registerController.registerUser;
   registerArtist = registerController.registerArtist;
   verifyArtist = registerController.verifyArtist;

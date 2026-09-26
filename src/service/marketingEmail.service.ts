@@ -10,7 +10,12 @@ import {
 } from "./email/templates/marketingEmails";
 import { AuditService } from "./audit.service";
 
-export type MarketingSegment = "all_opted_in" | "role" | "userIds" | "emails";
+export type MarketingSegment =
+  | "all_opted_in"
+  | "role"
+  | "userIds"
+  | "emails"
+  | "creators_active";
 
 export interface MarketingRecipient {
   userId: string;
@@ -197,7 +202,20 @@ export async function resolveSegment(
   const base = marketingOptedInFilter();
   let query: Record<string, any> = { ...base };
 
-  if (input.segment === "role") {
+  if (input.segment === "creators_active") {
+    const { Artist } = await import("../models/artist.model");
+    const artists = await Artist.find({
+      status: "active",
+      userId: { $ne: null },
+    })
+      .select("userId")
+      .limit(limit)
+      .lean();
+    const creatorIds = (artists as any[])
+      .map((a) => a.userId)
+      .filter(Boolean);
+    query._id = { $in: creatorIds };
+  } else if (input.segment === "role") {
     const roles = (input.roles || []).map((r) => String(r).toLowerCase());
     if (!roles.length) {
       throw new Error("roles is required when segment is 'role'");
@@ -219,7 +237,7 @@ export async function resolveSegment(
     query.email = { $in: emails };
   } else if (input.segment !== "all_opted_in") {
     throw new Error(
-      "segment must be one of: all_opted_in, role, userIds, emails"
+      "segment must be one of: all_opted_in, role, userIds, emails, creators_active"
     );
   }
 

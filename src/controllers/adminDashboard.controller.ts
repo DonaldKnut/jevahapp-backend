@@ -175,7 +175,7 @@ export const getPlatformAnalytics = async (
         severity: "high",
         title: "Send artist onboard emails",
         message:
-          "Active artists have never received an onboard invite. Email them creator studio steps (Music → Artists uploads).",
+          "Active creators have never received the Welcome to Jevah email. Send it so they can open Studio.",
         count: artistOnboardCounts.activeMissingOnboardEmail,
         action: {
           method: "POST",

@@ -1,7 +1,14 @@
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import { User } from "../../models/user.model";
 import emailService from "../email.service";
+import { AuthError } from "../../modules/auth/authErrors";
+import { generateNumericOtp, otpExpiresAt } from "../../modules/auth/otp";
+import { assertPasswordPolicy } from "../../modules/auth/passwordPolicy";
+import {
+  publicWebOrigin,
+  readPasswordResetLinkToken,
+  signPasswordResetLinkToken,
+} from "../../modules/auth/sessionIssue";
 import { normalizeEmail } from "./register.service";
 import { normalizeAuthCode } from "./shared";
 import { revokeAllUserRefreshTokens } from "./token.service";
@@ -22,17 +29,20 @@ export async function initiatePasswordReset(email: string) {
 
   // Banned users still get a code so we don't leak ban+existence; reset is allowed
   // so they can recover after an admin unban (token still checked on login).
-  const resetCode = crypto.randomBytes(3).toString("hex").toUpperCase();
-  const resetCodeExpires = new Date(Date.now() + 10 * 60 * 1000);
-
+  const resetCode = generateNumericOtp();
   user.resetPasswordToken = resetCode;
-  user.resetPasswordExpires = resetCodeExpires;
+  user.resetPasswordExpires = otpExpiresAt();
+  user.resetCodeVerified = false;
   await user.save();
+
+  const linkToken = signPasswordResetLinkToken(user.email, resetCode);
+  const resetUrl = `${publicWebOrigin()}/creators/reset?token=${encodeURIComponent(linkToken)}`;
 
   await emailService.sendPasswordResetEmail(
     user.email,
     user.firstName || "User",
-    resetCode
+    resetCode,
+    resetUrl
   );
 
   return { message: GENERIC_RESET_MESSAGE, sent: true };
@@ -47,7 +57,11 @@ export async function verifyResetCode(email: string, code: string) {
   });
 
   if (!user) {
-    throw new Error("Invalid or expired reset code");
+    throw new AuthError(
+      "RESET_TOKEN_INVALID",
+      "This reset code is invalid or expired.",
+      400
+    );
   }
 
   user.resetCodeVerified = true;
@@ -56,7 +70,11 @@ export async function verifyResetCode(email: string, code: string) {
   return { message: "Reset code verified successfully" };
 }
 
-async function applyNewPassword(user: InstanceType<typeof User>, newPassword: string) {
+async function applyNewPassword(
+  user: InstanceType<typeof User>,
+  newPassword: string
+) {
+  assertPasswordPolicy(newPassword, user.email);
   const hashedPassword = await bcrypt.hash(newPassword, 10);
   user.password = hashedPassword;
   user.resetPasswordToken = undefined;
@@ -80,25 +98,45 @@ export async function resetPasswordWithCode(
   });
 
   if (!user) {
-    throw new Error("Invalid or expired reset code");
+    throw new AuthError(
+      "RESET_TOKEN_INVALID",
+      "This reset code is invalid or expired.",
+      400
+    );
   }
 
   return applyNewPassword(user, newPassword);
 }
 
 export async function resetPassword(
-  email: string,
+  email: string | undefined,
   token: string,
   newPassword: string
 ) {
+  const link = readPasswordResetLinkToken(token);
+  const resolvedEmail = link?.email || email;
+  const resolvedCode = link?.code || token;
+
+  if (!resolvedEmail || !resolvedCode) {
+    throw new AuthError(
+      "RESET_TOKEN_INVALID",
+      "This reset link is invalid or expired.",
+      400
+    );
+  }
+
   const user = await User.findOne({
-    email: normalizeEmail(email),
-    resetPasswordToken: normalizeAuthCode(token),
+    email: normalizeEmail(resolvedEmail),
+    resetPasswordToken: normalizeAuthCode(resolvedCode),
     resetPasswordExpires: { $gt: Date.now() },
   });
 
   if (!user) {
-    throw new Error("Invalid or expired reset token");
+    throw new AuthError(
+      "RESET_TOKEN_INVALID",
+      "This reset link is invalid or expired.",
+      400
+    );
   }
 
   return applyNewPassword(user, newPassword);

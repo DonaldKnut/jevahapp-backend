@@ -261,6 +261,21 @@ export const reviewAdminTrackModeration = async (
       lane: track.lane,
     });
 
+    if (track.uploadedBy) {
+      const { notifyMediaModerationOutcomeSafe } = await import(
+        "../modules/creators/creatorNotify.service"
+      );
+      notifyMediaModerationOutcomeSafe({
+        userId: String(track.uploadedBy),
+        mediaId: id,
+        title: track.title,
+        contentType: "music",
+        status,
+        adminNotes: String(req.body?.reason || "").trim() || undefined,
+        internalReason: (track.moderationResult as any)?.reason,
+      });
+    }
+
     res.status(200).json({ success: true, data: shapeTrackCard(track.toObject()) });
   } catch (error: any) {
     handleTrackError(res, error, "Failed to review track");

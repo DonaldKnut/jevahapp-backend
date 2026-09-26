@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <%- include('partials/head', { title: 'Welcome to Jevah' }) %>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #0a1f1c;">
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #0a1f1c;"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table
+            role="presentation"
+            class="email-shell"
+            width="560"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="
+              width: 560px;
+              max-width: 560px;
+              background-color: #0a1f1c;
+              border: 1px solid rgba(255, 107, 53, 0.22);
+              border-radius: 16px;
+              overflow: hidden;
+            "
+          >
+            <%- include('partials/header') %>
+
+            <tr>
+              <td
+                class="email-pad"
+                style="
+                  padding: 8px 48px 8px 48px;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 16px;
+                  line-height: 1.7;
+                  color: #e4ebe9;
+                "
+              >
+                <p style="margin: 0 0 16px 0;">Hi <%= firstName %>,</p>
+
+                <p style="margin: 0 0 16px 0;">
+                  <strong style="color: #ffffff;">Welcome to Jevah. We’re glad you’re here.</strong>
+                </p>
+
+                <p style="margin: 0 0 16px 0; color: #b8c4c1;">
+                  Whether you share music, ministry, a podcast, a message, or your story — Jevah is a place for your voice to reach people who need to hear it.
+                </p>
+
+                <p style="margin: 0 0 16px 0; color: #b8c4c1;">
+                  Your creator profile is ready. You can post your work, meet your listeners, and grow your community from here.
+                </p>
+
+                <% if (typeof optionalNote !== 'undefined' && optionalNote) { %>
+                <p
+                  style="
+                    margin: 0 0 20px 0;
+                    padding: 12px 14px;
+                    background: #fff8e8;
+                    border: 1px solid #f0d48a;
+                    border-radius: 10px;
+                    color: #3d2f0f;
+                  "
+                >
+                  <%= optionalNote %>
+                </p>
+                <% } %>
+
+                <p style="margin: 0 0 16px 0;">
+                  <strong style="color: #ffffff;">Here’s what you can do next:</strong>
+                </p>
+
+                <p style="margin: 0 0 14px 0; color: #b8c4c1;">
+                  🎙️ <strong style="color: #ffffff;">Share your work</strong><br />
+                  Upload a song, sermon, podcast, teaching, or anything you’ve made.
+                </p>
+
+                <p style="margin: 0 0 14px 0; color: #b8c4c1;">
+                  🌍 <strong style="color: #ffffff;">Reach more people</strong><br />
+                  Let people outside your usual circle find you on Jevah.
+                </p>
+
+                <p style="margin: 0 0 14px 0; color: #b8c4c1;">
+                  💬 <strong style="color: #ffffff;">Build your community</strong><br />
+                  Connect with the people who listen, watch, follow, and believe in what you do.
+                </p>
+
+                <p style="margin: 0 0 16px 0; color: #b8c4c1;">
+                  🚀 <strong style="color: #ffffff;">Keep going</strong><br />
+                  Show up, keep creating, and let the journey unfold.
+                </p>
+
+                <p style="margin: 0 0 8px 0; color: #b8c4c1;">
+                  When you’re ready, open Studio and add your first upload. People will be able to find you on Jevah.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="email-pad" style="padding: 16px 48px 8px 48px;" align="left">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 8px 0 16px 0;">
+                  <tr>
+                    <td bgcolor="#256E63" style="border-radius: 12px;">
+                      <a
+                        href="<%= studioUrl %>"
+                        style="
+                          display: inline-block;
+                          padding: 12px 22px;
+                          color: #ffffff;
+                          font-weight: 700;
+                          text-decoration: none;
+                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                          font-size: 15px;
+                        "
+                      >
+                        Open Studio
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td
+                class="email-pad"
+                style="
+                  padding: 8px 48px 8px 48px;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 16px;
+                  line-height: 1.7;
+                  color: #e4ebe9;
+                "
+              >
+                <p style="margin: 0 0 12px 0;">
+                  <strong style="color: #ffffff;">Your next chapter starts here.</strong>
+                </p>
+                <p style="margin: 0 0 12px 0;">Welcome to Jevah, <%= firstName %>.</p>
+                <p style="margin: 0 0 12px 0;">
+                  <strong style="color: #ffffff;">Create. Connect. Inspire.</strong>
+                </p>
+                <p style="margin: 0; color: #b8c4c1;">The Jevah Team</p>
+              </td>
+            </tr>
+
+            <%- include('partials/footer') %>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

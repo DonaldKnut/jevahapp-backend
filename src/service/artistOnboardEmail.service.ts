@@ -7,7 +7,10 @@ import logger from "../utils/logger";
 import { AuditService } from "./audit.service";
 import {
   buildArtistOnboardEmailHtml,
-  plainTextToHtmlParagraphs,
+  interpolateCreatorTokens,
+  resolveCreatorFirstName,
+  resolveCreatorWelcomeSubject,
+  CREATOR_WELCOME_TEMPLATE_ID,
 } from "./email/templates/artistOnboardEmail";
 
 export type ArtistOnboardSegment =
@@ -37,35 +40,25 @@ export interface ResolveArtistOnboardInput {
 
 export interface SendArtistOnboardInput extends ResolveArtistOnboardInput {
   adminId: string;
-  /** Optional override; default subject uses artist welcome copy. */
+  /** Optional override; default Welcome to Jevah, {{firstName}}. */
   subject?: string;
   /** Optional personal note from admin (plain text). */
   message?: string;
+  /** Frontend sends creator_welcome_v1; any other id still uses that letter. */
+  templateId?: string;
   dryRun?: boolean;
 }
 
 const MAX_RECIPIENTS = 100;
 const SEND_PACE_MS = 75;
-const DEFAULT_SUBJECT = "You're invited to create on Jevah";
 
-function publicWebBase(): string {
-  return (
-    process.env.PUBLIC_WEB_URL ||
-    process.env.FRONTEND_URL ||
-    process.env.APP_PUBLIC_URL ||
-    "https://jevahapp.com"
-  ).replace(/\/$/, "");
-}
+export {
+  artistOnboardCtaUrl,
+} from "./email/templates/artistOnboardEmail";
 
-export function artistOnboardCtaUrl(status?: string): {
-  url: string;
-  label: string;
-} {
-  const base = publicWebBase();
-  if (status === "active") {
-    return { url: `${base}/creators`, label: "Open creator studio" };
-  }
-  return { url: `${base}/creators/apply`, label: "Start creator application" };
+function normalizeTemplateId(raw?: string): string {
+  const id = String(raw || CREATOR_WELCOME_TEMPLATE_ID).trim();
+  return id || CREATOR_WELCOME_TEMPLATE_ID;
 }
 
 function clampLimit(limit?: number): number {
@@ -282,6 +275,7 @@ export async function sendArtistOnboardCampaign(
   failed: number;
   failures: Array<{ email: string; error: string }>;
   subject: string;
+  templateId: string;
 }> {
   const recipients = await resolveArtistOnboardRecipients(input);
   if (!recipients.length) {
@@ -290,15 +284,17 @@ export async function sendArtistOnboardCampaign(
     );
   }
 
-  const subject = (input.subject || DEFAULT_SUBJECT).trim();
-  const customHtml = input.message?.trim()
-    ? plainTextToHtmlParagraphs(input.message.trim())
-    : undefined;
+  const templateId = normalizeTemplateId(input.templateId);
+  const noteTemplate = input.message?.trim() || "";
+  const subjectSample = resolveCreatorWelcomeSubject(
+    input.subject,
+    resolveCreatorFirstName(recipients[0] || {})
+  );
 
   if (input.dryRun) {
     await AdminEmailLog.create({
       adminId: input.adminId,
-      subject,
+      subject: subjectSample,
       recipientCount: recipients.length,
       recipientsSample: recipients.slice(0, 20).map((r) => r.email),
       dryRun: true,
@@ -306,6 +302,7 @@ export async function sendArtistOnboardCampaign(
       failed: 0,
       meta: {
         kind: "artist_onboard",
+        templateId,
         segment: input.segment,
         sampleArtistIds: recipients
           .map((r) => r.artistId)
@@ -319,7 +316,8 @@ export async function sendArtistOnboardCampaign(
       sent: 0,
       failed: 0,
       failures: [],
-      subject,
+      subject: subjectSample,
+      templateId,
     };
   }
 
@@ -330,18 +328,18 @@ export async function sendArtistOnboardCampaign(
 
   for (const r of recipients) {
     try {
-      let status: string | undefined;
-      if (r.artistId) {
-        const a = await Artist.findById(r.artistId).select("status").lean();
-        status = (a as any)?.status;
-      }
-      const cta = artistOnboardCtaUrl(status);
+      const firstName = resolveCreatorFirstName({
+        firstName: r.firstName,
+        artistName: r.artistName,
+      });
+      const subject = resolveCreatorWelcomeSubject(input.subject, firstName);
+      const optionalNote = noteTemplate
+        ? interpolateCreatorTokens(noteTemplate, firstName)
+        : "";
       const html = buildArtistOnboardEmailHtml({
         artistName: r.artistName,
-        firstName: r.firstName,
-        customMessageHtml: customHtml,
-        ctaUrl: cta.url,
-        ctaLabel: cta.label,
+        firstName,
+        optionalNote,
       });
       await resendEmailService.sendEmail({
         to: r.email,
@@ -373,7 +371,7 @@ export async function sendArtistOnboardCampaign(
 
   await AdminEmailLog.create({
     adminId: input.adminId,
-    subject,
+    subject: subjectSample,
     recipientCount: recipients.length,
     recipientsSample: recipients.slice(0, 20).map((r) => r.email),
     dryRun: false,
@@ -381,6 +379,7 @@ export async function sendArtistOnboardCampaign(
     failed,
     meta: {
       kind: "artist_onboard",
+      templateId,
       segment: input.segment,
       artistIds: sentArtistIds.slice(0, 50),
     },
@@ -391,7 +390,13 @@ export async function sendArtistOnboardCampaign(
       input.adminId,
       "send_artist_onboard_email",
       sentArtistIds[0] || input.adminId,
-      { sent, failed, recipientCount: recipients.length, segment: input.segment }
+      {
+        sent,
+        failed,
+        recipientCount: recipients.length,
+        segment: input.segment,
+        templateId,
+      }
     );
   } catch {
     /* non-fatal */
@@ -403,7 +408,8 @@ export async function sendArtistOnboardCampaign(
     sent,
     failed,
     failures: failures.slice(0, 25),
-    subject,
+    subject: subjectSample,
+    templateId,
   };
 }
 

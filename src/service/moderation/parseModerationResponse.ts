@@ -1,5 +1,6 @@
 import logger from "../../utils/logger";
 import type { ModerationInput, ModerationResult } from "./types";
+import { transcriptHasGospelLexicon } from "./offlineModeration";
 
 export function parseModerationResponse(
   aiResponse: string,
@@ -37,6 +38,9 @@ export function parseModerationResponse(
         } else if (!(isApproved && confidence >= 0.9)) {
           requiresReview = true;
           flags.push("video_low_confidence_review");
+        } else if (!transcriptHasGospelLexicon(input.transcript)) {
+          requiresReview = true;
+          flags.push("gemini_approve_needs_spoken_anchor");
         } else {
           requiresReview = false;
         }

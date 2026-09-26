@@ -3,7 +3,7 @@
 How to build the **admin web dashboard** (and optional admin views on mobile) against Jevah’s MongoDB-backed auth and `/api/admin` APIs.
 
 Companion API reference: [ADMIN.md](./ADMIN.md).  
-**Content moderation / reports handoff (feed this to implementers):** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md).
+**Content moderation / reports consume guide (feed this to implementers):** [FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md). That file is the source of truth for queue, reports, preview playback, assign/notes/rerun, and track review.
 
 Same users collection powers **mobile app** and **admin web** — an account with `role: "admin"` can sign in on either; only the web dashboard should mount the admin routes/UI.
 

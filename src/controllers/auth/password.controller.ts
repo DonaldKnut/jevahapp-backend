@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import authService from "../../service/auth.service";
+import { isAuthError, sendAuthError } from "../../modules/auth/authErrors";
+import { assertPasswordPolicy } from "../../modules/auth/passwordPolicy";
 
 export async function resetPassword(
   request: Request,
@@ -7,35 +9,42 @@ export async function resetPassword(
   next: NextFunction
 ) {
   try {
-    const { email, token, newPassword } = request.body;
+    const token = request.body?.token;
+    const newPassword =
+      request.body?.password || request.body?.newPassword;
+    const email = request.body?.email;
 
-    if (!email || !token || !newPassword) {
+    if (!token || !newPassword) {
       return response.status(400).json({
         success: false,
-        message: "Email, token, and new password are required",
+        code: "VALIDATION_ERROR",
+        message: "Reset token and password are required.",
+        fields: {
+          ...(!token ? { token: "Reset token is required." } : {}),
+          ...(!newPassword ? { password: "Password is required." } : {}),
+        },
       });
     }
 
-    if (String(newPassword).length < 6) {
-      return response.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long",
-      });
-    }
+    assertPasswordPolicy(String(newPassword), email);
 
-    await authService.resetPassword(email, token, newPassword);
+    await authService.resetPassword(email, token, String(newPassword));
 
     return response.status(200).json({
       success: true,
       message: "Password reset successfully. Please sign in again.",
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (
       error instanceof Error &&
       error.message === "Invalid or expired reset token"
     ) {
       return response.status(400).json({
         success: false,
+        code: "RESET_TOKEN_INVALID",
         message: error.message,
       });
     }
@@ -52,21 +61,26 @@ export async function initiatePasswordReset(
     const { email } = request.body;
 
     if (!email) {
-      return response.status(400).json({
-        success: false,
-        message: "Email is required",
+      return response.status(200).json({
+        success: true,
+        message:
+          "If an account exists for that email, a password reset code has been sent.",
       });
     }
 
     const result = await authService.initiatePasswordReset(email);
 
-    // Same 200 for all roles (admin, content_creator, artist, …) — no email enumeration
+    // Same 200 for all roles (admin, content_creator, artist, learner) — no email enumeration
     return response.status(200).json({
       success: true,
       message: result.message,
     });
-  } catch (error) {
-    return next(error);
+  } catch {
+    return response.status(200).json({
+      success: true,
+      message:
+        "If an account exists for that email, a password reset code has been sent.",
+    });
   }
 }
 
@@ -92,12 +106,16 @@ export async function verifyResetCode(
       message: "Reset code verified successfully",
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (
       error instanceof Error &&
       error.message === "Invalid or expired reset code"
     ) {
       return response.status(400).json({
         success: false,
+        code: "RESET_TOKEN_INVALID",
         message: error.message,
       });
     }
@@ -120,11 +138,12 @@ export async function resetPasswordWithCode(
       });
     }
 
-    if (newPassword.length < 6) {
-      return response.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long",
-      });
+    try {
+      assertPasswordPolicy(String(newPassword), email);
+    } catch (error) {
+      if (isAuthError(error)) {
+        return sendAuthError(response, error);
+      }
     }
 
     await authService.resetPasswordWithCode(email, code, newPassword);
@@ -134,12 +153,16 @@ export async function resetPasswordWithCode(
       message: "Password reset successfully. Please sign in again.",
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (
       error instanceof Error &&
       error.message === "Invalid or expired reset code"
     ) {
       return response.status(400).json({
         success: false,
+        code: "RESET_TOKEN_INVALID",
         message: error.message,
       });
     }
@@ -174,12 +197,7 @@ export async function changePassword(
       });
     }
 
-    if (String(newPassword).length < 6) {
-      return response.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long",
-      });
-    }
+    assertPasswordPolicy(String(newPassword));
 
     await authService.changePassword(userId, currentPassword, newPassword);
 
@@ -188,6 +206,9 @@ export async function changePassword(
       message: "Password changed successfully. Please sign in again.",
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (error instanceof Error) {
       if (
         error.message === "Current password is incorrect" ||

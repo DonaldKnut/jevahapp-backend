@@ -8,6 +8,7 @@ Platform how-tos (use these, not this file, to implement UI):
 
 - **Mobile (Expo / Lite, including Phase 2 pack):** [FRONTEND_BIBLE_MOBILE_HANDOFF.md](./FRONTEND_BIBLE_MOBILE_HANDOFF.md)
 - **Web (jevahapp.com online reader, no pack):** [FRONTEND_BIBLE_WEB_HANDOFF.md](./FRONTEND_BIBLE_WEB_HANDOFF.md)
+- **Web translations + best-in-class reader (2026-09-25):** [FRONTEND_BIBLE_WEB_EXPERIENCE.md](./FRONTEND_BIBLE_WEB_EXPERIENCE.md)
 
 ---
 

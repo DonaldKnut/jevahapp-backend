@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import authService from "../../service/auth.service";
 import { User } from "../../models/user.model";
 import multer from "multer";
+import { clearRefreshCookie } from "../../modules/auth/refreshCookie";
 
 export async function completeUserProfile(
   request: Request,
@@ -297,12 +298,7 @@ export async function logout(
 
     await authService.logout(userId, token, refreshToken);
 
-    response.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      path: "/",
-    });
+    clearRefreshCookie(response);
 
     return response.status(200).json({
       success: true,
@@ -416,12 +412,7 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
   } catch (error: any) {
     console.error("Token refresh error:", error);
 
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      path: "/",
-    });
+    clearRefreshCookie(res);
 
     res.status(401).json({
       success: false,

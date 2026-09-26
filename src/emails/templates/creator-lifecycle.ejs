@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <%- include('partials/head', { title: title || 'Jevah' }) %>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #0a1f1c;">
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #0a1f1c; background: linear-gradient(160deg, #112e2a 0%, #0a1f1c 100%);"
+    >
+      <tr>
+        <td align="center" style="padding: 32px 16px;">
+          <table
+            role="presentation"
+            class="email-shell"
+            width="560"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="
+              width: 560px;
+              max-width: 560px;
+              background-color: #0a1f1c;
+              border: 1px solid rgba(255, 107, 53, 0.22);
+              border-radius: 16px;
+              overflow: hidden;
+            "
+          >
+            <tr>
+              <td
+                style="
+                  height: 3px;
+                  line-height: 3px;
+                  font-size: 0;
+                  background-color: #ff6b35;
+                  background: linear-gradient(90deg, #ff6b35 0%, #ff8c42 50%, #f9c833 100%);
+                "
+              >
+                &nbsp;
+              </td>
+            </tr>
+
+            <%- include('partials/header', { title: title, subtitle: null }) %>
+
+            <tr>
+              <td
+                class="email-pad"
+                style="
+                  padding: 12px 48px 8px 48px;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 16px;
+                  line-height: 1.6;
+                  color: #e4ebe9;
+                  text-align: center;
+                "
+              >
+                <p style="margin: 0; color: #b8c4c1;"><%= body %></p>
+              </td>
+            </tr>
+
+            <% if (typeof reason !== 'undefined' && reason) { %>
+            <tr>
+              <td class="email-pad" style="padding: 16px 48px 0 48px;">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="
+                    background-color: #112e2a;
+                    border-left: 3px solid #ff6b35;
+                    border-radius: 6px;
+                  "
+                >
+                  <tr>
+                    <td
+                      style="
+                        padding: 16px 18px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                        font-size: 15px;
+                        line-height: 1.55;
+                        color: #e4ebe9;
+                      "
+                    >
+                      <%= reason %>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <% } %>
+
+            <% if (typeof ctaUrl !== 'undefined' && ctaUrl) { %>
+            <tr>
+              <td class="email-pad" style="padding: 28px 48px 8px 48px;" align="center">
+                <a
+                  href="<%= ctaUrl %>"
+                  style="
+                    display: inline-block;
+                    background-color: #ff6b35;
+                    color: #0a1f1c;
+                    padding: 14px 28px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    font-size: 15px;
+                    font-weight: 700;
+                  "
+                >
+                  <%= typeof ctaLabel !== 'undefined' && ctaLabel ? ctaLabel : 'Open Jevah' %>
+                </a>
+              </td>
+            </tr>
+            <% } %>
+
+            <%- include('partials/footer') %>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

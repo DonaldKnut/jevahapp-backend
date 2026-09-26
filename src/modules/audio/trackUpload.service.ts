@@ -600,6 +600,21 @@ export async function finalizeTrackUpload(
     );
     await track.save();
 
+    if (track.lane === "artist") {
+      const { notifyMediaModerationOutcomeSafe } = await import(
+        "../creators/creatorNotify.service"
+      );
+      notifyMediaModerationOutcomeSafe({
+        userId: adminId,
+        mediaId: trackId,
+        title: track.title,
+        contentType: "music",
+        status: String(track.moderationStatus || ""),
+        flags: [],
+        internalReason: (track.moderationResult as any)?.reason,
+      });
+    }
+
     await AuditService.logAdminAction(adminId, "finalize_track", trackId, {
       publish: wantsPublic,
       durationSec,

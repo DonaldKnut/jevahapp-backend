@@ -84,6 +84,22 @@ const META: Record<
     languageName: "English",
     license: "public-domain",
   },
+  bsb: {
+    abbreviation: "BSB",
+    name: "Berean Standard Bible",
+    language: "en",
+    languageName: "English",
+    // Dedicated to the public domain 30 Apr 2023 (CC0). See berean.bible/terms.htm
+    license: "public-domain",
+  },
+  drb: {
+    abbreviation: "DRB",
+    name: "Douay-Rheims Bible",
+    language: "en",
+    languageName: "English",
+    // 1899 Challoner revision; public domain. Catholic English of the 66 shared books.
+    license: "public-domain",
+  },
   niv: {
     abbreviation: "NIV",
     name: "New International Version",

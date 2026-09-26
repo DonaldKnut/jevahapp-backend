@@ -18,6 +18,8 @@ class AuthService {
   verifyArtist = registerService.verifyArtist;
   updateArtistProfile = registerService.updateArtistProfile;
   verifyEmail = registerService.verifyEmail;
+  verifyEmailForUserId = registerService.verifyEmailForUserId;
+  verifyEmailByLinkToken = registerService.verifyEmailByLinkToken;
   resendVerificationEmail = registerService.resendVerificationEmail;
   completeUserProfile = registerService.completeUserProfile;
 

@@ -1,95 +1,109 @@
 """
-Gospel / anti-gospel lexicons for EN + Nigerian Pidgin + Yoruba / Igbo / Hausa.
-Used for deterministic text scoring without cloud AI.
+Tiered gospel lexicons for EN + Nigerian Pidgin + Yoruba / Igbo / Hausa.
+
+ANCHOR — required to auto-publish (Christ, Scripture, or local name of Jesus/God in worship).
+SUPPORT — confirms an anchor (worship, choir). Never enough alone.
+ATMOSPHERE — prayer / amen / pastor / ministry. Holds for review; never auto-publishes.
 """
 from __future__ import annotations
 
-# Strong Christian / gospel signals
-GOSPEL_TERMS: list[str] = [
-    # English
+# Must be spoken to auto-publish: Jesus / Christ / Jesu / Yesu / Jisos
+JESUS_NAME_TERMS: list[str] = [
     "jesus",
     "christ",
-    "gospel",
+    "jesu",
+    "yesu",
+    "jisos",
+    "messiah",
+    "jesu kristi",
+    "jesus dey",
+    "blood of jesus",
+    "lamb of god",
+    "in jesus name",
+]
+
+# Other gospel body signals — confirm a Jesus-named sermon, not enough alone
+GOSPEL_ANCHOR_TERMS: list[str] = JESUS_NAME_TERMS + [
+    "yahweh",
+    "jehovah",
+    "holy spirit",
+    "holy ghost",
     "bible",
     "scripture",
-    "worship",
-    "hallelujah",
-    "hosanna",
-    "sermon",
-    "pastor",
-    "holy spirit",
-    "kingdom of god",
     "word of god",
-    "prayer",
-    "amen",
+    "kingdom of god",
+    "kingdom of heaven",
     "salvation",
     "redemption",
     "repentance",
-    "grace",
-    "covenant",
-    "righteousness",
     "resurrection",
-    "born again",
-    "sanctification",
-    "disciple",
-    "apostle",
-    "testimony",
-    "congregation",
-    "altar",
-    "cross",
     "crucified",
     "risen",
+    "born again",
+    "sanctification",
     "eternal life",
-    "kingdom of heaven",
-    "praise",
-    "hymn",
-    "choir",
-    "ministry",
-    "evangelism",
-    "fellowship",
-    "anointing",
-    "blood of jesus",
-    "lamb of god",
-    "messiah",
-    "yahweh",
-    "jehovah",
-    "psalm",
-    "proverb",
-    "genesis",
-    "romans",
-    "isaiah",
-    "matthew",
-    "john",
-    "paul the apostle",
-    # Yoruba
+    "gospel",
     "oluwa",
     "olorun",
-    "jesu",
-    "yesu",
-    "adura",
-    "igbagbo",
-    "orin iyin",
-    "olorun tobi",
-    # Igbo
     "chukwu",
     "chineke",
-    "jisos",
-    "ekpere",
-    "otito",
-    # Hausa
     "ubangiji",
-    "addu'a",
+    "god dey do",
+]
+
+# Confirms an anchor; does not saturate gospel_score alone
+GOSPEL_SUPPORT_TERMS: list[str] = [
+    "worship",
+    "hallelujah",
+    "halleluyah",
+    "hosanna",
+    "hymn",
+    "choir",
+    "testimony",
+    "evangelism",
+    "anointing",
+    "orin iyin",
+    "olorun tobi",
+    "igbagbo",
+    "otito",
     "ibada",
-    # Pidgin gospel
-    "god dey",
-    "jesus dey",
     "thank god",
     "bless god",
-    "holy ghost",
     "fire of god",
 ]
 
-# Secular / club / sexual / anti-gospel themes (scoring — hard blocklist still in Node)
+# Quiet sermons and prayer language — approve when spoken in the body
+GOSPEL_ATMOSPHERE_TERMS: list[str] = [
+    "prayer",
+    "amen",
+    "pastor",
+    "ministry",
+    "grace",
+    "sermon",
+    "congregation",
+    "altar",
+    "praise",
+    "fellowship",
+    "disciple",
+    "apostle",
+    "covenant",
+    "righteousness",
+    "adura",
+    "ekpere",
+    "addu'a",
+    "the lord",
+    "let us pray",
+    "make we pray",
+    "make una pray",
+    "in jesus name",
+    "god dey",
+]
+
+# Backward-compatible union (do not use for auto-publish scoring)
+GOSPEL_TERMS: list[str] = (
+    GOSPEL_ANCHOR_TERMS + GOSPEL_SUPPORT_TERMS + GOSPEL_ATMOSPHERE_TERMS
+)
+
 ANTI_GOSPEL_TERMS: list[str] = [
     "porn",
     "porno",
@@ -128,7 +142,6 @@ ANTI_GOSPEL_TERMS: list[str] = [
     "grinding on",
 ]
 
-# Soft secular entertainment cues (lower weight)
 SECULAR_SOFT_TERMS: list[str] = [
     "party vibes",
     "dance challenge",
@@ -140,4 +153,25 @@ SECULAR_SOFT_TERMS: list[str] = [
     "side chic",
     "sugar daddy",
     "yahoo boy",
+]
+
+# Generic motivation / self-help (reject when no gospel anchor)
+MOTIVATION_TERMS: list[str] = [
+    "motivational speaker",
+    "motivation monday",
+    "mindset",
+    "hustle culture",
+    "law of attraction",
+    "manifestation",
+    "self help",
+    "self-help",
+    "believe in yourself",
+    "grind mode",
+    "passive income",
+    "millionaire mindset",
+    "boss babe",
+    "success tips",
+    "confidence tips",
+    "how to get rich",
+    "level up your life",
 ]

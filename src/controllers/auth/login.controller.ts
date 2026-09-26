@@ -1,6 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import authService from "../../service/auth.service";
 import { AccountBannedError } from "../../service/auth/shared";
+import { isAuthError, sendAuthError } from "../../modules/auth/authErrors";
+import { maybeSetRefreshCookie } from "../../modules/auth/refreshCookie";
+import { registerNextStep } from "../../modules/auth/nextStep";
+import {
+  issueAuthSession,
+  publicWebOrigin,
+  readEmailVerifyLinkToken,
+} from "../../modules/auth/sessionIssue";
+import { RESEND_COOLDOWN_SEC } from "../../modules/auth/otp";
+import { normalizeEmail } from "../../service/auth/register.service";
 
 export async function loginUser(
   request: Request,
@@ -34,17 +44,7 @@ export async function loginUser(
       userAgent
     );
 
-    if (rememberMe && result.refreshToken) {
-      const isProduction = process.env.NODE_ENV === "production";
-
-      response.cookie("refreshToken", result.refreshToken, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "strict" : "lax",
-        maxAge: 90 * 24 * 60 * 60 * 1000,
-        path: "/",
-      });
-    }
+    maybeSetRefreshCookie(response, rememberMe, result.refreshToken);
 
     return response.status(200).json({
       success: true,
@@ -53,13 +53,18 @@ export async function loginUser(
       accessToken: result.accessToken,
       user: result.user,
       expiresIn: result.expiresIn,
-      tokenType: "bearer",
+      tokenType: result.tokenType || "Bearer",
       rememberMe: rememberMe,
+      nextStep: result.user.nextStep,
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (error instanceof AccountBannedError) {
       return response.status(403).json({
         success: false,
+        code: "BANNED",
         message: error.message,
         banReason: error.banReason,
         banUntil: error.banUntil,
@@ -69,12 +74,14 @@ export async function loginUser(
       if (error.message === "Invalid email or password") {
         return response.status(400).json({
           success: false,
+          code: "VALIDATION_ERROR",
           message: error.message,
         });
       }
       if (error.message === "Please verify your email before logging in") {
-        return response.status(403).json({
+        return response.status(422).json({
           success: false,
+          code: "EMAIL_NOT_VERIFIED",
           message: error.message,
         });
       }
@@ -89,43 +96,102 @@ export async function verifyEmail(
   next: NextFunction
 ) {
   try {
-    const { email, code } = request.body;
+    const code = request.body?.code;
+    const email = request.body?.email;
+    const rememberMe = Boolean(request.body?.rememberMe);
+    const sessionUserId = request.userId;
 
-    if (!email || !code) {
+    if (!code) {
       return response.status(400).json({
         success: false,
-        message: "Email and verification code are required",
+        code: "VALIDATION_ERROR",
+        message: "Verification code is required.",
+        fields: { code: "Enter the 6-digit code." },
       });
     }
 
-    const user = await authService.verifyEmail(email, code);
+    if (!email && !sessionUserId) {
+      return response.status(400).json({
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Email and verification code are required.",
+        fields: { email: "Email is required unless you are signed in." },
+      });
+    }
+
+    const user = sessionUserId && !email
+      ? await authService.verifyEmailForUserId(sessionUserId, code)
+      : await authService.verifyEmail(String(email || ""), code);
+
+    const session = await issueAuthSession(user, {
+      rememberMe: rememberMe || true,
+      deviceInfo: request.headers["user-agent"] || "Unknown",
+      ipAddress: request.ip || request.socket.remoteAddress || "Unknown",
+      userAgent: request.headers["user-agent"] || "",
+    });
+    maybeSetRefreshCookie(response, true, session.refreshToken);
 
     return response.status(200).json({
       success: true,
       message: "Email verified successfully",
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        isEmailVerified: user.isEmailVerified,
-        role: user.role,
-      },
+      accessToken: session.accessToken,
+      token: session.accessToken,
+      tokenType: session.tokenType,
+      expiresIn: session.expiresIn,
+      user: session.user,
+      nextStep: session.user.nextStep || registerNextStep(true),
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (error instanceof Error) {
       if (error.message === "Invalid email or code") {
         return response.status(400).json({
           success: false,
-          message: error.message,
+          code: "INVALID_CODE",
+          message: "That code is incorrect.",
         });
       }
       if (error.message === "Verification code expired") {
         return response.status(400).json({
           success: false,
-          message: error.message,
+          code: "CODE_EXPIRED",
+          message: "That code has expired. Resend a new code.",
         });
       }
+    }
+    return next(error);
+  }
+}
+
+export async function verifyEmailLink(
+  request: Request,
+  response: Response,
+  next: NextFunction
+) {
+  try {
+    const token = String(request.query.token || "");
+    const web = publicWebOrigin();
+    const parsed = readEmailVerifyLinkToken(token);
+    if (!parsed) {
+      return response.redirect(`${web}/creators/verify?status=expired`);
+    }
+
+    const user = await authService.verifyEmailByLinkToken(parsed.userId);
+    const session = await issueAuthSession(user, { rememberMe: true });
+    maybeSetRefreshCookie(response, true, session.refreshToken);
+    return response.redirect(`${web}/creators/verify?status=ok`);
+  } catch (error) {
+    if (isAuthError(error) && error.code === "ALREADY_VERIFIED") {
+      return response.redirect(
+        `${publicWebOrigin()}/creators/verify?status=ok`
+      );
+    }
+    if (isAuthError(error)) {
+      return response.redirect(
+        `${publicWebOrigin()}/creators/verify?status=expired`
+      );
     }
     return next(error);
   }
@@ -134,39 +200,34 @@ export async function verifyEmail(
 export async function resendVerificationEmail(
   request: Request,
   response: Response,
-  next: NextFunction
+  _next: NextFunction
 ) {
-  try {
-    const { email } = request.body;
+  const rawEmail = request.body?.email || "";
+  const email = rawEmail ? normalizeEmail(String(rawEmail)) : "";
 
-    if (!email) {
-      return response.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
-    }
-
-    await authService.resendVerificationEmail(email);
-
+  if (!email) {
     return response.status(200).json({
       success: true,
-      message: "Verification email resent successfully",
+      message: "If an account needs verification, we sent a new code.",
+      retryAfterSec: RESEND_COOLDOWN_SEC,
     });
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "User not found") {
-        return response.status(404).json({
-          success: false,
-          message: error.message,
-        });
-      }
-      if (error.message === "Email already verified") {
-        return response.status(400).json({
-          success: false,
-          message: error.message,
-        });
-      }
+  }
+
+  try {
+    const result = await authService.resendVerificationEmail(email);
+    if (result.retryAfterSec > 0 && !result.sent) {
+      response.setHeader("Retry-After", String(result.retryAfterSec));
     }
-    return next(error);
+    return response.status(200).json({
+      success: true,
+      message: "If an account needs verification, we sent a new code.",
+      retryAfterSec: result.retryAfterSec || RESEND_COOLDOWN_SEC,
+    });
+  } catch {
+    return response.status(200).json({
+      success: true,
+      message: "If an account needs verification, we sent a new code.",
+      retryAfterSec: RESEND_COOLDOWN_SEC,
+    });
   }
 }

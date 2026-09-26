@@ -24,12 +24,13 @@ function parseSegment(raw: unknown): MarketingSegment {
     s === "all_opted_in" ||
     s === "role" ||
     s === "userIds" ||
-    s === "emails"
+    s === "emails" ||
+    s === "creators_active"
   ) {
     return s;
   }
   throw new Error(
-    "segment must be one of: all_opted_in, role, userIds, emails"
+    "segment must be one of: all_opted_in, role, userIds, emails, creators_active"
   );
 }
 
@@ -205,12 +206,15 @@ export const sendArtistOnboardEmail = async (
       emails,
       dryRun,
       limit,
+      templateId,
     } = req.body || {};
 
     const result = await sendArtistOnboardCampaign({
       adminId,
       subject,
       message,
+      templateId:
+        typeof templateId === "string" ? templateId : "creator_welcome_v1",
       segment: parseArtistOnboardSegment(segment),
       artistIds: Array.isArray(artistIds) ? artistIds : undefined,
       userIds: Array.isArray(userIds) ? userIds : undefined,
@@ -233,7 +237,7 @@ export const sendArtistOnboardEmail = async (
         ...result,
         maxRecipients: ARTIST_ONBOARD_EMAIL_MAX_RECIPIENTS,
         reminder:
-          "After activating an artist, send this onboard email so they know how to upload to Music → Artists.",
+          "After activating a creator, send this Welcome to Jevah email so they can open Studio.",
       },
     });
   } catch (error: any) {

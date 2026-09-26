@@ -32,7 +32,7 @@ export async function requireEmailVerified(
     }
 
     if (!(user as any).isEmailVerified) {
-      res.status(403).json({
+      res.status(422).json({
         success: false,
         message:
           "Verify your email before continuing as a creator. Check your inbox or use resend verification.",

@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { User } from "../../models/user.model";
+import { Artist } from "../../models/artist.model";
 import emailService from "../email.service";
 import {
   extractUserInfoFromToken,
@@ -12,6 +13,8 @@ import { TOKEN_EXPIRATION } from "../../config/tokenConfig";
 import { JWT_SECRET_ASSERTED, assertUserNotBanned } from "./shared";
 import { normalizeEmail } from "./register.service";
 import { isMasterAdminEmail } from "../../config/superAdmin";
+import { AuthError } from "../../modules/auth/authErrors";
+import { issueAuthSession, shapeAuthUser } from "../../modules/auth/sessionIssue";
 
 export async function oauthLogin(
   provider: string,
@@ -207,47 +210,27 @@ export async function loginUser(
   }
 
   if (!user.isEmailVerified) {
-    throw new Error("Please verify your email before logging in");
+    throw new AuthError(
+      "EMAIL_NOT_VERIFIED",
+      "Verify your email before signing in.",
+      422,
+      undefined,
+      {
+        email: user.email,
+        firstName: user.firstName || null,
+        needsEmailVerification: true,
+      }
+    );
   }
 
   await assertUserNotBanned(user);
 
-  const expiresIn = rememberMe
-    ? TOKEN_EXPIRATION.REMEMBER_ME
-    : TOKEN_EXPIRATION.STANDARD;
-
-  const tokenPayload = {
-    userId: user._id.toString(),
-    email: user.email,
-    rememberMe: rememberMe,
-  };
-
-  const accessToken = jwt.sign(tokenPayload, JWT_SECRET_ASSERTED, {
-    expiresIn: expiresIn,
-    algorithm: "HS256",
+  const session = await issueAuthSession(user, {
+    rememberMe,
+    deviceInfo,
+    ipAddress,
+    userAgent,
   });
-
-  let refreshToken: string | undefined;
-
-  if (rememberMe) {
-    const { RefreshToken } = await import("../../models/refreshToken.model");
-    const crypto = await import("crypto");
-
-    refreshToken = crypto.randomBytes(64).toString("hex");
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 90);
-
-    await RefreshToken.create({
-      token: refreshToken,
-      userId: user._id,
-      deviceInfo,
-      ipAddress,
-      userAgent,
-      expiresAt,
-      isRevoked: false,
-    });
-  }
 
   await User.findByIdAndUpdate(user._id, {
     lastLoginAt: new Date(),
@@ -256,36 +239,16 @@ export async function loginUser(
   await aiReengagementService.trackUserReturn(user._id.toString());
 
   console.log(
-    `🔐 User login: ${user.email}, Remember Me: ${rememberMe}, Expires in: ${expiresIn}s`
+    `🔐 User login: ${user.email}, Remember Me: ${rememberMe}, Expires in: ${session.expiresIn}s`
   );
 
-  return {
-    accessToken,
-    refreshToken,
-    expiresIn,
-    user: {
-      id: user._id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatar: user.avatar,
-      role: user.role,
-      isProfileComplete: user.isProfileComplete,
-      isEmailVerified: user.isEmailVerified || false,
-      isBanned: false,
-      isMasterAdmin: isMasterAdminEmail(user.email),
-      isVerifiedArtist: !!(user as any).isVerifiedArtist,
-      isVerifiedChurch: !!(user as any).isVerifiedChurch,
-      isVerifiedCreator: !!(user as any).isVerifiedCreator,
-      isVerifiedVendor: !!(user as any).isVerifiedVendor,
-    },
-  };
+  return session;
 }
 
 export async function getCurrentUser(userId: string) {
   const user = (await User.findById(userId)
     .select(
-      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified isBanned banReason banUntil isVerifiedArtist isVerifiedChurch isVerifiedCreator isVerifiedVendor lastSeenAt lastLoginAt createdAt updatedAt"
+      "firstName lastName email avatar avatarUpload bio section role isProfileComplete isEmailVerified isBanned banReason banUntil isVerifiedArtist isVerifiedChurch isVerifiedCreator isVerifiedVendor lastSeenAt lastLoginAt createdAt updatedAt signupSource"
     )
     .lean()) as any;
 
@@ -293,35 +256,30 @@ export async function getCurrentUser(userId: string) {
     throw new Error("User not found");
   }
 
+  const artist = (await Artist.findOne({ userId: user._id })
+    .select("status")
+    .lean()) as { status?: "pending" | "active" | "suspended" | "rejected" } | null;
+  const artistStatus = artist?.status || null;
+
   const avatar = user.avatar || user.avatarUpload || null;
   const isBanned = !!user.isBanned;
+  const shaped = shapeAuthUser(
+    { ...user, avatar, isBanned },
+    { artistStatus }
+  );
 
   return {
-    id: user._id.toString(),
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    avatar,
+    ...shaped,
     avatarUpload: user.avatarUpload || null,
     bio: user.bio || null,
     section: user.section || "adults",
-    role: user.role,
-    isProfileComplete: user.isProfileComplete || false,
-    isEmailVerified: user.isEmailVerified || false,
-    isBanned,
     ...(isBanned
       ? {
           banReason: user.banReason || "Violation of community guidelines",
           banUntil: user.banUntil || null,
         }
       : {}),
-    isMasterAdmin: isMasterAdminEmail(user.email),
-    isVerifiedArtist: !!user.isVerifiedArtist,
-    isVerifiedChurch: !!user.isVerifiedChurch,
-    isVerifiedCreator: !!user.isVerifiedCreator,
-    isVerifiedVendor: !!user.isVerifiedVendor,
     lastSeenAt: user.lastSeenAt || user.lastLoginAt || null,
-    createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
 }

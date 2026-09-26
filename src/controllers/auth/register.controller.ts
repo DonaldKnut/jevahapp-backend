@@ -1,5 +1,47 @@
 import { Request, Response, NextFunction } from "express";
 import authService from "../../service/auth.service";
+import { isAuthError, sendAuthError } from "../../modules/auth/authErrors";
+import { assertPasswordPolicy } from "../../modules/auth/passwordPolicy";
+import {
+  normalizePersonName,
+  normalizeRegisterEmail,
+} from "../../modules/auth/registerFields";
+import { maybeSetRefreshCookie } from "../../modules/auth/refreshCookie";
+import { registerNextStep } from "../../modules/auth/nextStep";
+import { issueAuthSession } from "../../modules/auth/sessionIssue";
+import { normalizeSignupSource } from "../../modules/auth/signupSource";
+import { getPlatformConfig } from "../../service/admin/platformConfig.service";
+
+function requestDevice(request: Request) {
+  return {
+    deviceInfo: request.headers["user-agent"] || "Unknown",
+    ipAddress: request.ip || request.socket.remoteAddress || "Unknown",
+    userAgent: request.headers["user-agent"] || "",
+  };
+}
+
+export async function getRegistrationStatus(
+  _request: Request,
+  response: Response,
+  next: NextFunction
+) {
+  try {
+    const cfg = await getPlatformConfig();
+    const enabled = cfg.registrationEnabled !== false && !cfg.maintenanceMode;
+    return response.status(200).json({
+      success: true,
+      registrationEnabled: enabled,
+      message: enabled
+        ? null
+        : cfg.maintenanceMode
+          ? cfg.maintenanceMessage ||
+            "New accounts are paused. Sign in if you already have a Jevah account."
+          : "New accounts are paused. Sign in if you already have a Jevah account.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
 
 export async function registerUser(
   request: Request,
@@ -7,63 +49,59 @@ export async function registerUser(
   next: NextFunction
 ) {
   try {
-    const { email, password, firstName, lastName } = request.body;
+    const firstName = normalizePersonName(request.body?.firstName, "firstName");
+    const lastName = normalizePersonName(request.body?.lastName, "lastName");
+    const email = normalizeRegisterEmail(request.body?.email);
+    const password = String(request.body?.password ?? "");
+    const rememberMe = Boolean(request.body?.rememberMe);
+    const signupSource = normalizeSignupSource(request.body?.source);
 
-    if (!email || !password || !firstName || !lastName) {
+    if (!password) {
       return response.status(400).json({
         success: false,
-        message:
-          "First name, last name, email, and password are required for registration",
+        code: "VALIDATION_ERROR",
+        message: "Password is required.",
+        fields: { password: "Password is required." },
       });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return response.status(400).json({
-        success: false,
-        message: "Please provide a valid email address",
-      });
-    }
-
-    if (password.length < 6) {
-      return response.status(400).json({
-        success: false,
-        message: "Password must be at least 6 characters long",
-      });
-    }
+    assertPasswordPolicy(password, email);
 
     const user = await authService.registerUser(
       email,
       password,
       firstName,
-      lastName
+      lastName,
+      undefined,
+      undefined,
+      { signupSource }
     );
+
+    const session = await issueAuthSession(user, {
+      rememberMe,
+      ...requestDevice(request),
+    });
+    maybeSetRefreshCookie(response, rememberMe, session.refreshToken);
+
+    const nextStep =
+      session.user.nextStep ||
+      registerNextStep(Boolean(user.isEmailVerified));
 
     return response.status(201).json({
       success: true,
-      message: "User registered successfully. Please verify your email.",
-      user,
+      accessToken: session.accessToken,
+      token: session.accessToken,
+      tokenType: session.tokenType,
+      expiresIn: session.expiresIn,
+      user: { ...session.user, nextStep },
+      nextStep,
+      message: user.isEmailVerified
+        ? "Account created. You can apply as a creator."
+        : "Account created. Check your email to verify.",
     });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "Email address is already registered") {
-        return response.status(400).json({
-          success: false,
-          message: error.message,
-        });
-      }
-      if (error.message.includes("Unable to send verification email")) {
-        return response.status(500).json({
-          success: false,
-          message: error.message,
-        });
-      }
-      if (error.message.includes("Unable to send welcome email")) {
-        return response.status(500).json({
-          success: false,
-          message: error.message,
-        });
-      }
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
     }
     return next(error);
   }
@@ -128,11 +166,16 @@ export async function registerArtist(
       needsEmailVerification: true,
     });
   } catch (error) {
+    if (isAuthError(error)) {
+      return sendAuthError(response, error);
+    }
     if (error instanceof Error) {
       if (error.message === "Email address is already registered") {
-        return response.status(400).json({
+        return response.status(409).json({
           success: false,
-          message: error.message,
+          code: "EMAIL_TAKEN",
+          message: "That email already has a Jevah account. Sign in instead.",
+          fields: { email: "That email already has a Jevah account." },
         });
       }
       if (error.message.includes("Unable to send welcome email")) {

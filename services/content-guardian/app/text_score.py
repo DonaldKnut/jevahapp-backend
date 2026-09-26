@@ -5,7 +5,27 @@ import re
 import unicodedata
 from typing import Iterable
 
-from .lexicons import ANTI_GOSPEL_TERMS, GOSPEL_TERMS, SECULAR_SOFT_TERMS
+from .lexicons import (
+    ANTI_GOSPEL_TERMS,
+    GOSPEL_ANCHOR_TERMS,
+    GOSPEL_ATMOSPHERE_TERMS,
+    GOSPEL_SUPPORT_TERMS,
+    JESUS_NAME_TERMS,
+    MOTIVATION_TERMS,
+    SECULAR_SOFT_TERMS,
+)
+
+# "John 3" / "Romans 8" — not the name John / Johnny
+_BIBLE_CITATION = re.compile(
+    r"\b(?:genesis|exodus|leviticus|numbers|deuteronomy|joshua|judges|ruth|"
+    r"samuel|kings|chronicles|ezra|nehemiah|esther|job|psalm|psalms|proverb|proverbs|"
+    r"ecclesiastes|isaiah|jeremiah|ezekiel|daniel|hosea|joel|amos|obadiah|jonah|"
+    r"micah|nahum|habakkuk|zephaniah|haggai|zechariah|malachi|"
+    r"matthew|mark|luke|john|acts|romans|corinthians|galatians|ephesians|"
+    r"philippians|colossians|thessalonians|timothy|titus|philemon|hebrews|"
+    r"james|peter|jude|revelation)\s+\d+",
+    re.IGNORECASE,
+)
 
 
 def _normalize(text: str) -> str:
@@ -17,11 +37,38 @@ def _normalize(text: str) -> str:
 
 
 def _count_hits(normalized: str, terms: Iterable[str]) -> tuple[int, list[str]]:
+    """Whole-term matches only — 'john' must not fire on 'johnny', 'grace' not on 'disgrace'."""
     hits: list[str] = []
+    if not normalized:
+        return 0, hits
     for term in terms:
-        if term in normalized:
+        pattern = r"(?<!\w)" + re.escape(term) + r"(?!\w)"
+        if re.search(pattern, normalized):
             hits.append(term)
     return len(hits), hits
+
+
+def _jesus_count(normalized: str) -> tuple[int, list[str]]:
+    return _count_hits(normalized, JESUS_NAME_TERMS)
+
+
+def _anchor_count(normalized: str) -> tuple[int, list[str]]:
+    n, hits = _count_hits(normalized, GOSPEL_ANCHOR_TERMS)
+    if normalized and _BIBLE_CITATION.search(normalized):
+        n += 1
+        hits = hits + ["bible_citation"]
+    return n, hits
+
+
+def _gospel_score_from_counts(
+    jesus_n: int, support_n: int, atmosphere_n: int = 0
+) -> float:
+    # Auto-publish bar is Jesus / Christ / Jesu / Yesu / Jisos in the body.
+    if jesus_n <= 0:
+        if atmosphere_n + support_n >= 1:
+            return min(0.45, 0.2 + 0.08 * (atmosphere_n + support_n))
+        return 0.0
+    return min(1.0, 0.6 + 0.2 * (jesus_n - 1) + 0.08 * (support_n + atmosphere_n))
 
 
 def score_text(
@@ -31,10 +78,10 @@ def score_text(
 ) -> dict:
     """
     Returns gospel_score, anti_gospel_score, secular_text_score in [0, 1],
-    plus signal strings.
+    plus signal strings. gospel_score is anchor-weighted from the body.
     """
-    # Title once + description + transcript. Avoid double-counting title so
-    # gospel-looking metadata cannot dominate over body/transcript evidence.
+    title_n = _normalize(title)
+    body_n = _normalize(f"{description} {transcript}")
     blob = _normalize(f"{title} {description} {transcript}")
     if not blob:
         return {
@@ -46,40 +93,50 @@ def score_text(
             "signals": ["empty_text"],
         }
 
-    g_count, g_hits = _count_hits(blob, GOSPEL_TERMS)
+    body_jesus, body_jesus_hits = _jesus_count(body_n)
+    title_jesus, _ = _jesus_count(title_n)
+    body_anchors, body_anchor_hits = _anchor_count(body_n)
+    body_support, body_support_hits = _count_hits(body_n, GOSPEL_SUPPORT_TERMS)
+    body_atm, body_atm_hits = _count_hits(body_n, GOSPEL_ATMOSPHERE_TERMS)
+    atmosphere_n = body_atm
     a_count, a_hits = _count_hits(blob, ANTI_GOSPEL_TERMS)
     s_count, s_hits = _count_hits(blob, SECULAR_SOFT_TERMS)
+    m_count, m_hits = _count_hits(blob, MOTIVATION_TERMS)
 
-    # Saturating scores — a few strong hits are enough
-    gospel_score = min(1.0, g_count / 4.0)
-    anti_gospel_score = min(1.0, a_count / 2.0)
-    secular_text_score = min(1.0, (s_count * 0.35 + a_count * 0.5) / 2.0)
-
-    # Modest title boost only when transcript/description also support gospel
-    title_n = _normalize(title)
-    body_n = _normalize(f"{description} {transcript}")
-    if title_n:
-        t_g, _ = _count_hits(title_n, GOSPEL_TERMS)
-        body_g, _ = _count_hits(body_n, GOSPEL_TERMS) if body_n else (0, [])
-        if t_g and body_g:
+    if body_n:
+        gospel_score = _gospel_score_from_counts(
+            body_jesus, body_support, body_atm
+        )
+        if title_jesus and body_jesus:
             gospel_score = min(1.0, gospel_score + 0.1)
-        elif t_g and not body_n:
-            # Title-only assets (no body yet) keep a smaller boost
-            gospel_score = min(1.0, gospel_score + 0.08)
+    elif title_jesus:
+        gospel_score = 0.15
+    else:
+        gospel_score = _gospel_score_from_counts(0, body_support, 0)
+
+    anti_gospel_score = min(1.0, a_count / 2.0)
+    secular_text_score = min(
+        1.0, (s_count * 0.35 + a_count * 0.5 + m_count * 0.45) / 2.0
+    )
 
     signals: list[str] = []
-    if g_hits:
+    if body_jesus_hits:
+        signals.append("gospel_anchor")
         signals.append("gospel_lexicon")
+    elif atmosphere_n or body_support or body_anchor_hits:
+        signals.append("gospel_atmosphere")
     if a_hits:
         signals.append("anti_gospel_lexicon")
     if s_hits:
         signals.append("secular_lexicon")
+    if m_hits:
+        signals.append("motivation_lexicon")
 
     return {
         "gospel_score": round(gospel_score, 4),
         "anti_gospel_score": round(anti_gospel_score, 4),
         "secular_text_score": round(secular_text_score, 4),
-        "gospel_hits": g_hits[:12],
+        "gospel_hits": (body_anchor_hits + body_support_hits + body_atm_hits)[:12],
         "anti_hits": a_hits[:12],
         "signals": signals,
     }
@@ -95,6 +152,7 @@ def hint_from_text_scores(
     secular_scene: float = 0.0,
     content_type: str = "",
     transcript_chars: int = 0,
+    transcript_has_anchor: bool = False,
     violence: float = 0.0,
     gore: float = 0.0,
     weapons: float = 0.0,
@@ -124,7 +182,6 @@ def hint_from_text_scores(
     ct = (content_type or "").lower()
     is_av = ct in ("videos", "sermon", "music", "audio", "podcast") or not ct
 
-    # Hard safety rejects first (vision detectors)
     if nsfw >= nsfw_reject or sexual_scene >= sexual_scene_reject:
         signals.append("nsfw_reject" if nsfw >= nsfw_reject else "sexual_scene_reject")
         return "reject", 0.94, signals
@@ -155,6 +212,15 @@ def hint_from_text_scores(
         signals.append("secular_off_theme")
         return "reject", 0.85, signals
 
+    is_video = ct in ("videos", "sermon", "live", "recording") or not ct
+    spoken_anchor = (
+        transcript_has_anchor
+        or (
+            transcript_chars >= video_transcript_min_chars
+            and gospel >= gospel_text_strong
+        )
+    )
+
     if (
         christian_scene >= christian_scene_approve
         and gospel >= gospel_scene_approve
@@ -162,23 +228,19 @@ def hint_from_text_scores(
         and violence < violence_reject * 0.7
         and gore < gore_reject * 0.7
     ):
+        if is_video and not spoken_anchor:
+            signals.append("church_scene_needs_spoken_anchor")
+            return "review", 0.5, signals
         signals.append("church_scene_gospel")
         return "approve", 0.9, signals
 
-    is_video = ct in ("videos", "sermon", "live", "recording")
-    spoken_gospel = (
-        transcript_chars >= video_transcript_min_chars and gospel >= gospel_text_strong
-    )
-    # Note: Node applies transcriptHasGospel separately; Python hint uses length+score
-    # and Node fusion is authoritative for spoken path.
-
     if gospel >= gospel_text_strong and nsfw < nsfw_safe and secular_scene < secular_scene_safe:
         if is_video:
-            if christian_scene >= christian_scene_approve:
+            if christian_scene >= christian_scene_approve and spoken_anchor:
                 signals.append("strong_gospel_text")
                 signals.append("video_visual_corroboration")
                 return "approve", 0.82, signals
-            if spoken_gospel and violence < 0.3 and gore < 0.25:
+            if spoken_anchor and violence < 0.3 and gore < 0.25:
                 signals.append("strong_gospel_transcript")
                 signals.append("spoken_word_of_god")
                 return "approve", 0.84, signals

@@ -63,8 +63,11 @@ Admin metrics include `moderation.guardianOk` on `GET /api/metrics` (admin JWT).
 | Condition | Action |
 |-----------|--------|
 | Hard blocklist / NSFW ≥ 0.65 | **reject** |
-| Church scene + gospel text, safe NSFW | **approve** (auto publish) |
-| Strong gospel text, safe vision | **approve** |
+| Church scene + **spoken** Christ/Scripture anchor, safe NSFW | **approve** (auto publish) |
+| Strong gospel text **in the transcript**, safe vision | **approve** |
+| Spoken prayer / quiet local-language sermon **that names Jesus, Christ, Jesu, Yesu, or Jisos** | **approve** |
+| Prayer, amen, pastor, ministry, grace **without** Jesus’ name | **review** |
+| Pulpit visuals on a hustle / mindset talk with no sermon or prayer | **reject** or **review** |
 | Weak gospel + secular/anti-gospel | **reject** |
 | Everything else | **review** → Gemini → offline / admin |
 

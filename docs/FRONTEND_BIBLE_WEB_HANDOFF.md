@@ -1,5 +1,7 @@
 # Web handoff — Bible reader on jevahapp.com
 
+> **Translations + reader experience (current):** [FRONTEND_BIBLE_WEB_EXPERIENCE.md](./FRONTEND_BIBLE_WEB_EXPERIENCE.md) — picker, ids we ship now (WEB, KJV, BSB, …), change-translation algorithm, and YouVersion-quality UX. Use that file to build the switcher.
+
 **Date:** 2026-08-16  
 **Audience:** Web app (`https://www.jevahapp.com`) — Vite or Next  
 **API base:** `https://api.jevahapp.com/api` (must include `/api`; see [FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md](./FRONTEND_WEB_LOGIN_API_BASE_HANDOFF.md))  

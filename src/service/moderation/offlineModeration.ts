@@ -11,8 +11,11 @@ import {
   policyText,
 } from "./types";
 
-const GOSPEL_STRONG =
-  /\b(?:jesus|christ|gospel|bible|scripture|worship|hallelujah|hosanna|sermon|pastor|holy\s+spirit|kingdom\s+of\s+god|word\s+of\s+god|oluwa|chukwu|chineke|yesu|jesu|prayer|amen|salvation|redemption|repentance|born\s+again|halleluyah|holy\s+ghost|blood\s+of\s+jesus|testimony|congregation|choir|ministry)\b/i;
+/** Must be spoken to auto-publish: Jesus / Christ / local name of Jesus. */
+const JESUS_NAME =
+  /\b(?:jesus|christ|jesu|yesu|jisos|messiah|jesu\s+kristi|jesus\s+dey|blood\s+of\s+jesus|lamb\s+of\s+god|in\s+jesus\s+name)\b/i;
+
+const GOSPEL_STRONG = JESUS_NAME;
 
 const ANTI_GOSPEL =
   /\b(?:porn|porno|xxx|nude|nudity|strip\s+club|nightclub|onlyfans|ashawo|olosho|twerk|blaspheme|blasphemy)\b/i;
@@ -21,7 +24,7 @@ const ANTI_GOSPEL =
 export function transcriptHasGospelLexicon(transcript?: string): boolean {
   const t = (transcript || "").trim();
   if (t.length < 40) return false;
-  return GOSPEL_STRONG.test(t);
+  return JESUS_NAME.test(t);
 }
 
 export function hasStrongGospelSignal(input: ModerationInput): boolean {

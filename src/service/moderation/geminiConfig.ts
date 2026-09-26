@@ -78,8 +78,8 @@ export function assertSupportedGeminiModel(modelId: string, context: string): vo
 }
 
 /** Policy/prompt versions for moderation decision reuse. */
-export const MODERATION_PROMPT_VERSION = "v2-ng-multilingual";
-export const MODERATION_POLICY_VERSION = "christian-platform-v2";
+export const MODERATION_PROMPT_VERSION = "v5-must-name-jesus";
+export const MODERATION_POLICY_VERSION = "christian-platform-v5-must-name-jesus";
 
 export function validateGeminiStartupConfig(): void {
   const names = getConfiguredGeminiKeyEnvNames();

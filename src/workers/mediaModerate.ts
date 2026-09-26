@@ -12,6 +12,7 @@ import {
   reserveUserUploadForModeration,
 } from "../service/moderation/aiBudget.service";
 import fileUploadService from "../service/fileUpload.service";
+import { notifyMediaModerationOutcomeSafe } from "../modules/creators/creatorNotify.service";
 import logger from "../utils/logger";
 
 const THUMB_MAX_BYTES = 5 * 1024 * 1024;
@@ -88,6 +89,15 @@ export async function processMediaModeration(params: {
   const contentHash = await sha256File(localFilePath);
   const declared = (media as any).uploadIntent?.checksum;
   if (declared && declared.toLowerCase() !== contentHash.toLowerCase()) {
+    const creatorReason = notifyMediaModerationOutcomeSafe({
+      userId,
+      mediaId,
+      title: media.title,
+      contentType: media.contentType,
+      status: "rejected",
+      flags: ["checksum_mismatch"],
+      internalReason: "Checksum mismatch",
+    });
     await Media.findByIdAndUpdate(mediaId, {
       moderationStatus: "rejected",
       isHidden: true,
@@ -98,6 +108,7 @@ export async function processMediaModeration(params: {
         progress: 100,
       },
       contentHash,
+      "moderationResult.creatorReason": creatorReason,
     });
     throw new Error("Checksum mismatch against declared SHA-256");
   }
@@ -107,19 +118,44 @@ export async function processMediaModeration(params: {
   const reused = await findReusableModerationDecision(contentHash);
   if (reused) {
     await applyReusedDecisionToMedia(mediaId, reused);
+    const status = reused.requiresReview
+      ? "under_review"
+      : reused.isApproved
+        ? "approved"
+        : "rejected";
+    const creatorReason = notifyMediaModerationOutcomeSafe({
+      userId,
+      mediaId,
+      title: media.title,
+      contentType: media.contentType,
+      status,
+      flags: reused.flags,
+      internalReason: reused.reason,
+    });
+    await Media.findByIdAndUpdate(mediaId, {
+      "moderationResult.creatorReason": creatorReason,
+    });
     logger.info("Reused moderation decision via contentHash", {
       mediaId,
       contentHash: contentHash.slice(0, 12),
     });
-    const refreshed = await Media.findById(mediaId).select("moderationStatus");
     return {
-      moderationStatus: refreshed?.moderationStatus || "under_review",
+      moderationStatus: status,
       contentHash,
       reused: true,
     };
   }
 
   if (!(await reserveUserUploadForModeration(userId))) {
+    const creatorReason = notifyMediaModerationOutcomeSafe({
+      userId,
+      mediaId,
+      title: media.title,
+      contentType: media.contentType,
+      status: "under_review",
+      flags: ["user_upload_budget"],
+      internalReason: "Daily upload moderation allowance exceeded",
+    });
     await Media.findByIdAndUpdate(mediaId, {
       moderationStatus: "under_review",
       isHidden: true,
@@ -127,6 +163,7 @@ export async function processMediaModeration(params: {
         isApproved: false,
         confidence: 0,
         reason: "Daily upload moderation allowance exceeded",
+        creatorReason,
         flags: ["user_upload_budget"],
         requiresReview: true,
         moderatedAt: new Date(),
@@ -182,6 +219,16 @@ export async function processMediaModeration(params: {
       ? "approved"
       : "rejected";
 
+  const creatorReason = notifyMediaModerationOutcomeSafe({
+    userId,
+    mediaId,
+    title: media.title,
+    contentType: media.contentType,
+    status,
+    flags: moderationResult.flags,
+    internalReason: moderationResult.reason,
+  });
+
   await Media.findByIdAndUpdate(mediaId, {
     contentHash,
     moderationStatus: status,
@@ -197,6 +244,7 @@ export async function processMediaModeration(params: {
       isApproved: moderationResult.isApproved,
       confidence: moderationResult.confidence,
       reason: moderationResult.reason,
+      creatorReason,
       flags: moderationResult.flags,
       requiresReview: moderationResult.requiresReview,
       moderatedAt: new Date(),

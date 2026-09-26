@@ -108,9 +108,14 @@ export interface IUser {
   password: string;
   verificationCode?: string;
   verificationCodeExpires?: Date;
+  verificationAttempts?: number;
+  verificationLockedUntil?: Date;
+  verificationResendAt?: Date;
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
   resetCodeVerified?: boolean;
+  /** Telemetry only (creators_web | ios | android | …). Never a privilege. */
+  signupSource?: string;
 
   age?: number;
   isKid?: boolean;
@@ -246,9 +251,13 @@ const userSchema = new Schema<IUserDocument>(
     password: { type: String },
     verificationCode: { type: String },
     verificationCodeExpires: { type: Date },
+    verificationAttempts: { type: Number, default: 0 },
+    verificationLockedUntil: { type: Date },
+    verificationResendAt: { type: Date },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
     resetCodeVerified: { type: Boolean },
+    signupSource: { type: String, trim: true, maxlength: 40 },
 
     age: { type: Number },
     isKid: { type: Boolean },
