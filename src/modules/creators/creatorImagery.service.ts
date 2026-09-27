@@ -1,6 +1,8 @@
 import { Artist } from "../../models/artist.model";
 import { User } from "../../models/user.model";
-import fileUploadService from "../../service/fileUpload.service";
+import fileUploadService, {
+  requiredBrowserPutHeaders,
+} from "../../service/fileUpload.service";
 import {
   ALLOWED_COVER_MIME,
   TRACK_COVER_MAX_BYTES,
@@ -79,7 +81,7 @@ export async function createArtistImageUploadIntent(input: {
     kind: input.kind,
     putUrl,
     key,
-    headers: { "Content-Type": mime },
+    headers: requiredBrowserPutHeaders(mime),
     expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
   };
 }

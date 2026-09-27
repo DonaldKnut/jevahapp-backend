@@ -2,7 +2,9 @@ import { Types } from "mongoose";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { CopyrightFreeSong, ICopyrightFreeSong } from "../../models/copyrightFreeSong.model";
-import fileUploadService from "../../service/fileUpload.service";
+import fileUploadService, {
+  requiredBrowserPutHeaders,
+} from "../../service/fileUpload.service";
 import { AuditService } from "../../service/audit.service";
 import { hasFfprobe } from "../../utils/mediaTools";
 import logger from "../../utils/logger";
@@ -342,17 +344,17 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     audio: {
       putUrl: audioPutUrl,
       key: audioKey,
-      headers: { "Content-Type": contentType },
+      headers: requiredBrowserPutHeaders(contentType),
       expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
       mode: useMultipart ? ("multipart" as const) : ("single" as const),
       multipartUploadId,
       partSizeHint: useMultipart ? TRACK_MULTIPART_PART_SIZE_BYTES : null,
     },
-    cover: coverKey
+    cover: coverKey && input.coverContentType
       ? {
           putUrl: coverPutUrl,
           key: coverKey,
-          headers: { "Content-Type": input.coverContentType },
+          headers: requiredBrowserPutHeaders(input.coverContentType),
           expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
         }
       : null,
@@ -710,7 +712,7 @@ export async function createReplaceAudioIntent(
     audio: {
       putUrl,
       key,
-      headers: { "Content-Type": input.contentType },
+      headers: requiredBrowserPutHeaders(input.contentType),
       expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
     },
   };
@@ -751,7 +753,7 @@ export async function createReplaceCoverIntent(
     cover: {
       putUrl,
       key,
-      headers: { "Content-Type": input.contentType },
+      headers: requiredBrowserPutHeaders(input.contentType),
       expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
     },
   };

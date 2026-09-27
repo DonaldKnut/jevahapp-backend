@@ -8,7 +8,9 @@ import {
   type ReleaseType,
 } from "../../models/release.model";
 import { CopyrightFreeSong } from "../../models/copyrightFreeSong.model";
-import fileUploadService from "../../service/fileUpload.service";
+import fileUploadService, {
+  requiredBrowserPutHeaders,
+} from "../../service/fileUpload.service";
 import { AuditService } from "../../service/audit.service";
 import { distributionProvider } from "../../service/distribution/noopDistribution.provider";
 import logger from "../../utils/logger";
@@ -329,7 +331,7 @@ export async function createReleaseCoverUploadIntent(input: {
     cover: {
       putUrl,
       key,
-      headers: { "Content-Type": mime },
+      headers: requiredBrowserPutHeaders(mime),
       expiresInSeconds: TRACK_PRESIGN_EXPIRES_SEC,
     },
   };

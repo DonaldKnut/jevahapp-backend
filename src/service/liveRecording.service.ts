@@ -1,22 +1,14 @@
 import { Media } from "../models/media.model";
 import { Types } from "mongoose";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import logger from "../utils/logger";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
-import { toPublicR2Url } from "./fileUpload.service";
+import { createR2S3Client, toPublicR2Url } from "./fileUpload.service";
 
-// Configure S3 client for Cloudflare R2
-const s3Client = new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-  },
-});
+const s3Client = createR2S3Client();
 
 interface RecordingConfig {
   streamId: string;

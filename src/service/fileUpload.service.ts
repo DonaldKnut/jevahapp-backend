@@ -10,6 +10,7 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
+import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const DEFAULT_R2_PUBLIC_DEV_URL =
@@ -155,17 +156,53 @@ export function objectKeyFromPublicUrl(url: string): string | null {
   }
 }
 
-// Configure S3 client for Cloudflare R2
-const s3Client = new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT, // e.g., https://<accountid>.r2.cloudflarestorage.com
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-  },
-  // Disable checksum calculation to avoid x-amz-decoded-content-length header issues
-  forcePathStyle: true,
-});
+/**
+ * R2 + browser presigns cannot use AWS SDK v3 flexible checksums.
+ * Default `WHEN_SUPPORTED` signs `x-amz-checksum-crc32=AAAAAA==` (empty body),
+ * which fails after CORS is fixed. `WHEN_REQUIRED` only signs a checksum
+ * when the command itself sets one (server-side uploads may still do that).
+ */
+export function createR2S3Client(overrides: S3ClientConfig = {}): S3Client {
+  return new S3Client({
+    region: "auto",
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+    },
+    forcePathStyle: true,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
+    ...overrides,
+  });
+}
+
+export function requiredBrowserPutHeaders(mimeType: string): Record<string, string> {
+  return { "Content-Type": mimeType };
+}
+
+const s3Client = createR2S3Client();
+
+/** Presign a browser PUT with no flexible CRC32. FE must send `headers`. */
+export async function signBrowserPutUrl(opts: {
+  client?: S3Client;
+  bucket?: string;
+  key: string;
+  mimeType: string;
+  sizeBytes?: number;
+  expiresInSeconds?: number;
+}): Promise<string> {
+  return getSignedUrl(
+    opts.client || s3Client,
+    new PutObjectCommand({
+      Bucket: opts.bucket || process.env.R2_BUCKET,
+      Key: opts.key,
+      ContentType: opts.mimeType,
+      ...(opts.sizeBytes ? { ContentLength: opts.sizeBytes } : {}),
+    }),
+    { expiresIn: opts.expiresInSeconds ?? 3600 }
+  );
+}
 
 interface UploadApiResponse {
   secure_url: string;
@@ -429,23 +466,23 @@ class FileUploadService {
     return toPublicR2Url(objectKey);
   }
 
-  /** Presigned PUT for direct-to-R2 client uploads (single-object). */
+  /**
+   * Presigned PUT for direct-to-R2 browser/app uploads (single-object).
+   * Signs Content-Type (and Content-Length when known). Does not sign CRC32.
+   * Clients must send `Content-Type` — see `requiredBrowserPutHeaders`.
+   */
   async getPresignedPutUrl(
     objectKey: string,
     mimeType: string,
     sizeBytes?: number,
     expiresInSeconds = 3600
   ): Promise<string> {
-    return getSignedUrl(
-      s3Client,
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET,
-        Key: objectKey,
-        ContentType: mimeType,
-        ...(sizeBytes ? { ContentLength: sizeBytes } : {}),
-      }),
-      { expiresIn: expiresInSeconds }
-    );
+    return signBrowserPutUrl({
+      key: objectKey,
+      mimeType,
+      sizeBytes,
+      expiresInSeconds,
+    });
   }
 
   /** Start R2 multipart upload (large masters). */

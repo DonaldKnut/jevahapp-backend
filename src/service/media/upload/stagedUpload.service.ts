@@ -2,14 +2,14 @@ import { Types } from "mongoose";
 import { createHash, randomUUID } from "crypto";
 import {
   HeadObjectCommand,
-  PutObjectCommand,
   DeleteObjectCommand,
-  S3Client,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Media } from "../../../models/media.model";
 import { User } from "../../../models/user.model";
-import fileUploadService from "../../fileUpload.service";
+import fileUploadService, {
+  createR2S3Client,
+  requiredBrowserPutHeaders,
+} from "../../fileUpload.service";
 import { enqueueMediaPostUpload, enqueueAnalyticsEvent } from "../../../queues/enqueue";
 import { invalidateFeedCaches } from "../../../lib/invalidateFeedCaches";
 import { UPLOAD_LIMITS } from "../../../controllers/media/constants";
@@ -19,15 +19,7 @@ import { enrichMediaPlaybackFields } from "../playbackFields";
 const STAGING_PREFIX = "staging/uploads";
 const INTENT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
-  },
-  forcePathStyle: true,
-});
+const s3 = createR2S3Client();
 
 export interface CreateIntentInput {
   userId: string;
@@ -139,20 +131,14 @@ export async function createUploadIntent(input: CreateIntentInput) {
     contentHash: checksumSha256.toLowerCase(),
   });
 
-  const putUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
-      Key: stagingKey,
-      ContentType: mimeType,
-      ContentLength: sizeBytes,
-      // S3-compatible APIs expect SHA-256 in base64, while our public API uses
-      // the more common 64-character hexadecimal representation.
-      ChecksumSHA256: Buffer.from(checksumSha256, "hex").toString("base64"),
-    }),
-    { expiresIn: 3600 }
+  const putUrl = await fileUploadService.getPresignedPutUrl(
+    stagingKey,
+    mimeType,
+    sizeBytes,
+    3600
   );
 
+  const headers = requiredBrowserPutHeaders(mimeType);
   return {
     intentId,
     mediaId: media._id.toString(),
@@ -161,6 +147,8 @@ export async function createUploadIntent(input: CreateIntentInput) {
     expiresInSeconds: 3600,
     maxBytes: sizeBytes,
     contentType: mimeType,
+    headers,
+    uploadHeaders: headers,
   };
 }
 
