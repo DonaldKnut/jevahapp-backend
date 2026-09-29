@@ -31,14 +31,14 @@ def test_anti_gospel_club():
     assert r["anti_gospel_score"] >= 0.5
 
 
-def test_spoken_prayer_without_jesus_does_not_auto_publish():
+def test_spoken_prayer_without_jesus_auto_publishes():
     r = score_text(
         title="Sunday service",
         description="",
         transcript="Prayer changes things amen. This ministry walks in grace. Pastor said make we pray.",
     )
-    assert r["gospel_score"] < 0.55
-    assert "gospel_anchor" not in r["signals"]
+    assert r["gospel_score"] >= 0.55
+    assert "gospel_lexicon" in r["signals"]
 
 
 def test_spoken_prayer_with_jesus_auto_publishes():
@@ -49,6 +49,34 @@ def test_spoken_prayer_with_jesus_auto_publishes():
     )
     assert r["gospel_score"] >= 0.55
     assert "gospel_anchor" in r["signals"]
+
+
+def test_john_316_scripture_reading_scores_high():
+    r = score_text(
+        title="Bible reading",
+        description="",
+        transcript=(
+            "For God so loved the world that he gave his only begotten Son, "
+            "that whosoever believeth in him should not perish but have everlasting life. "
+            "John 3:16"
+        ),
+    )
+    assert r["gospel_score"] >= 0.7
+    assert "gospel_anchor" in r["signals"]
+    assert "bible_citation" in r["gospel_hits"]
+
+
+def test_hymn_to_god_scores_high():
+    r = score_text(
+        title="Choir night",
+        description="",
+        transcript=(
+            "Amazing grace how sweet the sound. Glory to God forever. "
+            "Hallelujah we worship the Lord today."
+        ),
+    )
+    assert r["gospel_score"] >= 0.7
+    assert "gospel_lexicon" in r["signals"]
 
 
 def test_title_only_prayer_does_not_score_as_gospel():

@@ -1,13 +1,13 @@
 """
 Tiered gospel lexicons for EN + Nigerian Pidgin + Yoruba / Igbo / Hausa.
 
-ANCHOR — required to auto-publish (Christ, Scripture, or local name of Jesus/God in worship).
-SUPPORT — confirms an anchor (worship, choir). Never enough alone.
-ATMOSPHERE — prayer / amen / pastor / ministry. Holds for review; never auto-publishes.
+ANCHOR — clear Christian / biblical body signal (Jesus, God, Scripture, gospel theology).
+SUPPORT — worship / hymn / choir language that strengthens an anchor.
+ATMOSPHERE — prayer / amen / pastor / ministry (counts toward score with anchors/support).
 """
 from __future__ import annotations
 
-# Must be spoken to auto-publish: Jesus / Christ / Jesu / Yesu / Jisos
+# Jesus / Christ names (EN + local forms)
 JESUS_NAME_TERMS: list[str] = [
     "jesus",
     "christ",
@@ -22,36 +22,67 @@ JESUS_NAME_TERMS: list[str] = [
     "in jesus name",
 ]
 
-# Other gospel body signals — confirm a Jesus-named sermon, not enough alone
+# Any clear Christian / biblical body signal — enough to auto-publish when safe
 GOSPEL_ANCHOR_TERMS: list[str] = JESUS_NAME_TERMS + [
     "yahweh",
     "jehovah",
     "holy spirit",
     "holy ghost",
+    "almighty god",
+    "living god",
+    "our god",
+    "praise god",
+    "praise the god",
+    "glory to god",
+    "thank god",
+    "thank you god",
+    "bless god",
+    "blessed be god",
     "bible",
     "scripture",
     "word of god",
     "kingdom of god",
     "kingdom of heaven",
+    "son of god",
     "salvation",
     "redemption",
     "repentance",
+    "repent",
     "resurrection",
     "crucified",
     "risen",
     "born again",
     "sanctification",
     "eternal life",
+    "everlasting life",
+    "only begotten",
+    "whosoever believeth",
+    "whosoever believes",
+    "for god so loved",
     "gospel",
+    "the lord",
+    "heavenly father",
+    "father in heaven",
+    "open your bible",
+    "open your bibles",
+    "turn with me to",
+    "brothers and sisters",
+    "brother and sister",
+    "beloved brethren",
+    "holy bible",
+    "reading from the word",
+    "reading from scripture",
+    "reading from the bible",
     "oluwa",
     "olorun",
     "chukwu",
     "chineke",
     "ubangiji",
     "god dey do",
+    "god dey",
 ]
 
-# Confirms an anchor; does not saturate gospel_score alone
+# Worship / hymn language — confirms Christian content
 GOSPEL_SUPPORT_TERMS: list[str] = [
     "worship",
     "hallelujah",
@@ -70,9 +101,15 @@ GOSPEL_SUPPORT_TERMS: list[str] = [
     "thank god",
     "bless god",
     "fire of god",
+    "amazing grace",
+    "how great thou art",
+    "blessed assurance",
+    "to god be the glory",
+    "great is thy faithfulness",
+    "praise and worship",
 ]
 
-# Quiet sermons and prayer language — approve when spoken in the body
+# Quiet sermons and prayer language
 GOSPEL_ATMOSPHERE_TERMS: list[str] = [
     "prayer",
     "amen",
@@ -91,15 +128,12 @@ GOSPEL_ATMOSPHERE_TERMS: list[str] = [
     "adura",
     "ekpere",
     "addu'a",
-    "the lord",
     "let us pray",
     "make we pray",
     "make una pray",
-    "in jesus name",
-    "god dey",
 ]
 
-# Backward-compatible union (do not use for auto-publish scoring)
+# Backward-compatible union
 GOSPEL_TERMS: list[str] = (
     GOSPEL_ANCHOR_TERMS + GOSPEL_SUPPORT_TERMS + GOSPEL_ATMOSPHERE_TERMS
 )
@@ -140,6 +174,17 @@ ANTI_GOSPEL_TERMS: list[str] = [
     "lewd dance",
     "twerk",
     "grinding on",
+    "chop babe",
+    "chopping babe",
+    "side chick",
+    "side chic",
+    "in my dm",
+    "in my dms",
+    "slide in my dm",
+    "full in my dm",
+    "send nudes",
+    "hookup",
+    "one night stand",
 ]
 
 SECULAR_SOFT_TERMS: list[str] = [
@@ -153,6 +198,11 @@ SECULAR_SOFT_TERMS: list[str] = [
     "side chic",
     "sugar daddy",
     "yahoo boy",
+    "my babe",
+    "fine girl",
+    "fine babe",
+    "dm me",
+    "in my dm",
 ]
 
 # Generic motivation / self-help (reject when no gospel anchor)

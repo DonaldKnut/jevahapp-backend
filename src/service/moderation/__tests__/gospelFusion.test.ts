@@ -86,17 +86,130 @@ describe("fuseGuardianScores", () => {
     expect(out.signals).toContain("spoken_word_of_god");
   });
 
+  it("approves mid gospel_score when spoken Christian lexicon is strong", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.4,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.2,
+      }),
+      "videos",
+      {
+        transcriptChars: 120,
+        transcriptHasGospel: true,
+        bodyHasGospel: true,
+        bodyGospelStrength: "strong",
+      }
+    );
+    expect(out.decision).toBe("approve");
+    expect(out.signals).toContain("lexicon_strong_christian_body");
+  });
+
+  it("approves when STT is empty but description has strong Scripture + church frames", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.75,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.6,
+      }),
+      "videos",
+      {
+        transcriptChars: 0,
+        transcriptHasGospel: false,
+        bodyHasGospel: true,
+        bodyGospelStrength: "strong",
+        hasFrames: true,
+      }
+    );
+    expect(out.decision).toBe("approve");
+  });
+
+  it("does not let Scripture description override long hustle transcript", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.85,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.6,
+      }),
+      "videos",
+      {
+        transcriptChars: 200,
+        transcriptHasGospel: false,
+        bodyHasGospel: true,
+        bodyGospelStrength: "strong",
+        hasFrames: true,
+      }
+    );
+    expect(out.decision).toBe("review");
+  });
+
+  it("approves silent Scripture slides via frame OCR", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.55,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.5,
+      }),
+      "videos",
+      {
+        transcriptChars: 0,
+        transcriptHasGospel: false,
+        ocrHasGospel: true,
+        hasFrames: true,
+      }
+    );
+    expect(out.decision).toBe("approve");
+    expect(
+      out.signals.some(s =>
+        ["frame_ocr_gospel", "lexicon_strong_christian_body", "spoken_word_of_god"].includes(
+          s
+        )
+      )
+    ).toBe(true);
+  });
+
+  it("trusted creator fast-lane auto-approves Christian gray zone", () => {
+    const out = fuseGuardianScores(
+      baseScores({
+        gospel_score: 0.4,
+        nsfw_score: 0.05,
+        secular_scene_score: 0.2,
+        christian_scene_score: 0.5,
+      }),
+      "videos",
+      {
+        transcriptChars: 120,
+        transcriptHasGospel: true,
+        trustedCreator: true,
+        trustTier: "trusted",
+        hasFrames: true,
+      }
+    );
+    expect(out.decision).toBe("approve");
+    expect(
+      out.signals.some(s =>
+        ["trusted_creator_fast_lane", "lexicon_strong_christian_body", "spoken_word_of_god"].includes(
+          s
+        )
+      )
+    ).toBe(true);
+  });
+
   it("does not approve violence-style video with gospel title but no gospel in transcript", () => {
     const out = fuseGuardianScores(
       baseScores({
-        gospel_score: 0.9, // title-inflated
+        gospel_score: 0.9,
         nsfw_score: 0.05,
         secular_scene_score: 0.2,
         christian_scene_score: 0.05,
       }),
       "videos",
       {
-        transcriptChars: 200, // long screams / non-gospel speech
+        transcriptChars: 200,
         transcriptHasGospel: false,
       }
     );
@@ -118,7 +231,11 @@ describe("fuseGuardianScores", () => {
     expect(out.decision).toBe("approve");
     expect(
       out.signals.some(s =>
-        ["video_visual_corroboration", "church_scene_gospel"].includes(s)
+        [
+          "video_visual_corroboration",
+          "church_scene_gospel",
+          "lexicon_strong_christian_body",
+        ].includes(s)
       )
     ).toBe(true);
   });
@@ -201,7 +318,6 @@ describe("fuseGuardianScores", () => {
       "music"
     );
     expect(out.decision).toBe("approve");
-    // strong_gospel_text may win before audio_book_gospel; either is correct
     expect(
       out.signals.some(s =>
         ["strong_gospel_text", "audio_book_gospel"].includes(s)
@@ -214,7 +330,7 @@ describe("fuseGuardianScores", () => {
       baseScores({
         gospel_score: 0.7,
         anti_gospel_score: 0.1,
-        nsfw_score: 0.5, // blocks strong_gospel_text (needs nsfw < 0.25)
+        nsfw_score: 0.5,
         secular_scene_score: 0.5,
       }),
       "books"
@@ -236,6 +352,7 @@ describe("fuseGuardianScores", () => {
     expect(out.decision).toBe("review");
     expect(out.signals).toContain("gray_zone");
   });
+
   it("rejects violence even with gospel title scores", () => {
     const out = fuseGuardianScores(
       baseScores({

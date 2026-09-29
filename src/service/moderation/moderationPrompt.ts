@@ -18,6 +18,10 @@ export function buildModerationPrompt(input: ModerationInput): string {
   const transcriptText = hasTranscript && input.transcript
     ? `- Transcript: "${input.transcript.substring(0, MODERATION_TRANSCRIPT_PROMPT_MAX)}${input.transcript.length > MODERATION_TRANSCRIPT_PROMPT_MAX ? "..." : ""}"`
     : "";
+  const ocrBlock =
+    input.ocrText && input.ocrText.trim().length > 0
+      ? `\n- On-screen OCR text (from video frames): "${input.ocrText.substring(0, 4000)}${input.ocrText.length > 4000 ? "..." : ""}"`
+      : "";
 
   const hasThumbnail = !!input.thumbnail;
   const framesText = hasFrames && input.videoFrames
@@ -38,26 +42,28 @@ export function buildModerationPrompt(input: ModerationInput): string {
 - Description: "${input.description || "N/A"}"
 - Content Type: ${input.contentType}
 ${transcriptText}
+${ocrBlock}
 ${thumbnailText}
 ${framesText}
 ${imageOrderText}
 
 **Jevah publish rule (do not break):**
-Jevah publishes worship, Scripture, and teaching centered on Jesus Christ.
-- To **auto-APPROVE** (requiresReview = false), the spoken or written body **must name Jesus**: Jesus, Christ, Jesu, Yesu, or Jisos (including “Jesus dey”, “Jesu Kristi”, “in Jesus name”). Quiet sermons in Pidgin, Yoruba, Igbo, or Hausa are welcome **when they say His name**.
-- Prayer, amen, pastor, ministry, grace, Adura, Ekpere, Addu’a, “make we pray” are Jevah sermon language — but **without Jesus’ name they must not go live**. Set requiresReview = true.
-- **REJECT** generic motivational speaking about mindset, hustle, money, or self-help. A gospel title or pulpit alone is not enough.
+Jevah auto-publishes clear Christian, gospel, and biblical content. Creators do **not** need to say the word “Jesus” explicitly.
+- To **auto-APPROVE** (requiresReview = false), the spoken or written body must show any clear Christian signal, including: naming Jesus/Christ/God/the Lord/Holy Spirit; quoting or citing Scripture (e.g. John 3:16, Romans 8, Psalm 23); reading the Bible; singing a hymn or worship/praise song; prayer, amen, sermon, testimony, or pastoral teaching; gospel theology (salvation, repentance, born again, Word of God, etc.); or local Christian language (Oluwa, Chineke, Adura, “make we pray”, etc.).
+- **John 3:16 being read**, a hymn to God, a choir worship clip, or a quiet prayer/sermon → **APPROVE** with requiresReview = false.
+- **REJECT** generic motivational speaking about mindset, hustle, money, or self-help with no Christian/biblical frame. A gospel title or pulpit visuals alone are not enough without Christian spoken or written body content.
 
 **Your Task:**
 Analyze this content and determine if it is:
-1. **Gospel-inclined/Christian content** - Worship, Scripture, and teaching centered on Jesus Christ (not generic spirituality or motivation)
+1. **Gospel-inclined/Christian content** - Worship, Scripture, God-centered teaching, hymns, and biblical media (not generic spirituality or motivation)
    - This includes gospel music and videos in ANY language (English, Yoruba, Hausa, Igbo, or any other language)
    - Gospel songs without preaching are still valid gospel content
    - Worship songs, praise songs, and hymns in any language are acceptable
    - Contemporary gospel, traditional gospel, and gospel in local languages are all acceptable
+   - **SCRIPTURE**: Bible readings and verse citations (John 3:16, Psalm 23, etc.) are VALID and must be APPROVED
    - **MARITAL & RELATIONSHIP TEACHINGS**: Biblical teachings on marriage, sex within marriage, and godly relationships are VALID gospel content. Pastor-led discussions or sermons on these topics should be APPROVED if they are presented from a biblical perspective and are not explicit or inappropriate in a secular sense.
-   - **SERMONS**: APPROVE quiet pastor-led talks in Pidgin, Yoruba, Igbo, and Hausa **when the transcript names Jesus / Christ / Jesu / Yesu / Jisos**. Prayer and amen without His name → requiresReview = true.
-   - **REJECT generic motivation**: success, mindset, hustle, confidence, or "believe in yourself" talks.
+   - **SERMONS / PRAYER**: APPROVE pastor-led talks, prayer, and amen gatherings in Pidgin, Yoruba, Igbo, and Hausa when the substance is Christian/biblical — they do not need to say “Jesus” by name.
+   - **REJECT generic motivation**: success, mindset, hustle, confidence, or "believe in yourself" talks with no gospel frame.
 2. **Inappropriate content** - Content that contains:
    - Explicit sexual content, nudity, or *unbiblical/pornographic* sexual themes
    - Violence, hate speech, or harmful content
@@ -74,7 +80,7 @@ Analyze this content and determine if it is:
 - **REJECT** if spoken content or on-screen text **promotes** sexual objectification, lewd dancing as the main subject, or **street/club secular music** with no worship, Bible, or Christian message.
 - **Transactional / street sex slang** (**ashawo**, **olosho**, **runs** in a sexual bragging sense) in a **non-sermon**, **celebratory** music context is usually non-gospel — **REJECT** unless clearly framed as **repentance/testimony or biblical warning** in the transcript.
 - **Do NOT** treat Pidgin gospel worship or biblical teaching as "low quality" — approve when the **substance** is praise, scripture, sermon, or Christian testimony, even if informal language is used.
-- If the **primary purpose** is entertainment, flexing, or sexual themes rather than **Jesus, the Word of God, worship, or biblical teaching**, REJECT or set requiresReview = true.
+- **REJECT** dating / “chop babe” / DM flex / hookup content — even if soft clothing. Objectifying someone or bragging about DMs is **not** gospel. Set isApproved = false.
 
 **CRITICAL - Nigerian Christian / God-related names (do NOT flag as inappropriate):**
 - Personal and theophoric names are common and **must be allowed**: Godwin, Godspower, Godstime, Blessing, Grace, Favour, Faith, Hope, Charity, Gift, Miracle, Praise, Glory, Emmanuel, Immanuel, Joshua, David, Daniel, Samuel, Esther, Ruth, Mary, Martha, Deborah, Joseph, Michael, Gabriel.
@@ -86,6 +92,7 @@ Analyze this content and determine if it is:
 **CRITICAL - Video frames (must use together with transcript):**
 - The attached images include **video stills** sampled across the timeline (not only the opening).
 - Use **visual context**: church, pulpit, open Bible, choir, or congregation **supports** a spoken sermon or prayer. Visuals alone do **not** approve a hustle / mindset talk.
+- **On-screen OCR text** (Scripture slides, lyric videos, Bible verses shown on screen) is valid Christian body evidence — APPROVE silent Scripture / hymn lyric videos when the text is clearly biblical or worship.
 - **REJECT** when frames suggest **nightclub, strip club, sexualized performance**, nudity, or **primary focus on lewd dancing** with no gospel context — even if the audio language is hard to judge.
 - If **audio says something coarse** but **visuals + transcript** indicate a **sermon or teaching**, prefer **APPROVE** (or requiresReview = true only if genuinely ambiguous).
 
@@ -120,17 +127,17 @@ Respond in this exact JSON format:
 - **Worship songs** in any language that align with Christian values are acceptable
 - Do NOT reject content just because it's in a language other than English
 - Analyze the CONTENT and MEANING, not the language
-- If the transcript names Jesus (or Jesu / Yesu / Jisos) in worship, prayer, or teaching in ANY language — including Pidgin, Yoruba, Igbo, Hausa — approve it.
+- If the transcript shows Christian worship, Scripture, prayer, hymn, or teaching in ANY language — including Pidgin, Yoruba, Igbo, Hausa — approve it (they do not need to say “Jesus” by name).
 
 **Important:**
 - Be strict about non-gospel content (secular music, non-Christian teachings)
 - Allow Christian content even if it's contemporary or modern in style
 - Consider context - Christian rap, contemporary worship, gospel in local languages, etc. are all acceptable
-- **Sermons**: Approve when they name Jesus. Prayer/amen/pastor without His name → requiresReview = true (do not auto-publish).
-- Reject generic motivational content (mindset, hustle, self-help) with no sermon or prayer in the body, regardless of language
+- **Sermons / Scripture / hymns**: Approve clear Christian body content. Bible readings (e.g. John 3:16), hymns to God, prayer, and pastoral teaching → requiresReview = false.
+- Reject generic motivational content (mindset, hustle, self-help) with no Christian or biblical frame in the body, regardless of language
 - When in doubt, set requiresReview = true
 - Remember: A gospel song in Yoruba, Hausa, or Igbo is just as valid as one in English
-- **Positive requirement**: Publish worship, Scripture, and teaching centered on Jesus Christ. Purely secular or self-help topics without that frame should be rejected.
+- **Positive requirement**: Publish worship, Scripture, God-centered teaching, and gospel media. Purely secular or self-help topics without that frame should be rejected.
 
 Now analyze the content and provide your response in the exact JSON format above.`;
 }

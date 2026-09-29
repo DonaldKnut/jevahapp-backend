@@ -45,6 +45,16 @@ export interface ICopyrightFreeSong extends Document {
   visibility: TrackVisibility;
   copyrightStatus: CopyrightStatus;
   licenseNote?: string | null;
+  /** Creator legal + gospel checkboxes at upload-intent (artist lane). */
+  rightsAttestation?: {
+    rightsAttested?: boolean;
+    gospelAttested?: boolean;
+    rightsType?: string | null;
+    policyVersion?: string | null;
+    attestedAt?: Date | null;
+    attestedByUserId?: mongoose.Types.ObjectId | null;
+    licenseNote?: string | null;
+  } | null;
 
   uploadedBy: mongoose.Types.ObjectId;
   createdByAdminId?: mongoose.Types.ObjectId | null;
@@ -91,6 +101,8 @@ export interface ICopyrightFreeSong extends Document {
     source?: string | null;
     reviewedAt?: Date | null;
     reviewedByAdminId?: mongoose.Types.ObjectId | null;
+    adminHeardConfirmed?: boolean;
+    adminHeardAt?: Date | null;
   };
 
   publishedAt?: Date | null;
@@ -176,6 +188,15 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
       default: "copyright_free",
     },
     licenseNote: { type: String, trim: true, default: null },
+    rightsAttestation: {
+      rightsAttested: { type: Boolean, default: false },
+      gospelAttested: { type: Boolean, default: false },
+      rightsType: { type: String, trim: true, default: null },
+      policyVersion: { type: String, trim: true, default: null },
+      attestedAt: { type: Date, default: null },
+      attestedByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+      licenseNote: { type: String, trim: true, default: null },
+    },
 
     uploadedBy: {
       type: Schema.Types.ObjectId,
@@ -250,6 +271,8 @@ const copyrightFreeSongSchema = new Schema<ICopyrightFreeSong>(
         ref: "User",
         default: null,
       },
+      adminHeardConfirmed: { type: Boolean, default: false },
+      adminHeardAt: { type: Date, default: null },
     },
 
     publishedAt: { type: Date, default: null },

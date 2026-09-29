@@ -19,28 +19,28 @@ export type TrackReviewResult = {
   transcriptPreview?: string;
 };
 
-const SAFETY_TRACK_SIGNALS = [
-  "nsfw_reject",
-  "sexual_scene_reject",
-  "violence_reject",
-  "gore_reject",
-  "weapons_reject",
-  "drugs_reject",
-];
-
 /**
  * After the track is heard: publish only a clear gospel pass.
- * Safety fails reject. Everything else waits for admin — never approve from title.
+ * Heard reject (safety or off-theme) never goes live. Gray stays with admin.
  */
-export function heardTrackDecision(signals: string[], fusionDecision: string): TrackModerationDecision {
+export function heardTrackDecision(
+  _signals: string[],
+  fusionDecision: string
+): TrackModerationDecision {
   if (fusionDecision === "approve") return "approved";
-  if (
-    fusionDecision === "reject" &&
-    signals.some(s => SAFETY_TRACK_SIGNALS.includes(s))
-  ) {
-    return "rejected";
-  }
+  if (fusionDecision === "reject") return "rejected";
   return "under_review";
+}
+
+/**
+ * Creator songs never go public from AI alone.
+ * Guardian may reject a heard off-theme track. Everything else waits
+ * for an admin to play it and PATCH with heardConfirmed.
+ */
+export function creatorTrackHoldForAdmin(
+  aiDecision: TrackModerationDecision
+): TrackModerationDecision {
+  return aiDecision === "rejected" ? "rejected" : "under_review";
 }
 
 /**

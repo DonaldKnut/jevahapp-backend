@@ -178,7 +178,7 @@ Email must be verified before apply — see [FRONTEND_ARTIST_EMAIL_VERIFICATION_
 |--------|------|--------|
 | GET | `/api/creators/me/tracks` | Own tracks incl. drafts |
 | GET/POST | `/api/creators/releases` | Studio releases (see [FRONTEND_ARTIST_RELEASES_HANDOFF.md](./FRONTEND_ARTIST_RELEASES_HANDOFF.md)) |
-| POST | `/api/creators/tracks/upload-intent` | Presign R2; optional `releaseId` + `trackNumber` |
+| POST | `/api/creators/tracks/upload-intent` | Presign R2; **requires** `rightsAttested`, `gospelAttested`, `rightsType` — see [FRONTEND_CREATOR_RIGHTS_HANDOFF.md](./FRONTEND_CREATOR_RIGHTS_HANDOFF.md) |
 | POST | `/api/creators/tracks/:trackId/finalize` | `{ publish?: true }` |
 | PATCH | `/api/creators/tracks/:id` | Metadata / visibility |
 | DELETE | `/api/creators/tracks/:id` | Hard delete + R2 purge |
@@ -197,7 +197,10 @@ Upload body mirrors admin (see [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACK
   "fileSizeBytes": 5242880,
   "coverContentType": "image/jpeg",
   "coverFileName": "cover.jpg",
-  "coverFileSizeBytes": 120000
+  "coverFileSizeBytes": 120000,
+  "rightsAttested": true,
+  "gospelAttested": true,
+  "rightsType": "original"
 }
 ```
 

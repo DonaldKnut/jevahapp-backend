@@ -19,13 +19,9 @@ describe("music shelf integrity filters", () => {
     expect(eq).toBeTruthy();
   });
 
-  it("artist filter requires approved (or legacy missing) moderation", () => {
+  it("artist filter requires explicit approved moderation", () => {
     const f = publicArtistReadyFilter() as any;
-    const mod = f.$and.find(
-      (c: any) =>
-        Array.isArray(c.$or) &&
-        c.$or.some((x: any) => x.moderationStatus === "approved")
-    );
+    const mod = f.$and.find((c: any) => c.moderationStatus === "approved");
     expect(mod).toBeTruthy();
   });
 

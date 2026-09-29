@@ -1,5 +1,5 @@
 """
-Jevah Content Guardian — local STT + vision + gospel lexicon scoring.
+Jevah Content Guardian — local STT + vision + OCR + gospel lexicon scoring.
 AI (Gemini) is NOT used here; Node calls this first, Gemini only for gray zones.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from fastapi import FastAPI, File, Form, UploadFile
 from pydantic import BaseModel, Field
 
 from . import config
+from . import ocr as frame_ocr
 from . import text_score
 from . import vision
 from . import whisper_stt
@@ -20,8 +21,8 @@ logger = logging.getLogger("content-guardian")
 
 app = FastAPI(
     title="Jevah Content Guardian",
-    version="1.0.0",
-    description="Gospel-first upload scoring without cloud AI",
+    version="1.1.0",
+    description="Gospel-first upload scoring without cloud AI (STT + vision + OCR)",
 )
 
 
@@ -33,6 +34,7 @@ class ScoreRequest(BaseModel):
     thumbnail: Optional[str] = None
     frames: List[str] = Field(default_factory=list)
     run_vision: bool = True
+    run_ocr: bool = True
 
 
 class ScoreResponse(BaseModel):
@@ -51,12 +53,19 @@ class ScoreResponse(BaseModel):
     confidence: float
     signals: List[str]
     transcript: str = ""
+    ocr_text: str = ""
     gospel_hits: List[str] = Field(default_factory=list)
     anti_hits: List[str] = Field(default_factory=list)
     frame_count_scored: int = 0
     provider: str = "content-guardian"
     vision_available: bool = True
     stt_available: bool = True
+    ocr_available: bool = True
+
+
+class OcrRequest(BaseModel):
+    frames: List[str] = Field(default_factory=list)
+    max_frames: Optional[int] = None
 
 
 @app.get("/health")
@@ -64,9 +73,10 @@ def health():
     return {
         "ok": True,
         "service": "content-guardian",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "whisper": whisper_stt.whisper_status(),
         "vision": vision.vision_status(),
+        "ocr": frame_ocr.ocr_status(),
         "thresholds": {
             "nsfw_reject": config.NSFW_REJECT,
             "gospel_text_strong": config.GOSPEL_TEXT_STRONG,
@@ -85,6 +95,16 @@ async def transcribe(
         data,
         filename=file.filename or "audio.wav",
         language=language or None,
+    )
+    return result
+
+
+@app.post("/v1/ocr")
+def ocr_frames(body: OcrRequest):
+    """OCR on-screen Scripture / lyrics from sampled video frames."""
+    result = frame_ocr.extract_text_from_frames(
+        body.frames,
+        max_frames=body.max_frames,
     )
     return result
 
@@ -120,12 +140,13 @@ async def score_audio(
         transcript=transcript,
         content_type=content_type or "music",
         run_vision=False,
+        run_ocr=False,
     )
     scored = score(body)
-    # Attach STT metadata
     scored.transcript = transcript
     scored.stt_available = stt_ok
     scored.vision_available = False
+    scored.ocr_available = False
     if not stt_ok:
         scored.signals = list(
             dict.fromkeys(list(scored.signals) + ["stt_unavailable_or_empty"])
@@ -138,7 +159,22 @@ async def score_audio(
 
 @app.post("/v1/score", response_model=ScoreResponse)
 def score(body: ScoreRequest):
-    text = text_score.score_text(body.title, body.description, body.transcript)
+    ocr_text = ""
+    ocr_signals: list[str] = []
+    ocr_available = True
+
+    if body.run_ocr and body.frames:
+        ocr_result = frame_ocr.extract_text_from_frames(body.frames)
+        ocr_text = (ocr_result.get("text") or "").strip()
+        ocr_signals = list(ocr_result.get("signals") or [])
+        ocr_available = bool(ocr_result.get("available", True))
+    elif body.run_ocr:
+        ocr_available = bool(frame_ocr.ocr_status().get("available"))
+
+    # Merge OCR into spoken body so silent Scripture slides score as gospel
+    spoken_body = f"{body.transcript or ''} {ocr_text}".strip()
+    text = text_score.score_text(body.title, body.description, spoken_body)
+
     nsfw = 0.0
     christian = 0.0
     secular_scene = 0.0
@@ -176,6 +212,7 @@ def score(body: ScoreRequest):
         secular_scene, float(text["secular_text_score"]) * 0.85
     )
 
+    spoken_chars = len(spoken_body)
     hint, confidence, fuse_signals = text_score.hint_from_text_scores(
         float(text["gospel_score"]),
         float(text["anti_gospel_score"]),
@@ -184,8 +221,11 @@ def score(body: ScoreRequest):
         christian_scene=christian,
         secular_scene=secular_combined,
         content_type=body.content_type,
-        transcript_chars=len((body.transcript or "").strip()),
-        transcript_has_anchor="gospel_anchor" in (text.get("signals") or []),
+        transcript_chars=spoken_chars,
+        transcript_has_anchor=(
+            "gospel_anchor" in (text.get("signals") or [])
+            or "gospel_lexicon" in (text.get("signals") or [])
+        ),
         violence=violence,
         gore=gore,
         weapons=weapons,
@@ -207,15 +247,38 @@ def score(body: ScoreRequest):
         sexual_scene_reject=config.SEXUAL_SCENE_REJECT,
     )
 
+    # Silent Scripture / lyric slides: OCR gospel + safe visuals → approve
+    if (
+        hint == "review"
+        and ocr_text
+        and ("gospel_anchor" in text["signals"] or "gospel_lexicon" in text["signals"])
+        and nsfw < config.NSFW_SAFE
+        and violence < config.VIOLENCE_REJECT * 0.7
+        and sexual_scene < config.SEXUAL_SCENE_REJECT
+    ):
+        if christian >= config.CHRISTIAN_SCENE_APPROVE * 0.7 or float(text["gospel_score"]) >= config.GOSPEL_TEXT_STRONG:
+            hint = "approve"
+            confidence = max(confidence, 0.82)
+            fuse_signals = list(fuse_signals) + ["frame_ocr_gospel_approve"]
+
     if body.run_vision and (body.thumbnail or body.frames) and not vision_available:
-        if hint == "approve":
-            hint = "review"
-            confidence = min(confidence, 0.4)
-        fuse_signals = list(fuse_signals) + ["vision_soft_fail_quarantine"]
+        # Don't quarantine OCR-clear Scripture when vision soft-fails
+        if hint == "approve" and (
+            "frame_ocr_gospel_approve" in fuse_signals
+            or "gospel_anchor" in text["signals"]
+        ):
+            fuse_signals = list(fuse_signals) + [
+                "vision_soft_fail_overridden_by_ocr_gospel"
+            ]
+        else:
+            if hint == "approve":
+                hint = "review"
+                confidence = min(confidence, 0.4)
+            fuse_signals = list(fuse_signals) + ["vision_soft_fail_quarantine"]
 
     signals = list(
         dict.fromkeys(
-            list(text["signals"]) + vision_signals + fuse_signals
+            list(text["signals"]) + vision_signals + ocr_signals + fuse_signals
         )
     )
 
@@ -238,11 +301,13 @@ def score(body: ScoreRequest):
         confidence=confidence,
         signals=signals,
         transcript=body.transcript or "",
+        ocr_text=ocr_text,
         gospel_hits=list(text.get("gospel_hits") or []),
         anti_hits=list(text.get("anti_hits") or []),
         frame_count_scored=frame_count,
         vision_available=vision_available,
         stt_available=stt_available,
+        ocr_available=ocr_available,
     )
 
 

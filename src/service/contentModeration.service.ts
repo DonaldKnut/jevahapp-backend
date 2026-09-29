@@ -15,7 +15,14 @@ import {
   getEvidenceProfile,
   hasMinimumEvidence,
 } from "./moderation/evidenceProfile";
-import { offlineModeration, transcriptHasGospelLexicon } from "./moderation/offlineModeration";
+import { offlineModeration } from "./moderation/offlineModeration";
+import {
+  bodyGospelStrength,
+  bodyHasGospelLexicon,
+  ocrHasGospelLexicon,
+  transcriptHasGospelLexicon,
+} from "./moderation/gospelSignal";
+import { getCreatorTrustProfile } from "./moderation/creatorTrust.service";
 import { buildModerationPrompt } from "./moderation/moderationPrompt";
 import { parseModerationResponse } from "./moderation/parseModerationResponse";
 import {
@@ -160,13 +167,39 @@ export class ContentModerationService {
       return null;
     }
 
+    // Prefer Guardian OCR (silent Scripture / lyric slides)
+    if (scored.ocr_text && !input.ocrText) {
+      input.ocrText = scored.ocr_text;
+    }
+
+    const trust = {
+      fastLane: input.trustedFastLane === true,
+      tier: input.trustTier || ("new" as const),
+    };
+    const spokenGospel = transcriptHasGospelLexicon(input.transcript);
+    const ocrGospel = ocrHasGospelLexicon(input.ocrText);
+    const bodyGospel = bodyHasGospelLexicon(
+      input.description,
+      input.transcript,
+      input.ocrText
+    );
     const outcome = fuseGuardianScores(scored, input.contentType, {
       transcriptChars: input.transcript?.trim().length || 0,
-      transcriptHasGospel: transcriptHasGospelLexicon(input.transcript),
+      transcriptHasGospel: spokenGospel,
+      bodyHasGospel: bodyGospel,
+      bodyGospelStrength: bodyGospelStrength(
+        input.description,
+        input.transcript,
+        input.ocrText
+      ),
+      ocrHasGospel: ocrGospel,
       hasFrames: !!(input.videoFrames && input.videoFrames.length),
+      trustedCreator: trust.fastLane,
+      trustTier: trust.tier,
     });
 
-    // Fail-soft: vision requested but Guardian couldn't score images → never auto-approve
+    // Fail-soft: vision down → quarantine unless spoken/body/OCR Christian signal
+    // is already strong — don't dump clear gospel on admins.
     const wantsVision =
       !!(input.thumbnail || (input.videoFrames && input.videoFrames.length)) &&
       !["music", "audio", "podcast", "books", "ebook"].includes(
@@ -177,12 +210,27 @@ export class ContentModerationService {
       scored.vision_available === false &&
       outcome.decision === "approve"
     ) {
-      outcome.decision = "review";
-      outcome.confidence = Math.min(outcome.confidence, 0.4);
-      outcome.signals = [
-        ...outcome.signals,
-        "vision_soft_fail_quarantine",
-      ];
+      const strongBody =
+        spokenGospel ||
+        ocrGospel ||
+        bodyGospelStrength(
+          input.description,
+          input.transcript,
+          input.ocrText
+        ) === "strong";
+      if (strongBody) {
+        outcome.signals = [
+          ...outcome.signals,
+          "vision_soft_fail_overridden_by_gospel_body",
+        ];
+      } else {
+        outcome.decision = "review";
+        outcome.confidence = Math.min(outcome.confidence, 0.4);
+        outcome.signals = [
+          ...outcome.signals,
+          "vision_soft_fail_quarantine",
+        ];
+      }
     }
 
     // Soft blocklist must not auto-publish
@@ -436,6 +484,18 @@ export class ContentModerationService {
       }
 
       const softSignal = block?.severity === "soft";
+
+      // Precompute creator trust for Guardian + Gemini paths
+      const trust = await getCreatorTrustProfile(input.uploadedBy);
+      input.trustedFastLane = trust.fastLane;
+      input.trustTier = trust.tier;
+      if (trust.fastLane) {
+        logger.info("Creator trust fast-lane active", {
+          mediaId: input.mediaId,
+          tier: trust.tier,
+          approved: trust.approved,
+        });
+      }
 
       // 1) Content Guardian primary path
       const guardianResult = await this.tryGuardianPath(

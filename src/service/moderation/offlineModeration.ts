@@ -5,27 +5,26 @@
  */
 import { matchModerationBlocklist } from "../../config/moderationBlocklist";
 import {
+  CHRIST_NAME,
+  BIBLE_CITATION,
+  GOSPEL_LEXICON,
+} from "./gospelSignal";
+import {
   ModerationInput,
   ModerationResult,
   detectLanguageCandidates,
   policyText,
 } from "./types";
 
-/** Must be spoken to auto-publish: Jesus / Christ / local name of Jesus. */
-const JESUS_NAME =
-  /\b(?:jesus|christ|jesu|yesu|jisos|messiah|jesu\s+kristi|jesus\s+dey|blood\s+of\s+jesus|lamb\s+of\s+god|in\s+jesus\s+name)\b/i;
+export { transcriptHasGospelLexicon } from "./gospelSignal";
 
-const GOSPEL_STRONG = JESUS_NAME;
+const GOSPEL_STRONG = new RegExp(
+  `${CHRIST_NAME.source}|${BIBLE_CITATION.source}|${GOSPEL_LEXICON.source}`,
+  "i"
+);
 
 const ANTI_GOSPEL =
-  /\b(?:porn|porno|xxx|nude|nudity|strip\s+club|nightclub|onlyfans|ashawo|olosho|twerk|blaspheme|blasphemy)\b/i;
-
-/** Gospel lexicon hits in spoken transcript only (ignores title/description). */
-export function transcriptHasGospelLexicon(transcript?: string): boolean {
-  const t = (transcript || "").trim();
-  if (t.length < 40) return false;
-  return JESUS_NAME.test(t);
-}
+  /\b(?:porn|porno|xxx|nude|nudity|strip\s+club|nightclub|onlyfans|ashawo|olosho|twerk|blaspheme|blasphemy|chop(?:ping)?\s+babe|side\s+chic?k|in\s+my\s+dms?|slide\s+in\s+my\s+dm|full\s+in\s+my\s+dm|send\s+nudes|hook\s*up|one\s+night\s+stand)\b/i;
 
 export function hasStrongGospelSignal(input: ModerationInput): boolean {
   const title = (input.title || "").toLowerCase();
@@ -42,8 +41,8 @@ export function hasStrongGospelSignal(input: ModerationInput): boolean {
     return false;
   }
 
-  // Videos: a gospel title + any frames is NOT enough (JEV-003 title bypass).
-  // Require gospel signal in description/transcript (not title alone).
+  // Videos: a gospel title alone is not enough (title bypass).
+  // Require gospel signal in description/transcript.
   if (isVideo) {
     if (!bodyHit) return false;
     const hasTranscriptDepth = transcript.length > 40;

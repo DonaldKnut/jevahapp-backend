@@ -39,7 +39,7 @@ describe("parseModerationResponse video title bypass", () => {
     expect(result.flags).toContain("video_missing_visual_evidence");
   });
 
-  it("allows high-confidence video approve only with frames and a spoken Christ/Scripture anchor", () => {
+  it("allows high-confidence video approve with frames and Christian spoken signal", () => {
     const result = parseModerationResponse(
       JSON.stringify({
         isApproved: true,
@@ -61,7 +61,7 @@ describe("parseModerationResponse video title bypass", () => {
     expect(result.isApproved).toBe(true);
   });
 
-  it("approves a quiet sermon only when they name Jesus", () => {
+  it("approves a quiet sermon that names Jesus", () => {
     const result = parseModerationResponse(
       JSON.stringify({
         isApproved: true,
@@ -83,7 +83,29 @@ describe("parseModerationResponse video title bypass", () => {
     expect(result.isApproved).toBe(true);
   });
 
-  it("holds a prayer/amen sermon that never names Jesus", () => {
+  it("approves a John 3:16 reading without saying Jesus", () => {
+    const result = parseModerationResponse(
+      JSON.stringify({
+        isApproved: true,
+        confidence: 0.95,
+        requiresReview: false,
+        reason: "Scripture reading",
+        flags: ["biblical"],
+      }),
+      {
+        contentType: "videos",
+        title: "Bible reading",
+        transcript:
+          "For God so loved the world that he gave his only begotten Son, that whosoever believeth in him should not perish but have everlasting life. John 3:16",
+        videoFrames: ["a", "b"],
+        thumbnail: "thumb",
+      }
+    );
+    expect(result.requiresReview).toBe(false);
+    expect(result.isApproved).toBe(true);
+  });
+
+  it("approves prayer / amen / ministry language without requiring Jesus by name", () => {
     const result = parseModerationResponse(
       JSON.stringify({
         isApproved: true,
@@ -101,31 +123,78 @@ describe("parseModerationResponse video title bypass", () => {
         thumbnail: "thumb",
       }
     );
-    expect(result.requiresReview).toBe(true);
-    expect(result.isApproved).toBe(false);
-    expect(result.flags).toContain("gemini_approve_needs_spoken_anchor");
+    expect(result.requiresReview).toBe(false);
+    expect(result.isApproved).toBe(true);
   });
 
-  it("holds a pulpit hustle talk with no sermon or prayer in the transcript", () => {
+  it("approves via description Scripture when STT is empty", () => {
     const result = parseModerationResponse(
       JSON.stringify({
         isApproved: true,
         confidence: 0.95,
         requiresReview: false,
-        reason: "Looks like church",
-        flags: ["sermon"],
+        reason: "Scripture in description",
+        flags: ["biblical"],
       }),
       {
         contentType: "videos",
-        title: "Sunday motivation",
+        title: "Bible reading",
+        description:
+          "Reading John 3:16 — For God so loved the world that he gave his only begotten Son.",
+        transcript: "",
+        videoFrames: ["a", "b"],
+        thumbnail: "thumb",
+      }
+    );
+    expect(result.requiresReview).toBe(false);
+    expect(result.isApproved).toBe(true);
+    expect(result.flags).toContain("gemini_approve_via_description_body");
+  });
+
+  it("approves via frame OCR when STT is empty", () => {
+    const result = parseModerationResponse(
+      JSON.stringify({
+        isApproved: true,
+        confidence: 0.95,
+        requiresReview: false,
+        reason: "Scripture on screen",
+        flags: ["biblical"],
+      }),
+      {
+        contentType: "videos",
+        title: "Verse slide",
+        transcript: "",
+        ocrText:
+          "John 3:16 For God so loved the world that he gave his only begotten Son",
+        videoFrames: ["a", "b"],
+        thumbnail: "thumb",
+      }
+    );
+    expect(result.requiresReview).toBe(false);
+    expect(result.isApproved).toBe(true);
+    expect(result.flags).toContain("gemini_approve_via_frame_ocr");
+  });
+
+  it("holds hustle audio even when description quotes Scripture", () => {
+    const result = parseModerationResponse(
+      JSON.stringify({
+        isApproved: true,
+        confidence: 0.95,
+        requiresReview: false,
+        reason: "Looks religious from description",
+        flags: ["biblical"],
+      }),
+      {
+        contentType: "videos",
+        title: "Sunday",
+        description: "John 3:16 reading night",
         transcript:
-          "Hustle harder. Mindset is everything. Believe in yourself and get the bag.",
+          "Hustle harder. Mindset is everything. Believe in yourself and get the bag this week team.",
         videoFrames: ["a", "b"],
         thumbnail: "thumb",
       }
     );
     expect(result.requiresReview).toBe(true);
     expect(result.isApproved).toBe(false);
-    expect(result.flags).toContain("gemini_approve_needs_spoken_anchor");
   });
 });

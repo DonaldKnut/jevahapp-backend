@@ -19,7 +19,7 @@ export async function verifyContentWithProgress(
   onProgress?: ProgressCallback,
   thumbnailBuffer?: Buffer,
   thumbnailMimeType?: string,
-  opts?: { mediaId?: string; contentHash?: string }
+  opts?: { mediaId?: string; contentHash?: string; uploadedBy?: string }
 ): Promise<OptimizedVerificationResult> {
   const reportProgress = (progress: number, stage: string, message: string) => {
     if (onProgress) {
@@ -35,12 +35,11 @@ export async function verifyContentWithProgress(
 
   reportProgress(5, "received", "File received, starting verification...");
 
-  // Fail fast with a clear code — path-based extract used to shell ffmpeg
-  // without a preflight and surface opaque Windows "not recognized" errors.
   await assertFfmpegForContentType(contentType);
 
   let transcript = "";
   let videoFrames: string[] = [];
+  let ocrText = "";
 
   try {
     if ((contentType === "videos" || contentType === "sermon") && fileMimeType.startsWith("video")) {
@@ -49,9 +48,10 @@ export async function verifyContentWithProgress(
         fileMimeType,
         uploadId,
         reportProgress,
-        (t, f) => {
+        (t, f, o) => {
           transcript = t;
           videoFrames = f;
+          ocrText = o || "";
         }
       );
     } else if (
@@ -79,17 +79,16 @@ export async function verifyContentWithProgress(
       );
     }
 
-    // Moderate thumbnail if provided (CRITICAL - first thing users see)
     let thumbnailBase64: string | undefined;
     if (thumbnailBuffer) {
       reportProgress(72, "moderating", "Checking thumbnail image...");
       thumbnailBase64 = `data:${thumbnailMimeType || "image/jpeg"};base64,${thumbnailBuffer.toString("base64")}`;
     }
 
-    // Run moderation (includes thumbnail check)
     reportProgress(75, "moderating", "Checking content guidelines...");
     const moderationResult = await contentModerationService.moderateContent({
       transcript: transcript || undefined,
+      ocrText: ocrText || undefined,
       videoFrames: videoFrames.length > 0 ? videoFrames : undefined,
       thumbnail: thumbnailBase64,
       title,
@@ -98,6 +97,7 @@ export async function verifyContentWithProgress(
       mediaId: opts?.mediaId,
       contentHash: opts?.contentHash,
       fileMimeType,
+      uploadedBy: opts?.uploadedBy,
     });
 
     reportProgress(95, "finalizing", "Verification complete!");
@@ -127,12 +127,14 @@ export async function verifyVideoPathWithProgress(
     contentHash?: string;
     thumbnailBuffer?: Buffer;
     thumbnailMimeType?: string;
+    uploadedBy?: string;
   }
 ): Promise<OptimizedVerificationResult> {
   await assertFfmpegForContentType(contentType);
 
   let transcript = "";
   let videoFrames: string[] = [];
+  let ocrText = "";
   const reportProgress = (
     progress: number,
     stage: string,
@@ -150,9 +152,10 @@ export async function verifyVideoPathWithProgress(
     fileMimeType,
     uploadId,
     reportProgress,
-    (t, f) => {
+    (t, f, o) => {
       transcript = t;
       videoFrames = f;
+      ocrText = o || "";
     }
   );
 
@@ -169,6 +172,7 @@ export async function verifyVideoPathWithProgress(
 
   const moderationResult = await contentModerationService.moderateContent({
     transcript: transcript || undefined,
+    ocrText: ocrText || undefined,
     videoFrames: videoFrames.length ? videoFrames : undefined,
     thumbnail: thumbnailBase64,
     title,
@@ -177,6 +181,7 @@ export async function verifyVideoPathWithProgress(
     mediaId: opts?.mediaId,
     contentHash: opts?.contentHash,
     fileMimeType,
+    uploadedBy: opts?.uploadedBy,
   });
   return {
     isApproved: moderationResult.isApproved,

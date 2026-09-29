@@ -197,6 +197,7 @@ export async function processMediaModeration(params: {
           contentHash,
           thumbnailBuffer: stagedThumb?.buffer,
           thumbnailMimeType: stagedThumb?.mimeType,
+          uploadedBy: userId,
         }
       )
     : await optimizedVerificationService.verifyContentWithProgress(
@@ -209,7 +210,7 @@ export async function processMediaModeration(params: {
         undefined,
         stagedThumb?.buffer,
         stagedThumb?.mimeType,
-        { mediaId, contentHash }
+        { mediaId, contentHash, uploadedBy: userId }
       );
 
   const moderationResult = result.moderationResult;

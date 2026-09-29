@@ -376,13 +376,7 @@ export function publicArtistReadyFilter(extra: Record<string, unknown> = {}) {
         ],
       },
       { fileUrl: { $not: /^pending:\/\// } },
-      {
-        $or: [
-          { moderationStatus: "approved" },
-          // Pre-review-field artist rows (back-compat)
-          { moderationStatus: { $exists: false } },
-        ],
-      },
+      { moderationStatus: "approved" },
       // Explicitly exclude curated mis-tags
       { lane: { $eq: "artist" } },
     ],

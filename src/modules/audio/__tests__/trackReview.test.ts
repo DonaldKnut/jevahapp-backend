@@ -1,4 +1,7 @@
-import { heardTrackDecision } from "../trackReview.service";
+import {
+  heardTrackDecision,
+  creatorTrackHoldForAdmin,
+} from "../trackReview.service";
 
 describe("heardTrackDecision", () => {
   it("approves only a clear heard gospel pass", () => {
@@ -12,10 +15,16 @@ describe("heardTrackDecision", () => {
     expect(heardTrackDecision(["drugs_reject"], "reject")).toBe("rejected");
   });
 
-  it("sends off-theme and gray tracks to admin, not auto-reject", () => {
+  it("rejects heard off-theme tracks and holds only gray", () => {
     expect(heardTrackDecision(["secular_entertainment"], "reject")).toBe(
-      "under_review"
+      "rejected"
     );
     expect(heardTrackDecision(["gray_zone"], "review")).toBe("under_review");
+  });
+
+  it("never auto-publishes creator songs — admin must hear", () => {
+    expect(creatorTrackHoldForAdmin("approved")).toBe("under_review");
+    expect(creatorTrackHoldForAdmin("under_review")).toBe("under_review");
+    expect(creatorTrackHoldForAdmin("rejected")).toBe("rejected");
   });
 });

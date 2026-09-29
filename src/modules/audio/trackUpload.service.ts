@@ -26,7 +26,9 @@ import {
   reviewTrackAudioWithGuardian,
   reviewImageNsfwWithGuardian,
   shouldAutoApproveVerifiedArtist,
+  creatorTrackHoldForAdmin,
 } from "./trackReview.service";
+import { parseArtistTrackRights } from "./trackRights";
 import { Artist } from "../../models/artist.model";
 import { shapeTrackCard, fromFeVisibility, shapeTrackCardWithRelease } from "./track.formatter";
 import { uploadProgressService } from "../../service/uploadProgress.service";
@@ -53,6 +55,9 @@ export interface UploadIntentInput {
   language?: string;
   copyrightStatus?: string;
   licenseNote?: string;
+  rightsAttested?: unknown;
+  gospelAttested?: unknown;
+  rightsType?: unknown;
   lane?: "curated" | "artist";
   artistId?: string | null;
   artistSlug?: string | null;
@@ -190,6 +195,28 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     throw new TrackUploadError("Invalid artistId");
   }
 
+  let copyrightStatus = input.copyrightStatus || "copyright_free";
+  let licenseNote = input.licenseNote?.trim() || null;
+  let rightsAttestation: Record<string, unknown> | null = null;
+  if (lane === "artist") {
+    const parsed = parseArtistTrackRights({
+      userId: adminId,
+      rightsAttested: input.rightsAttested,
+      gospelAttested: input.gospelAttested,
+      rightsType: input.rightsType || input.copyrightStatus,
+      licenseNote: input.licenseNote,
+    });
+    if (!parsed.ok) {
+      throw new TrackUploadError(parsed.message, parsed.status, parsed.code);
+    }
+    copyrightStatus = parsed.copyrightStatus;
+    licenseNote = parsed.licenseNote;
+    rightsAttestation = {
+      ...parsed.attestation,
+      attestedByUserId: new Types.ObjectId(adminId),
+    };
+  }
+
   let releaseIdObj: Types.ObjectId | null = null;
   let trackNumber: number | null =
     typeof input.trackNumber === "number" && input.trackNumber > 0
@@ -285,8 +312,9 @@ export async function createTrackUploadIntent(input: UploadIntentInput) {
     language: input.language?.trim() || null,
     lane,
     visibility: "draft",
-    copyrightStatus: input.copyrightStatus || "copyright_free",
-    licenseNote: input.licenseNote?.trim() || null,
+    copyrightStatus,
+    licenseNote,
+    rightsAttestation,
     artistId:
       lane === "artist" && input.artistId
         ? new Types.ObjectId(input.artistId)
@@ -556,6 +584,12 @@ export async function finalizeTrackUpload(
         }
       }
 
+      const held = creatorTrackHoldForAdmin(decision);
+      if (held !== decision) {
+        reason = `${reason} Waiting for an admin to listen before it can go live.`;
+        decision = held;
+      }
+
       track.moderationStatus = decision;
       track.moderationResult = {
         decision,
@@ -570,9 +604,9 @@ export async function finalizeTrackUpload(
         track.visibility = "published";
         track.publishedAt = track.publishedAt || new Date();
       } else if (wantsPublic && decision === "under_review") {
-        // Visible in studio as "public" intent but not on public shelf until approved
-        track.visibility = "published";
-        track.publishedAt = track.publishedAt || new Date();
+        // Studio sees the row; public catalog requires approved. Stay draft.
+        track.visibility = "draft";
+        track.publishedAt = null;
       } else if (decision === "rejected") {
         track.visibility = "draft";
       } else if (!wantsPublic) {

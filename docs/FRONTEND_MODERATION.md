@@ -744,20 +744,25 @@ Poll reports + analytics every 30–60s. There is no report websocket.
 
 ## 7. Artist-track moderation (sibling lane)
 
+**Build the listen-then-decide UI from** [FRONTEND_ADMIN_ARTIST_TRACK_REVIEW_HANDOFF.md](./FRONTEND_ADMIN_ARTIST_TRACK_REVIEW_HANDOFF.md) (list + player + `heardConfirmed`). Summary:
+
 Tracks live in `CopyrightFreeSong`, not `Media`. Do not send a track id to `/api/admin/moderation/:id`.
 
 ```http
-GET   /api/admin/audio/tracks?moderationStatus=under_review
+GET   /api/admin/audio/tracks?lane=artist&moderationStatus=under_review
 PATCH /api/admin/audio/tracks/:id/moderation
 {
   "status": "approved" | "rejected" | "under_review",
+  "heardConfirmed": true,
   "reason": "optional"
 }
 ```
 
-- `approved` + `visibility: "published"` → appears on the public Artists shelf (`publishedAt` set if missing).
+- Creator songs **never go live from AI**. Guardian may reject a heard off-theme track. Otherwise the row stays `under_review` + `draft` until an admin plays it.
+- **Approve requires `heardConfirmed: true`.** Disable the Approve button until the admin `<audio>` has played (or they confirm they listened). Missing flag → `400 ADMIN_MUST_HEAR_TRACK`.
+- `approved` + `heardConfirmed` → `visibility: published` + `publishedAt` → public Artists shelf.
 - `rejected` → `visibility` forced to `draft`.
-- Play the track from the track card’s `playbackUrl` / `fileUrl` (MP3). Same “no HLS in `<video>`” rule; use `<audio>`.
+- Play from `playbackUrl` / `fileUrl` / `audioUrl` (MP3). Use `<audio>`, not `<video>`.
 
 Full catalog/upload: [FRONTEND_AUDIO_TRACKS.md](./FRONTEND_AUDIO_TRACKS.md).
 

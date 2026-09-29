@@ -1,10 +1,11 @@
 /**
  * Fusion business rules: map Guardian scores (+ optional hint) → ModerationResult.
- * Clear gospel → auto-approve (no admin). Clear off-theme/unsafe → reject.
- * Gray → review (caller may escalate to Gemini).
+ * Clear Christian / gospel / biblical content → auto-approve (no admin).
+ * Clear off-theme/unsafe → reject. Gray → review (caller may escalate to Gemini).
  */
 import type { ModerationInput, ModerationResult } from "./types";
 import type { GuardianScoreResult } from "./guardianClient";
+import type { GospelSignalStrength } from "./gospelSignal";
 
 function envFloat(name: string, fallback: number): number {
   const n = parseFloat(process.env[name] || "");
@@ -22,7 +23,7 @@ export function getFusionThresholds() {
     secularSceneReject: envFloat("FUSION_SECULAR_SCENE_REJECT", 0.55),
     secularSceneSafe: envFloat("FUSION_SECULAR_SCENE_SAFE", 0.45),
     antiGospelReject: envFloat("FUSION_ANTI_GOSPEL_REJECT", 0.5),
-    videoTranscriptMinChars: envFloat("FUSION_VIDEO_TRANSCRIPT_MIN_CHARS", 80),
+    videoTranscriptMinChars: envFloat("FUSION_VIDEO_TRANSCRIPT_MIN_CHARS", 40),
     violenceReject: envFloat("FUSION_VIOLENCE_REJECT", 0.45),
     goreReject: envFloat("FUSION_GORE_REJECT", 0.4),
     weaponsReject: envFloat("FUSION_WEAPONS_REJECT", 0.48),
@@ -38,7 +39,18 @@ export interface FusionEvidence {
   transcriptChars?: number;
   /** True only when gospel lexicon appears in the transcript itself */
   transcriptHasGospel?: boolean;
+  /**
+   * Gospel signal in description + transcript + OCR (never title alone).
+   * Helps when STT fails but the verse was pasted or shown on screen.
+   */
+  bodyHasGospel?: boolean;
+  bodyGospelStrength?: GospelSignalStrength;
+  /** On-screen Scripture / lyrics from frame OCR */
+  ocrHasGospel?: boolean;
   hasFrames?: boolean;
+  /** Trusted / rising creator — softens gray-zone, never safety rejects */
+  trustedCreator?: boolean;
+  trustTier?: "new" | "rising" | "trusted";
 }
 
 export interface FusionOutcome {
@@ -81,9 +93,23 @@ export function fuseGuardianScores(
   const ct = (contentType || "").toLowerCase();
   const signals = [...(scores.signals || [])];
   const transcriptChars = Math.max(0, evidence?.transcriptChars ?? 0);
+  const sttThin = transcriptChars < t.videoTranscriptMinChars;
+  const ocrGospel = evidence?.ocrHasGospel === true;
+  // Spoken STT wins. Description/OCR fills the gap when STT is empty/short
+  // (never let a Bible verse in the description override hustle audio).
   const spokenAnchor =
-    transcriptChars >= t.videoTranscriptMinChars &&
-    evidence?.transcriptHasGospel === true;
+    (transcriptChars >= t.videoTranscriptMinChars &&
+      evidence?.transcriptHasGospel === true) ||
+    (sttThin && evidence?.bodyGospelStrength === "strong") ||
+    (sttThin && ocrGospel);
+  const bodyGospel = evidence?.bodyHasGospel === true;
+  const christianCorroborated =
+    spokenAnchor ||
+    (sttThin &&
+      (bodyGospel || ocrGospel) &&
+      christian >= t.christianSceneApprove &&
+      (evidence?.hasFrames ?? false));
+  const trusted = evidence?.trustedCreator === true;
   const knownNonVideo = [
     "music",
     "audio",
@@ -156,26 +182,44 @@ export function fuseGuardianScores(
     weapons < t.weaponsReject * 0.7 &&
     drugs < t.drugsReject * 0.7;
 
-  // Church / pulpit footage plus spoken prayer, sermon, or Christ language.
+  // Church / pulpit footage plus spoken OR body Christian / Scripture signal.
   if (
     christian >= t.christianSceneApprove &&
     gospel >= t.gospelSceneApprove &&
     nsfw < t.nsfwSafe &&
     safetyClear
   ) {
-    if (isVideo && !spokenAnchor) {
+    if (isVideo && !christianCorroborated) {
       return pack("review", 0.5, ["church_scene_needs_spoken_anchor"]);
     }
-    return pack("approve", 0.9, ["church_scene_gospel"]);
+    return pack("approve", 0.9, [
+      spokenAnchor ? "church_scene_gospel" : "church_scene_body_gospel",
+    ]);
   }
 
   if (isVideo) {
+    // Strong spoken/body Christian signal + safe scores — trust lexicon even
+    // when Guardian gospel_score is only mid (STT/scoring lag).
+    if (
+      spokenAnchor &&
+      safetyClear &&
+      nsfw < t.nsfwSafe &&
+      gospel >= t.gospelTextWeak &&
+      secularCombined < t.secularSceneSafe &&
+      anti < t.antiGospelReject
+    ) {
+      return pack("approve", 0.86, [
+        "lexicon_strong_christian_body",
+        "spoken_word_of_god",
+      ]);
+    }
+
     if (
       gospel >= t.gospelTextStrong &&
       nsfw < t.nsfwSafe &&
       secularCombined < t.secularSceneSafe
     ) {
-      if (christian >= t.christianSceneApprove && spokenAnchor && safetyClear) {
+      if (christian >= t.christianSceneApprove && christianCorroborated && safetyClear) {
         return pack("approve", 0.82, [
           "strong_gospel_text",
           "video_visual_corroboration",
@@ -185,6 +229,19 @@ export function fuseGuardianScores(
         return pack("approve", 0.84, [
           "strong_gospel_transcript",
           "spoken_word_of_god",
+        ]);
+      }
+      // Description carries Scripture + safe church-ish visuals, STT empty/short
+      if (
+        sttThin &&
+        bodyGospel &&
+        christian >= t.christianSceneApprove * 0.85 &&
+        (evidence?.hasFrames ?? false) &&
+        safetyClear
+      ) {
+        return pack("approve", 0.8, [
+          "strong_gospel_description",
+          "video_visual_corroboration",
         ]);
       }
       return pack("review", 0.5, [
@@ -218,11 +275,28 @@ export function fuseGuardianScores(
     ]);
   }
 
+  // Silent Scripture / lyric slides — OCR gospel + safe frames
+  if (
+    isVideo &&
+    ocrGospel &&
+    safetyClear &&
+    nsfw < t.nsfwSafe &&
+    secularCombined < t.secularSceneSafe &&
+    anti < t.antiGospelReject &&
+    (evidence?.hasFrames ?? false) &&
+    (gospel >= t.gospelTextWeak || christian >= t.christianSceneApprove * 0.7)
+  ) {
+    return pack("approve", 0.83, [
+      "frame_ocr_gospel",
+      "silent_scripture_or_lyrics",
+    ]);
+  }
+
   const hint = scores.decision_hint;
   if (hint === "approve" && (scores.confidence ?? 0) >= 0.8) {
-    if (isVideo && !spokenAnchor) {
+    if (isVideo && !christianCorroborated) {
       return pack("review", 0.5, [
-        "guardian_hint_approve_needs_spoken_or_visual",
+        "guardian_hint_approve_needs_christian_spoken_signal",
         "video_metadata_insufficient",
       ]);
     }
@@ -233,6 +307,27 @@ export function fuseGuardianScores(
   }
   if (hint === "reject" && (scores.confidence ?? 0) >= 0.8) {
     return pack("reject", scores.confidence ?? 0.8, ["guardian_hint_reject"]);
+  }
+
+  // Trusted / rising creators: clear Christian gray-zone → auto-publish
+  // (never overrides NSFW / violence / anti-gospel rejects above).
+  if (
+    trusted &&
+    isVideo &&
+    safetyClear &&
+    nsfw < t.nsfwSafe &&
+    anti < t.antiGospelReject &&
+    secularCombined < t.secularSceneReject &&
+    (spokenAnchor ||
+      ocrGospel ||
+      (bodyGospel && sttThin) ||
+      (christian >= t.christianSceneApprove * 0.8 &&
+        gospel >= t.gospelTextWeak))
+  ) {
+    return pack("approve", 0.78, [
+      "trusted_creator_fast_lane",
+      `trust_tier:${evidence?.trustTier || "trusted"}`,
+    ]);
   }
 
   return pack("review", Math.min(0.55, scores.confidence ?? 0.45), [

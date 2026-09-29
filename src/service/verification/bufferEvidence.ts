@@ -27,7 +27,7 @@ export async function processVideoContent(
   videoMimeType: string,
   uploadId: string,
   reportProgress: (progress: number, stage: string, message: string) => void,
-  onComplete: (transcript: string, frames: string[]) => void
+  onComplete: (transcript: string, frames: string[], ocrText?: string) => void
 ): Promise<void> {
   reportProgress(20, "validating", "Validating video format...");
 
@@ -54,7 +54,7 @@ export async function processVideoContentLegacyBuffer(
   videoMimeType: string,
   uploadId: string,
   reportProgress: (progress: number, stage: string, message: string) => void,
-  onComplete: (transcript: string, frames: string[]) => void
+  onComplete: (transcript: string, frames: string[], ocrText?: string) => void
 ): Promise<void> {
   return processVideoContent(
     videoBuffer,

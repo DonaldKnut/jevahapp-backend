@@ -135,6 +135,9 @@ export const createAdminTrackUploadIntent = async (
       language: body.language,
       copyrightStatus: body.copyrightStatus,
       licenseNote: body.licenseNote,
+      rightsAttested: body.rightsAttested,
+      gospelAttested: body.gospelAttested,
+      rightsType: body.rightsType || body.copyrightStatus,
       lane: body.lane,
       artistId: body.artistId,
       contentType: body.contentType,
@@ -234,6 +237,19 @@ export const reviewAdminTrackModeration = async (
       });
       return;
     }
+    const heardConfirmed =
+      req.body?.heardConfirmed === true ||
+      req.body?.heardConfirmed === "true" ||
+      req.body?.heardConfirmed === 1;
+    if (status === "approved" && !heardConfirmed) {
+      res.status(400).json({
+        success: false,
+        code: "ADMIN_MUST_HEAR_TRACK",
+        message:
+          "Play the song first, then send heardConfirmed: true. Creator tracks do not go live from a click alone.",
+      });
+      return;
+    }
     const track = await CopyrightFreeSong.findById(id);
     if (!track) {
       res.status(404).json({ success: false, message: "Track not found" });
@@ -246,12 +262,16 @@ export const reviewAdminTrackModeration = async (
       source: "admin",
       reviewedAt: new Date(),
       reviewedByAdminId: new Types.ObjectId(adminId),
-    };
-    if (status === "approved" && track.visibility === "published" && !track.publishedAt) {
-      track.publishedAt = new Date();
+      adminHeardConfirmed: status === "approved" ? true : undefined,
+      adminHeardAt: status === "approved" ? new Date() : undefined,
+    } as any;
+    if (status === "approved") {
+      track.visibility = "published";
+      track.publishedAt = track.publishedAt || new Date();
     }
     if (status === "rejected") {
       track.visibility = "draft";
+      track.publishedAt = null;
     }
     await track.save();
 

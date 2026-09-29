@@ -8,7 +8,9 @@ import { transcriptionService } from "../transcription.service";
 import {
   clipDurationsWithinBudget,
   getEvidenceProfile,
+  suggestedFrameCount,
 } from "../moderation/evidenceProfile";
+import { ocrFramesWithGuardian } from "../moderation/guardianClient";
 import { cleanupFile, getVerificationTempDir } from "./tempWorkspace";
 import { hasFfmpeg, MediaToolsError } from "../../utils/mediaTools";
 
@@ -19,7 +21,7 @@ export async function processVideoPath(
   videoMimeType: string,
   uploadId: string,
   reportProgress: (progress: number, stage: string, message: string) => void,
-  onComplete: (transcript: string, frames: string[]) => void
+  onComplete: (transcript: string, frames: string[], ocrText?: string) => void
 ): Promise<void> {
   if (!(await hasFfmpeg())) {
     throw new MediaToolsError();
@@ -31,10 +33,7 @@ export async function processVideoPath(
 
   const profile = getEvidenceProfile("videos", videoMimeType);
   const { offsets, clipSeconds } = clipDurationsWithinBudget(profile, duration);
-  const frameCount = Math.min(
-    profile.maxFrames,
-    Math.max(profile.minFrames, Math.floor(duration / 90) + 2)
-  );
+  const frameCount = suggestedFrameCount(profile, duration);
   const audioResult =
     offsets.length > 1
       ? await extractMultipleAudioSamplesFromPath(
@@ -84,12 +83,30 @@ export async function processVideoPath(
       transcriptLength: transcript.length,
       uploadId,
       segmentsProcessed: Array.isArray(audioResult) ? audioResult.length : 1,
+      audioWindows: offsets.length,
     });
   } catch (error: any) {
     logger.warn("Transcription failed, continuing with frames only:", error);
   }
+
+  reportProgress(62, "analyzing", "Reading on-screen text...");
+  let ocrText = "";
+  try {
+    const ocr = await ocrFramesWithGuardian(framesResult.frames, 8);
+    if (ocr?.text) {
+      ocrText = ocr.text;
+      logger.info("Frame OCR completed", {
+        uploadId,
+        ocrChars: ocrText.length,
+        available: ocr.available,
+      });
+    }
+  } catch (error: any) {
+    logger.warn("Frame OCR failed, continuing:", error?.message);
+  }
+
   reportProgress(70, "analyzing", "Processing complete!");
-  onComplete(transcript, framesResult.frames);
+  onComplete(transcript, framesResult.frames, ocrText || undefined);
 }
 
 export async function getVideoDurationFromPath(inputPath: string): Promise<number> {

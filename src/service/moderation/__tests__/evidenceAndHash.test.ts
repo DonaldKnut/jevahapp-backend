@@ -3,6 +3,7 @@ import {
   clipDurationsWithinBudget,
   hasMinimumEvidence,
   distributedOffsets,
+  suggestedFrameCount,
 } from "../evidenceProfile";
 import { sha256Buffer } from "../contentHashDedup";
 
@@ -58,6 +59,24 @@ describe("evidence profiles", () => {
     const offs = distributedOffsets(100, 5);
     expect(offs[0]).toBeLessThan(5);
     expect(offs[offs.length - 1]).toBeGreaterThan(90);
+  });
+
+  it("scales audio windows with long sermon duration", () => {
+    const profile = getEvidenceProfile("videos", "video/mp4");
+    const short = clipDurationsWithinBudget(profile, 90);
+    const long = clipDurationsWithinBudget(profile, 2400);
+    expect(long.offsets.length).toBeGreaterThan(short.offsets.length);
+    expect(long.offsets[long.offsets.length - 1]).toBeGreaterThan(1800);
+  });
+
+  it("suggests denser frames for longer videos", () => {
+    const profile = getEvidenceProfile("videos", "video/mp4");
+    expect(suggestedFrameCount(profile, 60)).toBeGreaterThanOrEqual(
+      profile.minFrames
+    );
+    expect(suggestedFrameCount(profile, 1800)).toBeGreaterThan(
+      suggestedFrameCount(profile, 60)
+    );
   });
 });
 

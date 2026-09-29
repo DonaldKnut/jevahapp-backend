@@ -15,7 +15,7 @@ from .lexicons import (
     SECULAR_SOFT_TERMS,
 )
 
-# "John 3" / "Romans 8" — not the name John / Johnny
+# "John 3" / "Romans 8" / "John 3:16" — not the name John / Johnny
 _BIBLE_CITATION = re.compile(
     r"\b(?:genesis|exodus|leviticus|numbers|deuteronomy|joshua|judges|ruth|"
     r"samuel|kings|chronicles|ezra|nehemiah|esther|job|psalm|psalms|proverb|proverbs|"
@@ -23,7 +23,7 @@ _BIBLE_CITATION = re.compile(
     r"micah|nahum|habakkuk|zephaniah|haggai|zechariah|malachi|"
     r"matthew|mark|luke|john|acts|romans|corinthians|galatians|ephesians|"
     r"philippians|colossians|thessalonians|timothy|titus|philemon|hebrews|"
-    r"james|peter|jude|revelation)\s+\d+",
+    r"james|peter|jude|revelation)\s+\d+(?:\s*[:：]\s*\d+)?",
     re.IGNORECASE,
 )
 
@@ -61,14 +61,27 @@ def _anchor_count(normalized: str) -> tuple[int, list[str]]:
 
 
 def _gospel_score_from_counts(
-    jesus_n: int, support_n: int, atmosphere_n: int = 0
+    anchor_n: int, support_n: int, atmosphere_n: int = 0
 ) -> float:
-    # Auto-publish bar is Jesus / Christ / Jesu / Yesu / Jisos in the body.
-    if jesus_n <= 0:
-        if atmosphere_n + support_n >= 1:
-            return min(0.45, 0.2 + 0.08 * (atmosphere_n + support_n))
-        return 0.0
-    return min(1.0, 0.6 + 0.2 * (jesus_n - 1) + 0.08 * (support_n + atmosphere_n))
+    """
+    Score clear Christian / biblical body language.
+    Anchors (Jesus, God, Scripture, gospel theology, bible citations) auto-publish.
+    Strong worship/hymn + prayer atmosphere can also clear without saying \"Jesus\".
+    """
+    if anchor_n > 0:
+        return min(
+            1.0,
+            0.62 + 0.12 * (anchor_n - 1) + 0.06 * (support_n + atmosphere_n),
+        )
+    # Hymn / worship / choir without an explicit Jesus name
+    if support_n >= 2 or (support_n >= 1 and atmosphere_n >= 2):
+        return min(0.78, 0.58 + 0.06 * support_n + 0.04 * atmosphere_n)
+    # Quiet prayer / sermon atmosphere cluster (prayer + amen + ministry/pastor…)
+    if atmosphere_n >= 3:
+        return min(0.72, 0.52 + 0.05 * atmosphere_n)
+    if support_n + atmosphere_n >= 1:
+        return min(0.42, 0.18 + 0.07 * (support_n + atmosphere_n))
+    return 0.0
 
 
 def score_text(
@@ -96,6 +109,7 @@ def score_text(
     body_jesus, body_jesus_hits = _jesus_count(body_n)
     title_jesus, _ = _jesus_count(title_n)
     body_anchors, body_anchor_hits = _anchor_count(body_n)
+    title_anchors, _ = _anchor_count(title_n)
     body_support, body_support_hits = _count_hits(body_n, GOSPEL_SUPPORT_TERMS)
     body_atm, body_atm_hits = _count_hits(body_n, GOSPEL_ATMOSPHERE_TERMS)
     atmosphere_n = body_atm
@@ -105,14 +119,15 @@ def score_text(
 
     if body_n:
         gospel_score = _gospel_score_from_counts(
-            body_jesus, body_support, body_atm
+            body_anchors, body_support, body_atm
         )
-        if title_jesus and body_jesus:
-            gospel_score = min(1.0, gospel_score + 0.1)
-    elif title_jesus:
+        if (title_jesus or title_anchors) and body_anchors:
+            gospel_score = min(1.0, gospel_score + 0.08)
+    elif title_anchors:
+        # Title-only: weak signal — never enough to auto-publish alone
         gospel_score = 0.15
     else:
-        gospel_score = _gospel_score_from_counts(0, body_support, 0)
+        gospel_score = 0.0
 
     anti_gospel_score = min(1.0, a_count / 2.0)
     secular_text_score = min(
@@ -120,11 +135,13 @@ def score_text(
     )
 
     signals: list[str] = []
-    if body_jesus_hits:
+    if body_anchor_hits or body_jesus_hits:
         signals.append("gospel_anchor")
         signals.append("gospel_lexicon")
-    elif atmosphere_n or body_support or body_anchor_hits:
+    elif atmosphere_n or body_support:
         signals.append("gospel_atmosphere")
+        if body_support >= 2 or (body_support >= 1 and atmosphere_n >= 2) or atmosphere_n >= 3:
+            signals.append("gospel_lexicon")
     if a_hits:
         signals.append("anti_gospel_lexicon")
     if s_hits:
@@ -167,7 +184,7 @@ def hint_from_text_scores(
     secular_scene_reject: float = 0.55,
     secular_scene_safe: float = 0.45,
     anti_gospel_reject: float = 0.50,
-    video_transcript_min_chars: int = 80,
+    video_transcript_min_chars: int = 40,
     violence_reject: float = 0.45,
     gore_reject: float = 0.40,
     weapons_reject: float = 0.48,

@@ -11,6 +11,8 @@ export interface ModerationResult {
 
 export interface ModerationInput {
   transcript?: string;
+  /** On-screen text from frame OCR (Scripture slides, lyrics) */
+  ocrText?: string;
   videoFrames?: string[]; // Base64 encoded images
   thumbnail?: string; // Base64 encoded thumbnail image
   title?: string;
@@ -19,10 +21,15 @@ export interface ModerationInput {
   mediaId?: string;
   contentHash?: string;
   fileMimeType?: string;
+  /** Uploader — enables trusted-creator fast lane */
+  uploadedBy?: string;
+  /** Precomputed trust fast-lane (set by moderation service) */
+  trustedFastLane?: boolean;
+  trustTier?: "new" | "rising" | "trusted";
 }
 
 export function policyText(input: ModerationInput): string {
-  return `${input.title || ""} ${input.description || ""} ${input.transcript || ""}`;
+  return `${input.title || ""} ${input.description || ""} ${input.transcript || ""} ${input.ocrText || ""}`;
 }
 
 /** Heuristic language candidates for Nigerian multilingual evidence logging. */

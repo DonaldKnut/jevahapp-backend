@@ -1,3 +1,5 @@
+import { artistUploadPolicy } from "../audio/trackRights";
+
 /**
  * Shared presenter for Artist / Creator profiles (DRY).
  * Single place for FE-facing shape + capability flags (Open/Closed for new nextSteps).
@@ -214,5 +216,6 @@ export function shapeCreatorMePayload(
     nextStep: capabilities.nextStep,
     emailVerified: capabilities.emailVerified,
     needsEmailVerification: capabilities.needsEmailVerification,
+    uploadPolicy: artistUploadPolicy(),
   };
 }

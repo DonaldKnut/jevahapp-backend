@@ -1,6 +1,7 @@
 /**
  * Media-type evidence budgets for cost-bounded, full-timeline sampling.
  * Never sample only the first N minutes — distribute across the whole asset.
+ * Tuned for catching late-sermon Scripture and lyric/slide videos.
  */
 
 export type EvidenceMediaKind = "video" | "audio" | "book" | "image" | "unknown";
@@ -49,18 +50,19 @@ export function getEvidenceProfile(
   escalate = false
 ): EvidenceProfile {
   const kind = resolveEvidenceKind(contentType, mimeType);
-  const frameCap = envInt("MODERATION_MAX_VIDEO_FRAMES", 10);
-  const clipCap = envInt("VERIFICATION_MAX_AUDIO_SEGMENTS", 5);
+  // State-of-art defaults: denser frames + more STT windows across the full timeline
+  const frameCap = envInt("MODERATION_MAX_VIDEO_FRAMES", 16);
+  const clipCap = envInt("VERIFICATION_MAX_AUDIO_SEGMENTS", 9);
 
   if (kind === "video") {
     return {
       kind,
-      maxFrames: escalate ? Math.min(16, frameCap + 4) : Math.min(10, frameCap),
-      minFrames: 4,
-      maxAudioClips: escalate ? Math.min(7, clipCap + 2) : Math.min(5, clipCap),
-      minAudioClips: 2,
-      clipSeconds: 45,
-      maxTranscribedSeconds: escalate ? 300 : 240,
+      maxFrames: escalate ? Math.min(20, frameCap + 4) : Math.min(16, frameCap),
+      minFrames: 5,
+      maxAudioClips: escalate ? Math.min(10, clipCap + 2) : Math.min(9, clipCap),
+      minAudioClips: 3,
+      clipSeconds: 40,
+      maxTranscribedSeconds: escalate ? 420 : 360,
       maxTextChars: 0,
       minTextChars: 0,
       textWindows: 0,
@@ -74,10 +76,10 @@ export function getEvidenceProfile(
       kind,
       maxFrames: 0,
       minFrames: 0,
-      maxAudioClips: escalate ? Math.min(6, clipCap + 1) : Math.min(4, clipCap),
+      maxAudioClips: escalate ? Math.min(8, clipCap + 1) : Math.min(6, clipCap),
       minAudioClips: 2,
       clipSeconds: 40,
-      maxTranscribedSeconds: escalate ? 210 : 180,
+      maxTranscribedSeconds: escalate ? 240 : 210,
       maxTextChars: 0,
       minTextChars: 0,
       textWindows: 0,
@@ -95,7 +97,6 @@ export function getEvidenceProfile(
       minAudioClips: 0,
       clipSeconds: 0,
       maxTranscribedSeconds: 0,
-      // Deeper ebook verification — still Contabo-capped via sampling windows
       maxTextChars: escalate ? 24000 : 18000,
       minTextChars: 400,
       textWindows: escalate ? 9 : 7,
@@ -132,21 +133,37 @@ export function distributedOffsets(durationSeconds: number, count: number): numb
   return out;
 }
 
+/**
+ * Prefer denser sampling on long sermons so late "God / Scripture" moments are heard.
+ * Clip count scales with duration (about one window every ~2 minutes), capped by profile.
+ */
 export function clipDurationsWithinBudget(
   profile: EvidenceProfile,
   durationSeconds: number
 ): { offsets: number[]; clipSeconds: number } {
+  const byDuration = Math.ceil(Math.max(1, durationSeconds) / 120);
   const n = Math.min(
     profile.maxAudioClips,
-    Math.max(profile.minAudioClips, Math.ceil(durationSeconds / 180) || profile.minAudioClips)
+    Math.max(profile.minAudioClips, byDuration)
   );
   let clipSeconds = Math.min(profile.clipSeconds, Math.max(10, durationSeconds));
   const total = n * clipSeconds;
   if (total > profile.maxTranscribedSeconds) {
-    clipSeconds = Math.max(15, Math.floor(profile.maxTranscribedSeconds / n));
+    clipSeconds = Math.max(12, Math.floor(profile.maxTranscribedSeconds / n));
+  }
+  // Bias: keep start, mid, and late third so closing altar calls are covered
+  const offsets = distributedOffsets(durationSeconds, n);
+  if (durationSeconds > 180 && offsets.length >= 3) {
+    const late = Math.max(0, durationSeconds - clipSeconds - 1);
+    offsets[offsets.length - 1] = Math.min(
+      offsets[offsets.length - 1],
+      late
+    );
+    // Ensure a dedicated late window near the end
+    offsets[offsets.length - 1] = late;
   }
   return {
-    offsets: distributedOffsets(durationSeconds, n),
+    offsets: [...new Set(offsets.map(o => Math.max(0, o)))].sort((a, b) => a - b),
     clipSeconds,
   };
 }
@@ -182,4 +199,16 @@ export function hasMinimumEvidence(
     return coverage.transcriptChars >= 20;
   }
   return coverage.title || coverage.description;
+}
+
+/** Suggested frame count for a video duration (more slides for lyric / Scripture videos). */
+export function suggestedFrameCount(
+  profile: EvidenceProfile,
+  durationSeconds: number
+): number {
+  const byDuration = Math.floor(durationSeconds / 45) + 3;
+  return Math.min(
+    profile.maxFrames,
+    Math.max(profile.minFrames, byDuration)
+  );
 }

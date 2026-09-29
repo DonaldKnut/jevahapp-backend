@@ -31,12 +31,14 @@ export interface GuardianScoreResult {
   confidence: number;
   signals: string[];
   transcript?: string;
+  ocr_text?: string;
   gospel_hits?: string[];
   anti_hits?: string[];
   frame_count_scored?: number;
   provider?: string;
   vision_available?: boolean;
   stt_available?: boolean;
+  ocr_available?: boolean;
 }
 
 export interface GuardianTranscribeResult {
@@ -128,8 +130,9 @@ export async function scoreWithGuardian(
     transcript: input.transcript || "",
     content_type: input.contentType || "videos",
     thumbnail: input.thumbnail || null,
-    frames: (input.frames || []).slice(0, 10),
+    frames: (input.frames || []).slice(0, 16),
     run_vision: input.runVision !== false,
+    run_ocr: true,
   };
 
   try {
@@ -198,6 +201,50 @@ export async function scoreAudioWithGuardian(input: {
   } catch (err: any) {
     recordFailure();
     logger.warn("Guardian /v1/score-audio error", {
+      error: String(err?.message || err),
+    });
+    return null;
+  }
+}
+
+export async function ocrFramesWithGuardian(
+  frames: string[],
+  maxFrames = 8
+): Promise<{ text: string; available: boolean; signals: string[] } | null> {
+  const base = guardianBaseUrl();
+  if (!base || circuitOpen() || !frames.length) return null;
+
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs());
+    const res = await fetch(`${base}/v1/ocr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        frames: frames.slice(0, maxFrames),
+        max_frames: maxFrames,
+      }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) {
+      recordFailure();
+      return null;
+    }
+    const data = (await res.json()) as {
+      text?: string;
+      available?: boolean;
+      signals?: string[];
+    };
+    recordSuccess();
+    return {
+      text: (data.text || "").trim(),
+      available: data.available !== false,
+      signals: data.signals || [],
+    };
+  } catch (err: any) {
+    recordFailure();
+    logger.warn("Guardian /v1/ocr error", {
       error: String(err?.message || err),
     });
     return null;

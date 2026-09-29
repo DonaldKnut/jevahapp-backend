@@ -5,6 +5,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgomp1 \
+    tesseract-ocr \
+    tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -20,6 +22,8 @@ ENV GUARDIAN_HOST=0.0.0.0 \
     GUARDIAN_ENABLE_WHISPER=true \
     GUARDIAN_ENABLE_NUDENET=true \
     GUARDIAN_ENABLE_CLIP=true \
+    GUARDIAN_ENABLE_OCR=true \
+    GUARDIAN_OCR_MAX_FRAMES=8 \
     GUARDIAN_WHISPER_MODEL=base \
     GUARDIAN_WHISPER_DEVICE=cpu \
     GUARDIAN_WHISPER_COMPUTE=int8

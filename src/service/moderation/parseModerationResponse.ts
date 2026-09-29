@@ -1,6 +1,10 @@
 import logger from "../../utils/logger";
 import type { ModerationInput, ModerationResult } from "./types";
-import { transcriptHasGospelLexicon } from "./offlineModeration";
+import {
+  bodyHasGospelLexicon,
+  ocrHasGospelLexicon,
+  transcriptHasGospelLexicon,
+} from "./gospelSignal";
 
 export function parseModerationResponse(
   aiResponse: string,
@@ -16,33 +20,62 @@ export function parseModerationResponse(
       const isClearGospel = flags.some(
         f =>
           typeof f === "string" &&
-          /gospel|worship|biblical|christian|faith/i.test(f)
+          /gospel|worship|biblical|christian|faith|scripture|hymn|sermon/i.test(
+            f
+          )
       );
       const ct = (input.contentType || "").toLowerCase();
       const isVideo = ["videos", "sermon", "live", "recording"].includes(ct);
       const hasFrameEvidence =
         !!(input.videoFrames && input.videoFrames.length > 0) ||
         !!input.thumbnail;
+      const sttThin = (input.transcript || "").trim().length < 40;
+      const christianBody =
+        transcriptHasGospelLexicon(input.transcript) ||
+        ocrHasGospelLexicon(input.ocrText) ||
+        (sttThin &&
+          bodyHasGospelLexicon(
+            input.description,
+            input.transcript,
+            input.ocrText
+          ));
+
+      const trustedFastLane = input.trustedFastLane === true;
+      const minConfidence = trustedFastLane ? 0.8 : 0.85;
 
       let requiresReview: boolean;
       if (isVideo) {
-        // Title / gospel flags must never force-publish a video.
-        // Only allow auto-clear when frames exist, confidence is high, and the
-        // model itself did not request review.
         if (!hasFrameEvidence) {
           requiresReview = true;
           flags.push("video_missing_visual_evidence");
+        } else if (
+          parsed.requiresReview === true &&
+          christianBody &&
+          confidence >= minConfidence
+        ) {
+          requiresReview = false;
+          flags.push("gemini_review_overridden_by_christian_body");
         } else if (parsed.requiresReview === true) {
           requiresReview = true;
           flags.push("video_model_requested_review");
-        } else if (!(isApproved && confidence >= 0.9)) {
+        } else if (!(isApproved && confidence >= minConfidence)) {
           requiresReview = true;
           flags.push("video_low_confidence_review");
-        } else if (!transcriptHasGospelLexicon(input.transcript)) {
+        } else if (!christianBody) {
           requiresReview = true;
-          flags.push("gemini_approve_needs_spoken_anchor");
+          flags.push("gemini_approve_needs_christian_spoken_signal");
         } else {
           requiresReview = false;
+          if (
+            !transcriptHasGospelLexicon(input.transcript) &&
+            christianBody
+          ) {
+            flags.push(
+              ocrHasGospelLexicon(input.ocrText)
+                ? "gemini_approve_via_frame_ocr"
+                : "gemini_approve_via_description_body"
+            );
+          }
         }
       } else {
         requiresReview =

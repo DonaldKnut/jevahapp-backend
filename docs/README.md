@@ -26,15 +26,19 @@ Last updated: July 2026 (post-modularization refactor)
 11d0b. **[FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md](./FRONTEND_ARTIST_EMAIL_VERIFICATION_HANDOFF.md)** — Artists verify email; welcome after verify; admin mail always reaches
 11d0c. **[FRONTEND_CREATOR_ANALYTICS_HANDOFF.md](./FRONTEND_CREATOR_ANALYTICS_HANDOFF.md)** — Studio analytics `GET /creators/me/analytics`
 11d2. **[FRONTEND_ARTIST_RELEASES_HANDOFF.md](./FRONTEND_ARTIST_RELEASES_HANDOFF.md)** — Albums/EPs/mixtapes/singles (Release + Track on R2)
+11d3. **[FRONTEND_CREATOR_RIGHTS_HANDOFF.md](./FRONTEND_CREATOR_RIGHTS_HANDOFF.md)** — Rights + gospel checkboxes before creator song presign
 11e. **[BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md](./BACKEND_CREATORS_GOSPEL_MOBILE_HANDOFF.md)** — Mobile FE contract corroboration
 11f. **[R2_CORS.md](./R2_CORS.md)** — Bucket CORS for presigned Track uploads
 11g. **[FRONTEND_SERMONS.md](./FRONTEND_SERMONS.md)** — Public `/api/sermons` for web marketing catalog
+11g2. **[FRONTEND_WEB_SERMONS_AND_LATEST_VIDEOS_HANDOFF.md](./FRONTEND_WEB_SERMONS_AND_LATEST_VIDEOS_HANDOFF.md)** — Web: list/watch sermons + public latest vs admin all-media
+11g3. **[FRONTEND_WEB_EBOOKS_HANDOFF.md](./FRONTEND_WEB_EBOOKS_HANDOFF.md)** — Web: list ebooks, PDF reader, optional text/TTS
 11h. **[BACKEND_VIDEO_DURATION_HANDOFF.md](./BACKEND_VIDEO_DURATION_HANDOFF.md)** — Video `duration` + seekable MP4/HLS for mobile scrubber
 11i. **[FRONTEND_VIDEO_DURATION_HANDOFF.md](./FRONTEND_VIDEO_DURATION_HANDOFF.md)** — Mobile scrubber: poll ready, prefer MP4, gate seek on `duration`
 11i2. **[FRONTEND_AUDIO_SEEK_VIEWS_HANDOFF.md](./FRONTEND_AUDIO_SEEK_VIEWS_HANDOFF.md)** — Feed/CF audio seek duration + dual view stacks (`counted`)
 11j. **[FRONTEND_UPLOAD_PROGRESS_HANDOFF.md](./FRONTEND_UPLOAD_PROGRESS_HANDOFF.md)** — Upload detect/verify + `X-Upload-ID` progress + password reset for admin/creators
 11k. **[FRONTEND_MARKETING_EMAIL_HANDOFF.md](./FRONTEND_MARKETING_EMAIL_HANDOFF.md)** — Admin marketing blasts, opt-out, public unsubscribe
 12. **[FRONTEND_MODERATION.md](./FRONTEND_MODERATION.md)** — Complete admin moderation consume guide (queue, reports, player URL rules, tracks)
+12a. **[FRONTEND_ADMIN_ARTIST_TRACK_REVIEW_HANDOFF.md](./FRONTEND_ADMIN_ARTIST_TRACK_REVIEW_HANDOFF.md)** — Admin UI: list creator songs, play, approve only after listen
 12b. **[CONTENT_GUARDIAN.md](./CONTENT_GUARDIAN.md)** — Python Content Guardian (Whisper/NudeNet/CLIP) + Node fusion; Gemini gray-zone only
 12b2. **[CONTENT_VERIFICATION_ADVANCED.md](./CONTENT_VERIFICATION_ADVANCED.md)** — Fail-soft harden + ebook full-sample + creator audio STT
 12c. **[ENGAGEMENT_TIKTOK_STANDARD.md](./ENGAGEMENT_TIKTOK_STANDARD.md)** — Lifetime vs live counts, CF view/like rate limits, FE fire-and-forget rules
