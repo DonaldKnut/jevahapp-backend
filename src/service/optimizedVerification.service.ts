@@ -30,7 +30,7 @@ export class OptimizedVerificationService {
     onProgress?: ProgressCallback,
     thumbnailBuffer?: Buffer,
     thumbnailMimeType?: string,
-    opts?: { mediaId?: string; contentHash?: string }
+    opts?: { mediaId?: string; contentHash?: string; uploadedBy?: string }
   ): Promise<OptimizedVerificationResult> {
     return verifyContentWithProgress(
       file,
@@ -58,6 +58,7 @@ export class OptimizedVerificationService {
       contentHash?: string;
       thumbnailBuffer?: Buffer;
       thumbnailMimeType?: string;
+      uploadedBy?: string;
     }
   ): Promise<OptimizedVerificationResult> {
     return verifyVideoPathWithProgress(
